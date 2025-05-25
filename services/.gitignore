@@ -1,6 +1,10 @@
 # Node.js モジュール
 node_modules/
 
+# pnpm
+.pnpm-debug.log*
+.pnpm-store/
+
 # ビルド成果物
 dist/
 

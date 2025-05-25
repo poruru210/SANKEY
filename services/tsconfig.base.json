@@ -2,9 +2,18 @@
   "compilerOptions": {
     "target": "ES2020",
     "module": "CommonJS",
-    "moduleResolution": "node",
-    "strict": true,
+    "moduleResolution": "Node",
     "esModuleInterop": true,
-    "skipLibCheck": true
-  }
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "sourceMap": true,
+    "outDir": "dist",
+    "baseUrl": ".",
+    "paths": {
+      "@lambda/*": ["lambda/src/*"],
+      "@cdk/*": ["cdk/lib/*"]
+    }
+  },
+  "exclude": ["node_modules", "dist"]
 }
