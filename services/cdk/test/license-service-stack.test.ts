@@ -31,7 +31,7 @@ describe('LicenseServiceStack', () => {
 
     template.hasResourceProperties('AWS::ApiGateway::Method', {
       HttpMethod: 'POST',
-      AuthorizationType: 'NONE',
+      AuthorizationType: 'COGNITO_USER_POOLS',
       ApiKeyRequired: true,
     });
   });

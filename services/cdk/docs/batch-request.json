@@ -1,0 +1,93 @@
+{
+  "ea-applications-licenseservicedbstack": [
+    {
+      "PutRequest": {
+        "Item": {
+          "userId": {"S": "87444aa8-c0b1-703a-89cc-0c6c5c34ee4f"},
+          "sk": {"S": "APPLICATION#2025-03-01T10:00:00Z#1001234567"},
+          "accountNumber": {"S": "1001234567"},
+          "eaName": {"S": "Scalping Master EA"},
+          "broker": {"S": "XM Trading"},
+          "email": {"S": "tanaka@example.com"},
+          "xAccount": {"S": "@TanakaTaro_fx"},
+          "status": {"S": "Pending"},
+          "appliedAt": {"S": "2025-03-01T10:00:00Z"},
+          "updatedAt": {"S": "2025-05-30T10:00:00Z"}
+        }
+      }
+    },
+    {
+      "PutRequest": {
+        "Item": {
+          "userId": {"S": "87444aa8-c0b1-703a-89cc-0c6c5c34ee4f"},
+          "sk": {"S": "APPLICATION#2025-02-15T14:30:00Z#1002345678"},
+          "accountNumber": {"S": "1002345678"},
+          "eaName": {"S": "Trend Follower Pro"},
+          "broker": {"S": "FXGT"},
+          "email": {"S": "tanaka@example.com"},
+          "xAccount": {"S": "@TanakaTaro_fx"},
+          "status": {"S": "Active"},
+          "appliedAt": {"S": "2025-02-15T14:30:00Z"},
+          "approvedAt": {"S": "2025-02-16T14:30:00Z"},
+          "expiresAt": {"S": "2025-12-31T23:59:59Z"},
+          "licenseKey": {"S": "SMP-2025-ABC12345"},
+          "updatedAt": {"S": "2025-05-30T10:00:00Z"}
+        }
+      }
+    },
+    {
+      "PutRequest": {
+        "Item": {
+          "userId": {"S": "87444aa8-c0b1-703a-89cc-0c6c5c34ee4f"},
+          "sk": {"S": "APPLICATION#2025-04-01T09:15:00Z#1003456789"},
+          "accountNumber": {"S": "1003456789"},
+          "eaName": {"S": "Grid Trading Bot"},
+          "broker": {"S": "TitanFX"},
+          "email": {"S": "sato@example.com"},
+          "xAccount": {"S": "@SatoHanako_fx"},
+          "status": {"S": "Rejected"},
+          "appliedAt": {"S": "2025-04-01T09:15:00Z"},
+          "updatedAt": {"S": "2025-05-30T10:00:00Z"}
+        }
+      }
+    },
+    {
+      "PutRequest": {
+        "Item": {
+          "userId": {"S": "87444aa8-c0b1-703a-89cc-0c6c5c34ee4f"},
+          "sk": {"S": "APPLICATION#2024-12-01T16:20:00Z#1004567890"},
+          "accountNumber": {"S": "1004567890"},
+          "eaName": {"S": "News Trading EA"},
+          "broker": {"S": "IC Markets"},
+          "email": {"S": "sato@example.com"},
+          "xAccount": {"S": "@SatoHanako_fx"},
+          "status": {"S": "Expired"},
+          "appliedAt": {"S": "2024-12-01T16:20:00Z"},
+          "approvedAt": {"S": "2024-12-02T16:20:00Z"},
+          "expiresAt": {"S": "2024-12-31T23:59:59Z"},
+          "licenseKey": {"S": "SMP-2024-DEF67890"},
+          "updatedAt": {"S": "2025-05-30T10:00:00Z"}
+        }
+      }
+    },
+    {
+      "PutRequest": {
+        "Item": {
+          "userId": {"S": "87444aa8-c0b1-703a-89cc-0c6c5c34ee4f"},
+          "sk": {"S": "APPLICATION#2025-01-20T11:45:00Z#1005678901"},
+          "accountNumber": {"S": "1005678901"},
+          "eaName": {"S": "Arbitrage Hunter"},
+          "broker": {"S": "Exness"},
+          "email": {"S": "suzuki@example.com"},
+          "xAccount": {"S": "@SuzukiIchiro_fx"},
+          "status": {"S": "Revoked"},
+          "appliedAt": {"S": "2025-01-20T11:45:00Z"},
+          "approvedAt": {"S": "2025-01-21T11:45:00Z"},
+          "revokedAt": {"S": "2025-05-15T10:30:00Z"},
+          "licenseKey": {"S": "SMP-2025-GHI11111"},
+          "updatedAt": {"S": "2025-05-30T10:00:00Z"}
+        }
+      }
+    }
+  ]
+}

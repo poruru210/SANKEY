@@ -48,3 +48,48 @@ export async function encryptLicense(
   // --- Base64 エンコードして返却 ---
   return combined.toString('base64');
 }
+
+export async function decryptLicense(
+    key: CryptoKey,
+    encrypted: string,
+    accountId: string
+): Promise<string> {
+  const rawKey = await webcrypto.subtle.exportKey("raw", key);
+  if (rawKey.byteLength !== 32) {
+    throw new Error("Invalid key length. Only 256-bit keys are supported.");
+  }
+
+  const encryptedBuffer = Buffer.from(encrypted, 'base64');
+
+  const iv = encryptedBuffer.subarray(0, 16);
+  const hmac = encryptedBuffer.subarray(16, 48); // 32 bytes (SHA-256)
+  const ciphertext = encryptedBuffer.subarray(48);
+
+  const hmacKey = await webcrypto.subtle.importKey(
+      'raw',
+      rawKey,
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['verify']
+  );
+
+  const isValid = await webcrypto.subtle.verify(
+      'HMAC',
+      hmacKey,
+      hmac,
+      Buffer.concat([iv, ciphertext, new TextEncoder().encode(accountId)])
+  );
+
+  if (!isValid) {
+    throw new Error("HMAC verification failed. Data may be tampered with.");
+  }
+
+  const algo: AesCbcParams = {
+    name: 'AES-CBC',
+    iv
+  };
+
+  const decryptedBuffer = await webcrypto.subtle.decrypt(algo, key, ciphertext);
+
+  return new TextDecoder().decode(decryptedBuffer);
+}
