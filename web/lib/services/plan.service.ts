@@ -71,11 +71,12 @@ export class PlanService {
             if (error && typeof error === 'object' && 'status' in error) {
                 const httpError = error as any
                 throw new PlanServiceError(
-                    `Failed to get plan information: ${httpError.message}`,
-                    httpError.status
+                    `errors.planService.getFailed`, // Key for "Failed to get plan information: {message}"
+                    httpError.status,
+                    'GET_PLAN_FAILED'
                 )
             }
-            throw new PlanServiceError('Failed to get plan information')
+            throw new PlanServiceError('errors.planService.getFailed', 500, 'GET_PLAN_FAILED_UNKNOWN')
         }
     }
 
@@ -97,11 +98,12 @@ export class PlanService {
             if (error && typeof error === 'object' && 'status' in error) {
                 const httpError = error as any
                 throw new PlanServiceError(
-                    `Failed to change plan: ${httpError.message}`,
-                    httpError.status
+                    `errors.planService.changeFailed`, // Key for "Failed to change plan: {message}"
+                    httpError.status,
+                    'CHANGE_PLAN_FAILED'
                 )
             }
-            throw new PlanServiceError('Failed to change plan')
+            throw new PlanServiceError('errors.planService.changeFailed', 500, 'CHANGE_PLAN_FAILED_UNKNOWN')
         }
     }
 
@@ -183,20 +185,28 @@ export class PlanService {
      * プラン名の表示用フォーマット
      */
     formatPlanName(tier: string): string {
-        const formatMap: Record<string, string> = {
-            'free': 'Free Plan',
-            'basic': 'Basic Plan',
-            'pro': 'Pro Plan'
+        // Returns a translation key instead of a direct string
+        const keyMap: Record<string, string> = {
+            'free': 'settings.plan.tierFree',
+            'basic': 'settings.plan.tierBasic',
+            'pro': 'settings.plan.tierPro'
         }
-
-        return formatMap[tier] || tier
+        return keyMap[tier.toLowerCase()] || 'settings.plan.unknownPlan';
     }
 
     /**
      * プラン制限の表示用フォーマット
      */
-    formatPlanLimits(limits: PlanLimits): string {
-        return `${limits.quotaLimit} requests/${limits.quotaPeriod.toLowerCase()}, ${limits.rateLimit} req/sec`
+    formatPlanLimits(limits: PlanLimits): { key: string; values: Record<string, any> } {
+        const quotaPeriodKey = `settings.plan.quotaPeriod${limits.quotaPeriod.charAt(0).toUpperCase() + limits.quotaPeriod.slice(1).toLowerCase()}`;
+        return {
+            key: 'settings.plan.limitsPattern',
+            values: {
+                quotaLimit: limits.quotaLimit === -1 ? 'Unlimited' : limits.quotaLimit.toLocaleString(), // Handle unlimited case
+                quotaPeriod: quotaPeriodKey, // This will be a key like 'settings.plan.quotaPeriodDay'
+                rateLimit: limits.rateLimit
+            }
+        };
     }
 
     /**
@@ -214,11 +224,12 @@ export class PlanService {
             if (error && typeof error === 'object' && 'message' in error) {
                 const httpError = error as any
                 throw new PlanServiceError(
-                    `Plan service connection test failed: ${httpError.message}`,
-                    httpError.status || 500
+                    `errors.planService.connectionTestFailed`, // Key
+                    httpError.status || 500,
+                    'CONNECTION_TEST_FAILED'
                 )
             }
-            throw new PlanServiceError('Plan service connection test failed')
+            throw new PlanServiceError('errors.planService.connectionTestFailed', 500, 'CONNECTION_TEST_FAILED_UNKNOWN')
         }
     }
 }

@@ -124,9 +124,9 @@ export function ActiveLicenses({
     }
 
     const formatDate = (dateString: string) => {
-        if (!dateString) return 'N/A'
+        if (!dateString) return t('common.notAvailable');
         try {
-            return new Date(dateString).toLocaleDateString('en-US', {
+            return new Date(dateString).toLocaleDateString(t('common.locale'), {
                 year: 'numeric',
                 month: 'short',
                 day: '2-digit',
@@ -240,7 +240,7 @@ export function ActiveLicenses({
                                                     variant="ghost"
                                                     size="sm"
                                                     className="p-1 h-auto hover:bg-emerald-500/10"
-                                                    title="変更履歴を表示"
+                                                    title={t('activeLicenses.showHistoryTitle')}
                                                 >
                                                     <History className="w-4 h-4 text-emerald-400" />
                                                 </Button>
@@ -302,7 +302,7 @@ export function ActiveLicenses({
                                         </div>
                                         <div className="flex items-center">
                                             <Calendar className="w-3 h-3 mr-1 text-emerald-400" />
-                                            <span className="theme-text-emerald">Last updated:</span>{" "}
+                                            <span className="theme-text-emerald">{t('activeLicenses.lastUpdatedLabel')}</span>{" "}
                                             <span className="theme-text-primary">{formatDate(license.activatedAt)}</span>
                                         </div>
                                     </div>

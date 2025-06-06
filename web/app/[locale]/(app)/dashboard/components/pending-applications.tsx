@@ -23,37 +23,58 @@ interface PendingApplicationsProps {
     itemsPerPage: number
 }
 
-// カウントダウンフック
-const useCountdown = (targetDate: string) => {
-    const [timeLeft, setTimeLeft] = useState('')
-
-    useEffect(() => {
-        if (!targetDate) return
-
-        const timer = setInterval(() => {
-            const now = new Date().getTime()
-            const target = new Date(targetDate).getTime()
-            const difference = target - now
-
-            if (difference > 0) {
-                const minutes = Math.floor(difference / (1000 * 60))
-                const seconds = Math.floor((difference % (1000 * 60)) / 1000)
-
-                if (difference < 30000) { // 30秒未満
-                    setTimeLeft('まもなく送信')
-                } else {
-                    setTimeLeft(`${minutes}分${seconds}秒後送信`)
-                }
-            } else {
-                setTimeLeft('送信完了')
-            }
-        }, 1000)
-
-        return () => clearInterval(timer)
-    }, [targetDate])
-
-    return timeLeft
+// Countdown Hook Refactor
+interface CountdownState {
+  type: 'soon' | 'timeLeft' | 'sent' | 'idle';
+  minutes?: number;
+  seconds?: number;
 }
+
+const useCountdown = (targetDate: string | undefined, t: ReturnType<typeof useTranslations>): CountdownState => {
+  const [countdownData, setCountdownData] = useState<CountdownState>({ type: 'idle' });
+
+  useEffect(() => {
+    if (!targetDate) {
+      setCountdownData({ type: 'idle' });
+      return;
+    }
+
+    const timer = setInterval(() => {
+      const now = new Date().getTime();
+      const targetTime = new Date(targetDate).getTime();
+      const difference = targetTime - now;
+
+      if (difference <= 0) {
+        setCountdownData({ type: 'sent' });
+        clearInterval(timer);
+      } else {
+        const totalSeconds = Math.floor(difference / 1000);
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+
+        if (totalSeconds < 30) {
+          setCountdownData({ type: 'soon' });
+        } else {
+          setCountdownData({ type: 'timeLeft', minutes, seconds });
+        }
+      }
+    }, 1000);
+
+    // Initial check
+    const now = new Date().getTime();
+    const targetTime = new Date(targetDate).getTime();
+    const difference = targetTime - now;
+    if (difference <= 0) {
+        setCountdownData({ type: 'sent' });
+        clearInterval(timer);
+    }
+
+
+    return () => clearInterval(timer);
+  }, [targetDate, t]);
+
+  return countdownData;
+};
 
 export function PendingApplications({
                                         applications,
@@ -84,15 +105,15 @@ export function PendingApplications({
     })
 
     // ダイアログ用のカウントダウンフック
-    const dialogCountdown = useCountdown(dialogState.scheduledAt || '')
+    const dialogCountdownData = useCountdown(dialogState.scheduledAt, t);
 
     // ローディング状態の管理
     const [loadingStates, setLoadingStates] = useState<Record<string, boolean>>({})
 
     const formatDate = (dateString: string) => {
-        if (!dateString) return 'N/A'
+        if (!dateString) return t('common.notAvailable');
         try {
-            return new Date(dateString).toLocaleDateString('en-US', {
+            return new Date(dateString).toLocaleDateString(t('common.locale'), {
                 year: 'numeric',
                 month: 'short',
                 day: '2-digit',
@@ -299,6 +320,17 @@ export function PendingApplications({
 
     const dialogConfig = getDialogConfig()
 
+    let translatedCountdownMessage = "";
+    if (dialogState.type === 'cancel' && dialogState.scheduledAt) {
+        if (dialogCountdownData.type === 'soon') {
+            translatedCountdownMessage = t('countdown.soon');
+        } else if (dialogCountdownData.type === 'timeLeft' && dialogCountdownData.minutes !== undefined && dialogCountdownData.seconds !== undefined) {
+            translatedCountdownMessage = t('countdown.timeLeft', { minutes: dialogCountdownData.minutes, seconds: dialogCountdownData.seconds });
+        } else if (dialogCountdownData.type === 'sent') {
+            translatedCountdownMessage = t('countdown.sent');
+        }
+    }
+
     return (
         <>
             <Card className="theme-card-bg border-emerald-500/20 backdrop-blur-sm">
@@ -379,7 +411,7 @@ export function PendingApplications({
                 onConfirm={handleConfirmAction}
                 loading={loadingStates[dialogState.targetId]}
                 targetName={dialogState.targetName}
-                countdown={dialogState.type === 'cancel' && dialogState.scheduledAt ? dialogCountdown : undefined}
+                countdown={translatedCountdownMessage || undefined}
             />
         </>
     )

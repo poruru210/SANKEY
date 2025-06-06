@@ -19,7 +19,21 @@
     "title": "申請履歴",
     "description": "{applicationName}のステータス変更履歴",
     "noData": "履歴データがありません",
-    "reason": "理由"
+    "reason": "理由",
+    "actions": {
+      "approve": "承認済み",
+      "approved": "承認済み",
+      "awaitingnotification": "通知待ち",
+      "reject": "拒否済み",
+      "rejected": "拒否済み",
+      "cancel": "キャンセル済み",
+      "cancelled": "キャンセル済み",
+      "revoke": "無効化済み",
+      "revoked": "無効化済み",
+      "active": "有効",
+      "activated": "有効化済み",
+      "pending": "保留中"
+    }
   },
   "actions": {
     "approve": "承認",
@@ -39,7 +53,10 @@
     "loadingApplications": "アプリケーション読み込み中...",
     "processing": "処理中...",
     "refresh": "更新",
-    "retry": "再試行"
+    "retry": "再試行",
+    "notAvailable": "該当なし",
+    "error": "エラー",
+    "unknownError": "不明なエラーが発生しました"
   },
   "dashboard": {
     "activeApplications": "有効なライセンス",
@@ -52,6 +69,346 @@
     "title": "ライセンス管理ダッシュボード",
     "totalIssued": "発行済み総数",
     "within30Days": "30日以内"
+  },
+  "activeLicenses": {
+    "showHistoryTitle": "変更履歴を表示",
+    "lastUpdatedLabel": "最終更新日:"
+  },
+  "licenseHistories": {
+    "showHistoryTitle": "変更履歴を表示",
+    "lastUpdatedLabel": "最終更新日:"
+  },
+  "countdown": {
+    "soon": "まもなく送信",
+    "timeLeft": "{minutes}分{seconds}秒後送信",
+    "sent": "送信完了"
+  },
+  "developer": {
+    "title": "開発者統合ガイド",
+    "subtitle": "Expert AdvisorにSANKEYライセンス認証を統合するための完全ガイド",
+    "integrationSteps": {
+      "title": "統合手順",
+      "description": "SANKEYライセンス認証を統合するためのステップバイステップガイド"
+    },
+    "toasts": {
+      "gasDownloadSuccess": {
+        "title": "ダウンロード成功",
+        "description": "GASテンプレートがダウンロードされました。"
+      },
+      "gasDownloadError": {
+        "title": "ダウンロードエラー",
+        "noErrorInfo": "ファイルの取得に失敗しましたが、エラー情報がありません。",
+        "general": "GASテンプレートのダウンロード中にエラーが発生しました。"
+      }
+    },
+    "moduleDownload": {
+      "mqh": {
+        "name": "MQHライブラリ",
+        "description": "MQL4/MQL5で簡単なライセンス認証を行うためのヘッダーファイルです。",
+        "requirements": "MQL4/MQL5 環境",
+        "fileName": "SANKEY_License.mqh",
+        "downloadButton": "MQHをダウンロード",
+        "title": "MQHライブラリダウンロード",
+        "status": {
+          "downloaded": "ダウンロード済み"
+        },
+        "labels": {
+          "fileName": "ファイル名",
+          "size": "サイズ",
+          "version": "バージョン",
+          "requirements": "システム要件"
+        },
+        "buttons": {
+          "download": "ダウンロード",
+          "downloadCompleted": "ダウンロード完了"
+        },
+        "requirementsList": {
+          "mt5": "MetaTrader 5 Build 3560以上",
+          "mql5Compiler": "MQL5コンパイラ対応",
+          "includeFolder": "Include フォルダに配置"
+        }
+      },
+      "dll": {
+        "name": "DLLライブラリ",
+        "description": "ライセンス認証機能のためのWindows DLL。MQHに必要です。",
+        "requirements": "Windows 環境",
+        "fileName": "SANKEY_License.dll",
+        "downloadButton": "DLLをダウンロード",
+        "title": "DLLライブラリダウンロード",
+        "requirementsList": {
+          "windows": "Windows 10/11 (64-bit)",
+          "vcRedist": "Visual C++ Redistributable 2019以上",
+          "librariesFolder": "Libraries フォルダに配置"
+        }
+      },
+      "gas": {
+        "name": "GASテンプレート",
+        "description": "HTTP API経由でライセンスを認証するためのGoogle Apps Scriptテンプレート。",
+        "requirements": "Googleアカウント",
+        "fileName": "SANKEY_GAS_Template.js",
+        "downloadButton": "GASをダウンロード",
+        "title": "GASテンプレートダウンロード",
+        "note": "注意：これはテンプレートです。Google Apps Script環境でウェブアプリとしてデプロイする必要があります。"
+      },
+      "installation": {
+        "title": "インストール手順",
+        "description": "ダウンロードしたファイルを正しい場所に配置してください。",
+        "mqh": {
+          "title": "MQHファイルの配置",
+          "step1": "MetaTrader 5を開く",
+          "step2": "ファイル → データフォルダを開く",
+          "step3": "MQL5 → Include フォルダに配置",
+          "path": "...\\MetaTrader 5\\MQL5\\Include\\SANKEY_License.mqh"
+        },
+        "dll": {
+          "title": "DLLファイルの配置",
+          "step1": "MetaTrader 5を開く",
+          "step2": "ファイル → データフォルダを開く",
+          "step3": "MQL5 → Libraries フォルダに配置",
+          "path": "...\\MetaTrader 5\\MQL5\\Libraries\\SANKEY_License.dll"
+        },
+        "importantNotes": {
+          "title": "重要な注意事項",
+          "note1": "• DLLの使用を許可するため、MetaTrader 5の設定で「DLLの使用を許可する」にチェックを入れてください。",
+          "note2": "• ファイル配置後、MetaTrader 5を再起動してください。",
+          "note3": "• ウイルス対策ソフトがDLLをブロックする場合は、除外設定を行ってください。"
+        }
+      }
+    },
+    "mtSelector": {
+      "platformLabel": "プラットフォーム:",
+      "mt4Button": "MT4",
+      "mt5Button": "MT5",
+      "title": "統合例",
+      "implementationCodeTitle": "{version}版 実装コード",
+      "codeComments": {
+        "loadFailed": "ライセンスファイルの読み込みに失敗しました",
+        "decryptionFailed": "復号失敗（コード: {errorCode}）",
+        "decryptionSuccess": "復号成功\n{json}"
+      },
+      "differences": {
+        "title": "主な違い",
+        "mt4": {
+          "title": "MT4版",
+          "point1": "• AccountNumber()関数を使用",
+          "point2": "• ファイルハンドルエラーは < 0 で判定",
+          "point3": "• MQL4/Filesフォルダを使用"
+        },
+        "mt5": {
+          "title": "MT5版",
+          "point1": "• AccountInfoInteger(ACCOUNT_LOGIN)を使用",
+          "point2": "• INVALID_HANDLEで判定",
+          "point3": "• MQL5/Filesフォルダを使用"
+        }
+      }
+    },
+    "playground": {
+      "cardTitle": "プレイグラウンド",
+      "description": "テスト目的でサンプルライセンスキーを生成および検証します。",
+      "resetButton": "すべてリセット",
+      "tabs": {
+        "generate": "ライセンス生成",
+        "validate": "ライセンス検証"
+      },
+      "generate": {
+        "title": "新しいライセンスを生成",
+        "description": "EA情報を入力してライセンスキーを生成します。",
+        "preset1d": "1日",
+        "preset7d": "7日",
+        "preset30d": "30日",
+        "preset90d": "90日",
+        "preset365d": "1年",
+        "preset730d": "2年",
+        "expiryDateDisplay": "有効期限: {date}"
+      },
+      "eaNameLabel": "EA名",
+      "eaNamePlaceholder": "EA名を入力",
+      "accountNumberLabel": "アカウントID",
+      "accountNumberPlaceholder": "MT4/MT5アカウント番号を入力",
+      "brokerLabel": "ブローカー",
+      "brokerPlaceholder": "ブローカー名を入力",
+      "expiryPresetLabel": "有効期限プリセット",
+      "customExpiryLabel": "カスタム有効期限（日数）",
+      "neverExpires": "無期限",
+      "generateButton": "ライセンス生成",
+      "buttons": {
+        "generating": "生成中...",
+        "validateLicense": "ライセンス検証",
+        "validating": "検証中...",
+        "show": "表示",
+        "hide": "非表示",
+        "useInValidationForm": "検証フォームで使用"
+      },
+      "generatedLicense": {
+        "title": "生成されたライセンス",
+        "description": "暗号化されたライセンスキーです。",
+        "licenseKeyLabel": "ライセンスキー",
+        "pleaseGenerate": "まずライセンスを生成してください。"
+      },
+      "validate": {
+        "title": "ライセンスを検証",
+        "description": "ライセンスキーを入力して内容を確認します。",
+        "licenseKeyLabel": "ライセンスキー",
+        "licenseKeyPlaceholder": "暗号化されたライセンス文字列を入力",
+        "accountIdLabel": "アカウントID"
+      },
+      "licenseInfo": {
+        "title": "ライセンス情報",
+        "description": "復号化されたライセンス詳細です。",
+        "eaNameLabel": "EA名",
+        "accountIdLabel": "アカウントID",
+        "expiryDateLabel": "有効期限",
+        "issuedAtLabel": "発行日時",
+        "jsonViewLabel": "JSON表示",
+        "hiddenMessage": "ライセンス情報は非表示です。",
+        "pleaseValidate": "まずライセンスを検証してください。",
+        "daysUnit": "日"
+      },
+      "status": {
+        "active": "有効",
+        "expired": "期限切れ",
+        "expiringSoon": "まもなく期限切れ（残り{days}日）",
+        "notYetActive": "有効期間開始前（{days}日後に開始）"
+      },
+      "toasts": {
+        "generateSuccess": {
+          "title": "ライセンス生成完了",
+          "description": "サンプルライセンスキーが作成されました。"
+        },
+        "generateError": {
+          "title": "生成失敗",
+          "description": "ライセンスキーを生成できませんでした。入力を確認してください。"
+        },
+        "copySuccess": {
+          "title": "クリップボードにコピーしました",
+          "description": "{label} をクリップボードにコピーしました。"
+        },
+        "copyError": {
+          "title": "コピー失敗",
+          "description": "クリップボードへのアクセスに失敗しました。"
+        },
+        "validationError": {
+          "title": "検証エラー",
+          "eaNameAndAccountIdRequired": "EA名とアカウントIDは必須です。",
+          "licenseKeyAndAccountIdRequired": "ライセンスキーとアカウントIDは必須です。"
+        },
+        "validateSuccess": {
+            "title": "ライセンス検証完了",
+            "description": "ライセンス情報が復号化されました。"
+        },
+        "licenseSetForValidation": {
+            "title": "ライセンス設定完了",
+            "description": "生成されたライセンスが検証フォームに設定されました。"
+        }
+      }
+    },
+    "step1": {
+      "title": "事前準備",
+      "description": "ライセンス申請用のGoogleフォームに必要な項目を作成します。",
+      "formPrep": {
+        "title": "Googleフォームの準備",
+        "description": "申請フォームに以下の質問項目を作成してください（",
+        "requiredBadge": "必須",
+        "requiredText": "マークの項目は必須）：",
+        "table": {
+          "question": "質問項目",
+          "required": "必須",
+          "example": "回答例",
+          "eaName": {
+            "question": "EA名",
+            "example": "MyTradingEA v1.0"
+          },
+          "accountNumber": {
+            "question": "アカウント番号",
+            "example": "1234567890"
+          },
+          "brokerName": {
+            "question": "ブローカー名",
+            "example": "XM Trading"
+          },
+          "email": {
+            "question": "メールアドレス",
+            "example": "user@example.com"
+          },
+          "xAccount": {
+            "question": "Xアカウント名",
+            "example": "@username"
+          }
+        },
+        "openExternalLinkButton": "Googleフォームを開く"
+      }
+    },
+    "step2": {
+      "title": "Google Form連携設定（GAS）",
+      "description": "Google Apps Scriptで新しいプロジェクトを作成し、提供されたテンプレートを元に設定を行います。",
+      "createProject": {
+        "title": "新しいプロジェクトを作成",
+        "step1": "「",
+        "step1LinkText": "Google Apps Script",
+        "step2": "」にアクセス",
+        "step3": "「新しいプロジェクト」をクリック"
+      },
+      "prepareCode": {
+        "title": "コードファイルの準備",
+        "description": "以下のボタンをクリックして、GASテンプレートファイル（`gas-template.gs`）をダウンロードします。",
+        "downloadButton": "GASテンプレートをダウンロード",
+        "downloadingButton": "ダウンロード中..."
+      },
+      "pasteCode": {
+        "title": "コードの貼り付け",
+        "description": "ダウンロードした `gas-template.gs` ファイルを開き、その内容全体をコピーして、Google Apps Scriptエディタに貼り付けてください。既存のコードは全て置き換えます。"
+      },
+      "adjustFormFields": {
+        "title": "FORM_FIELDS の調整",
+        "description": "実際のGoogleフォームの質問文に合わせて、スクリプト内の `FORM_FIELDS` オブジェクトを調整してください。キー（例: `EA_NAME`）は固定ですが、値（例: `\"あなたのEA名を入力してください\"`）をフォームの質問文と一致させる必要があります。",
+        "exampleTitle": "例：",
+        "exampleDescription": "フォームの質問が「あなたのEA名を入力してください」の場合",
+        "codeExample": "// FORM_FIELDS: {\n//   EA_NAME: \"あなたのEA名を入力してください\",\n//   // ...\n// }"
+      }
+    },
+    "step3": {
+      "title": "連携テストを行う",
+      "description": "Google Apps Script内でテスト関数を実行し、設定と通信が正常に行われるか確認します。",
+      "checkSettings": {
+        "title": "設定値の確認",
+        "step1": "Google Apps Scriptエディタの上部メニューの「実行」をクリック。",
+        "step2": "「関数を実行」にマウスオーバーし、ドロップダウンから「validateConfig」を選択。",
+        "step3": "実行後、エディタ下部の「実行ログ」で「",
+        "successMessage": "✅ 設定は正常です",
+        "onErrorTitle": "」というメッセージが表示されることを確認してください。",
+        "onErrorDescription": "エラーが出た場合: スクリプト内の `CONFIG` セクションの設定値を再確認してください。"
+      },
+      "communicationTest": {
+        "title": "通信テスト",
+        "step1": "再度、上部メニューの「実行」をクリック。",
+        "step2": "「関数を実行」にマウスオーバーし、ドロップダウンから「testWebhook」を選択。",
+        "step3": "実行後、「実行ログ」で「",
+        "successMessage": "✅ テスト成功"
+      }
+    },
+    "step4": {
+      "title": "ライセンス認証用モジュールをダウンロードする",
+      "description": "EAに組み込むためのライセンス認証モジュールを取得します"
+    },
+    "step5": {
+      "title": "EAに認証モジュールを組み込む",
+      "description": "ダウンロードしたモジュールをExpert Advisorに統合します",
+      "overview": {
+        "title": "概要",
+        "description": "Expert AdvisorにSANKEYライセンス認証機能を組み込み、適切な認証フローを実装します。"
+      },
+      "implementationCode": {
+        "title": "実装コード"
+      }
+    },
+    "step6": {
+      "title": "EAのダウンロードURLを設定する",
+      "description": "認証済みユーザーがEAをダウンロードできるURLを設定します",
+      "overview": {
+        "title": "概要",
+        "description": "ライセンス認証が完了したユーザーが安全にEAファイルをダウンロードできるシステムを構築します。"
+      }
+    }
   },
   "dialog": {
     "approveDescription": "このアプリケーションを承認してもよろしいですか？ユーザーにライセンスキーが発行されます。",
@@ -91,6 +448,9 @@
     "title": "フィルター",
     "xAccount": "Xアカウント"
   },
+  "footer": {
+    "copyright": "© 2024 SANKEY. 全著作権所有。"
+  },
   "login": {
     "accessDenied": "アクセスが拒否されました",
     "checkingAuth": "認証状態を確認中...",
@@ -120,7 +480,10 @@
   "pagination": {
     "of": "/",
     "showing": "表示中",
-    "to": "〜"
+    "to": "〜",
+    "applications": "件の申請",
+    "licenses": "件のライセンス",
+    "historyRecords": "件の履歴"
   },
   "settings": {
     "active": "有効",
@@ -155,9 +518,49 @@
     "title": "設定",
     "unlimited": "無制限",
     "updatePlan": "プラン更新",
-    "used": "使用済み"
+    "used": "使用済み",
+    "toasts": {
+      "loadingPlanError": "プラン情報の読み込みエラー",
+      "retryButton": "再試行"
+    },
+    "plan": {
+      "unknownPlan": "不明なプラン",
+      "noLimits": "プランの上限情報がありません",
+      "tierFree": "フリープラン",
+      "tierBasic": "ベーシックプラン",
+      "tierPro": "プロプラン",
+      "rateLimitLabel": "レート制限:",
+      "burstLimitLabel": "バースト制限:",
+      "quotaLabel": "クォータ:",
+      "changingStatus": "変更中...",
+      "limitsPattern": "{quotaLimit} / {quotaPeriod}, {rateLimit} リクエスト/秒",
+      "quotaPeriodDay": "日",
+      "quotaPeriodMonth": "月"
+    },
+    "itemsPerPageOption": "{count}件"
   },
-  "status": {},
+  "errors": {
+    "plans": {
+      "loadFailed": "プラン情報の読み込みに失敗しました。",
+      "changeFailed": "プランの変更に失敗しました。",
+      "connectionTestFailed": "プランサービスの接続テストに失敗しました。"
+    },
+    "planService": {
+      "getFailed": "サーバーからプラン情報を取得できませんでした。",
+      "changeFailed": "サーバーでのプラン詳細の変更に失敗しました。",
+      "connectionTestFailed": "プランサービスへの接続テストに失敗しました。"
+    }
+  },
+  "status": {
+    "pending": "保留中",
+    "awaitingnotification": "通知待ち",
+    "active": "有効",
+    "expired": "期限切れ",
+    "revoked": "無効化済み",
+    "rejected": "拒否済み",
+    "cancelled": "キャンセル済み",
+    "expiringSoon": "期限切れ間近"
+  },
   "tabs": {
     "active": "有効なライセンス",
     "activeDescription": "現在有効なEAライセンス",

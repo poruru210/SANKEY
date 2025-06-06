@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Download, FileCode, Settings, CheckCircle, AlertCircle } from "lucide-react"
 import { useState } from "react"
+import { useTranslations } from "next-intl";
 
 interface ModuleInfo {
   name: string
@@ -21,30 +22,39 @@ interface ModuleInfo {
 }
 
 export function ModuleDownload() {
+  const t = useTranslations('developer.moduleDownload');
   const [downloadedModules, setDownloadedModules] = useState<string[]>([])
 
   const modules: ModuleInfo[] = [
     {
-      name: "MQHライブラリ",
-      description: "専用ライブラリ用のMQHヘッダーファイル",
-      filename: "SANKEY_License.mqh",
-      size: "12.5 KB",
-      version: "v2.1.0",
+      name: t('mqh.name'),
+      description: t('mqh.description'),
+      filename: t('mqh.fileName'),
+      size: "12.5 KB", // This could be dynamic or also translated if needed
+      version: "v2.1.0", // This could be dynamic
       icon: <FileCode className="w-5 h-5 text-blue-400" />,
       downloadUrl: "/downloads/SANKEY_License.mqh",
-      requirements: ["MetaTrader 5 Build 3560以上", "MQL5コンパイラ対応", "Include フォルダに配置"],
-      checksum: "SHA256: a1b2c3d4e5f6789...",
+      requirements: [
+        t('mqh.requirements.mt5'),
+        t('mqh.requirements.mql5Compiler'),
+        t('mqh.requirements.includeFolder')
+      ],
+      checksum: "SHA256: a1b2c3d4e5f6789...", // This should be dynamic
     },
     {
-      name: "DLLライブラリ",
-      description: "ライセンス認証用のWindows DLL",
-      filename: "SANKEY_License.dll",
-      size: "245 KB",
-      version: "v2.1.0",
+      name: t('dll.name'),
+      description: t('dll.description'),
+      filename: t('dll.fileName'),
+      size: "245 KB", // Dynamic
+      version: "v2.1.0", // Dynamic
       icon: <Settings className="w-5 h-5 text-purple-400" />,
       downloadUrl: "/downloads/SANKEY_License.dll",
-      requirements: ["Windows 10/11 (64-bit)", "Visual C++ Redistributable 2019以上", "Libraries フォルダに配置"],
-      checksum: "SHA256: f6e5d4c3b2a1098...",
+      requirements: [
+        t('dll.requirements.windows'),
+        t('dll.requirements.vcRedist'),
+        t('dll.requirements.librariesFolder')
+      ],
+      checksum: "SHA256: f6e5d4c3b2a1098...", // Dynamic
     },
   ]
 
@@ -77,7 +87,7 @@ export function ModuleDownload() {
                 {isDownloaded(module.filename) && (
                   <Badge className="bg-emerald-500 text-white">
                     <CheckCircle className="w-3 h-3 mr-1" />
-                    ダウンロード済み
+                    {t('status.downloaded')}
                   </Badge>
                 )}
               </div>
@@ -87,22 +97,22 @@ export function ModuleDownload() {
               {/* ファイル情報 */}
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
-                  <span className="theme-text-secondary">ファイル名:</span>
+                  <span className="theme-text-secondary">{t('labels.fileName')}:</span>
                   <span className="theme-text-primary font-mono">{module.filename}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="theme-text-secondary">サイズ:</span>
+                  <span className="theme-text-secondary">{t('labels.size')}:</span>
                   <span className="theme-text-primary">{module.size}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="theme-text-secondary">バージョン:</span>
+                  <span className="theme-text-secondary">{t('labels.version')}:</span>
                   <span className="theme-text-primary">{module.version}</span>
                 </div>
               </div>
 
               {/* 要件 */}
               <div>
-                <h5 className="text-sm font-medium theme-text-primary mb-2">システム要件</h5>
+                <h5 className="text-sm font-medium theme-text-primary mb-2">{t('labels.requirements')}</h5>
                 <ul className="space-y-1">
                   {module.requirements.map((req, index) => (
                     <li key={index} className="flex items-start space-x-2">
@@ -127,7 +137,7 @@ export function ModuleDownload() {
                 disabled={isDownloaded(module.filename)}
               >
                 <Download className="w-4 h-4 mr-2" />
-                {isDownloaded(module.filename) ? "ダウンロード完了" : "ダウンロード"}
+                {isDownloaded(module.filename) ? t('buttons.downloadCompleted') : t('buttons.download')}
               </Button>
             </CardContent>
           </Card>
@@ -137,9 +147,9 @@ export function ModuleDownload() {
       {/* インストール手順 */}
       <Card className="theme-card-bg border-emerald-500/20">
         <CardHeader>
-          <CardTitle className="theme-text-primary text-lg">インストール手順</CardTitle>
+          <CardTitle className="theme-text-primary text-lg">{t('installation.title')}</CardTitle>
           <CardDescription className="theme-text-secondary">
-            ダウンロードしたファイルを正しい場所に配置してください
+            {t('installation.description')}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -148,29 +158,29 @@ export function ModuleDownload() {
             <div className="space-y-3">
               <h5 className="font-medium theme-text-primary flex items-center">
                 <FileCode className="w-4 h-4 mr-2 text-blue-400" />
-                MQHファイルの配置
+                {t('installation.mqh.title')}
               </h5>
               <div className="space-y-2 text-sm">
                 <div className="flex items-start space-x-2">
                   <span className="bg-emerald-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold">
                     1
                   </span>
-                  <span className="theme-text-secondary">MetaTrader 5を開く</span>
+                  <span className="theme-text-secondary">{t('installation.mqh.step1')}</span>
                 </div>
                 <div className="flex items-start space-x-2">
                   <span className="bg-emerald-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold">
                     2
                   </span>
-                  <span className="theme-text-secondary">ファイル → データフォルダを開く</span>
+                  <span className="theme-text-secondary">{t('installation.mqh.step2')}</span>
                 </div>
                 <div className="flex items-start space-x-2">
                   <span className="bg-emerald-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold">
                     3
                   </span>
-                  <span className="theme-text-secondary">MQL5 → Include フォルダに配置</span>
+                  <span className="theme-text-secondary">{t('installation.mqh.step3')}</span>
                 </div>
                 <div className="bg-slate-900/50 p-2 rounded font-mono text-xs theme-text-muted">
-                  ...\MetaTrader 5\MQL5\Include\SANKEY_License.mqh
+                  {t('installation.mqh.path')}
                 </div>
               </div>
             </div>
@@ -179,29 +189,29 @@ export function ModuleDownload() {
             <div className="space-y-3">
               <h5 className="font-medium theme-text-primary flex items-center">
                 <Settings className="w-4 h-4 mr-2 text-purple-400" />
-                DLLファイルの配置
+                {t('installation.dll.title')}
               </h5>
               <div className="space-y-2 text-sm">
                 <div className="flex items-start space-x-2">
                   <span className="bg-emerald-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold">
                     1
                   </span>
-                  <span className="theme-text-secondary">MetaTrader 5を開く</span>
+                  <span className="theme-text-secondary">{t('installation.dll.step1')}</span>
                 </div>
                 <div className="flex items-start space-x-2">
                   <span className="bg-emerald-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold">
                     2
                   </span>
-                  <span className="theme-text-secondary">ファイル → データフォルダを開く</span>
+                  <span className="theme-text-secondary">{t('installation.dll.step2')}</span>
                 </div>
                 <div className="flex items-start space-x-2">
                   <span className="bg-emerald-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold">
                     3
                   </span>
-                  <span className="theme-text-secondary">MQL5 → Libraries フォルダに配置</span>
+                  <span className="theme-text-secondary">{t('installation.dll.step3')}</span>
                 </div>
                 <div className="bg-slate-900/50 p-2 rounded font-mono text-xs theme-text-muted">
-                  ...\MetaTrader 5\MQL5\Libraries\SANKEY_License.dll
+                  {t('installation.dll.path')}
                 </div>
               </div>
             </div>
@@ -212,13 +222,11 @@ export function ModuleDownload() {
             <div className="flex items-start space-x-2">
               <AlertCircle className="w-5 h-5 text-yellow-400 mt-0.5 flex-shrink-0" />
               <div className="space-y-2">
-                <h6 className="font-medium theme-text-primary">重要な注意事項</h6>
+                <h6 className="font-medium theme-text-primary">{t('installation.importantNotes.title')}</h6>
                 <ul className="space-y-1 text-sm theme-text-secondary">
-                  <li>
-                    • DLLの使用を許可するため、MetaTrader 5の設定で「DLLの使用を許可する」にチェックを入れてください
-                  </li>
-                  <li>• ファイル配置後、MetaTrader 5を再起動してください</li>
-                  <li>• ウイルス対策ソフトがDLLをブロックする場合は、除外設定を行ってください</li>
+                  <li>{t('installation.importantNotes.note1')}</li>
+                  <li>{t('installation.importantNotes.note2')}</li>
+                  <li>{t('installation.importantNotes.note3')}</li>
                 </ul>
               </div>
             </div>

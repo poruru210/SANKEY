@@ -145,7 +145,7 @@ export default function LoginPage() {
                     {/* Logo Section */}
                     <div className="flex justify-center">
                         <div className="flex items-center justify-center w-16 h-16 bg-emerald-500/10 rounded-xl border border-emerald-400/20">
-                            <Image src="/sankey-logo.svg" alt="SANKEY Logo" width={40} height={40} className="w-10 h-10" />
+                            <Image src="/sankey-logo.svg" alt={t('altSankeyLogo')} width={40} height={40} className="w-10 h-10" />
                         </div>
                     </div>
 

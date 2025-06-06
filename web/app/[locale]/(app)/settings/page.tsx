@@ -108,7 +108,7 @@ export default function SettingsPage() {
                 <div className="flex items-center justify-center min-h-[400px]">
                     <div className="text-center space-y-4">
                         <Loader2 className="w-8 h-8 animate-spin mx-auto text-emerald-400" />
-                        <p className="theme-text-secondary">Loading plan information...</p>
+                                <p className="theme-text-secondary">{t('common.loading')}</p>
                     </div>
                 </div>
             </main>
@@ -122,7 +122,7 @@ export default function SettingsPage() {
                 <Card className="theme-card-bg border-red-500/20">
                     <CardContent className="p-6">
                         <div className="text-center space-y-4">
-                            <div className="text-red-400 text-lg font-semibold">Error loading plan information</div>
+                                    <div className="text-red-400 text-lg font-semibold">{t('settings.toasts.loadingPlanError')}</div>
                             <p className="theme-text-secondary">{planError}</p>
                             <Button
                                 onClick={() => {
@@ -131,7 +131,7 @@ export default function SettingsPage() {
                                 }}
                                 className="bg-emerald-500 hover:bg-emerald-600 text-white"
                             >
-                                Retry
+                                        {t('settings.toasts.retryButton')}
                             </Button>
                         </div>
                     </CardContent>
@@ -175,12 +175,12 @@ export default function SettingsPage() {
                                 </div>
                                 <div>
                                     <h3 className="font-semibold theme-text-primary">
-                                        {currentTier ? formatPlanName(currentTier) : 'Unknown Plan'}
+                                        {currentTier ? t(formatPlanName(currentTier)) : t('settings.plan.unknownPlan')}
                                     </h3>
                                     <p className="text-sm theme-text-secondary">
                                         {planInfo?.current.limits ?
-                                            formatPlanLimits(planInfo.current.limits) :
-                                            'No plan limits available'
+                                            t(formatPlanLimits(planInfo.current.limits).key, formatPlanLimits(planInfo.current.limits).values) :
+                                            t('settings.plan.noLimits')
                                         }
                                     </p>
                                 </div>
@@ -193,7 +193,7 @@ export default function SettingsPage() {
                                                 "bg-gray-500"
                                 } text-white`}
                             >
-                                {currentTier ? formatPlanName(currentTier) : 'Unknown'}
+                                {currentTier ? t(formatPlanName(currentTier)) : t('settings.plan.unknownPlan')}
                             </Badge>
                         </div>
 
@@ -391,10 +391,10 @@ export default function SettingsPage() {
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent className="theme-card-bg border-emerald-500/20">
-                                    <SelectItem value="10">10 items</SelectItem>
-                                    <SelectItem value="25">25 items</SelectItem>
-                                    <SelectItem value="50">50 items</SelectItem>
-                                    <SelectItem value="100">100 items</SelectItem>
+                                    <SelectItem value="10">{t('settings.itemsPerPageOption', {count: 10})}</SelectItem>
+                                    <SelectItem value="25">{t('settings.itemsPerPageOption', {count: 25})}</SelectItem>
+                                    <SelectItem value="50">{t('settings.itemsPerPageOption', {count: 50})}</SelectItem>
+                                    <SelectItem value="100">{t('settings.itemsPerPageOption', {count: 100})}</SelectItem>
                                 </SelectContent>
                             </Select>
                             <p className="text-xs theme-text-muted">{t("settings.itemsPerPageDesc")}</p>
@@ -475,30 +475,30 @@ export default function SettingsPage() {
 
                                     <div>
                                         <h3 className="text-lg md:text-xl font-bold theme-text-primary">
-                                            {formatPlanName(tier)}
+                                            {t(formatPlanName(tier))}
                                         </h3>
                                         <div className="text-sm theme-text-secondary mt-2">
-                                            {formatPlanLimits(limits)}
+                                            {t(formatPlanLimits(limits).key, formatPlanLimits(limits).values)}
                                         </div>
                                     </div>
 
                                     <div className="space-y-2 text-xs md:text-sm">
                                         <div className="flex items-center justify-between">
-                                            <span className="theme-text-secondary">Rate Limit:</span>
+                                            <span className="theme-text-secondary">{t('settings.plan.rateLimitLabel')}</span>
                                             <span className="theme-text-primary font-medium">
                                                 {limits.rateLimit}/sec
                                             </span>
                                         </div>
                                         <div className="flex items-center justify-between">
-                                            <span className="theme-text-secondary">Burst Limit:</span>
+                                            <span className="theme-text-secondary">{t('settings.plan.burstLimitLabel')}</span>
                                             <span className="theme-text-primary font-medium">
                                                 {limits.burstLimit}
                                             </span>
                                         </div>
                                         <div className="flex items-center justify-between">
-                                            <span className="theme-text-secondary">Quota:</span>
+                                            <span className="theme-text-secondary">{t('settings.plan.quotaLabel')}</span>
                                             <span className="theme-text-primary font-medium">
-                                                {limits.quotaLimit.toLocaleString()}/{limits.quotaPeriod.toLowerCase()}
+                                                {limits.quotaLimit === -1 ? t('settings.unlimited') : limits.quotaLimit.toLocaleString()}/{t(`settings.plan.quotaPeriod${limits.quotaPeriod.charAt(0).toUpperCase() + limits.quotaPeriod.slice(1)}`)}
                                             </span>
                                         </div>
                                     </div>
@@ -531,7 +531,7 @@ export default function SettingsPage() {
                             {isChangingPlan ? (
                                 <>
                                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                    Changing...
+                                    {t('settings.plan.changingStatus')}
                                 </>
                             ) : (
                                 t("settings.updatePlan")

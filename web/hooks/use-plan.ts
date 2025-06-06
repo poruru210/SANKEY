@@ -59,8 +59,8 @@ export function usePlan(): UsePlan {
             }))
         } catch (error) {
             const errorMessage = error instanceof PlanServiceError
-                ? error.message
-                : 'Failed to load plan information'
+                ? error.message // This could be a key like 'errors.planService.specificError'
+                : 'errors.plans.loadFailed' // General error key
 
             setState(prev => ({
                 ...prev,
@@ -87,8 +87,8 @@ export function usePlan(): UsePlan {
             return result
         } catch (error) {
             const errorMessage = error instanceof PlanServiceError
-                ? error.message
-                : 'Failed to change plan'
+                ? error.message // This could be a key like 'errors.planService.changeFailed'
+                : 'errors.plans.changeFailed' // General error key for plan change failure
 
             setState(prev => ({
                 ...prev,
@@ -113,8 +113,8 @@ export function usePlan(): UsePlan {
             console.log('✅ Plan service connection test successful')
         } catch (error) {
             const errorMessage = error instanceof PlanServiceError
-                ? error.message
-                : 'Plan service connection test failed'
+                ? error.message // This could be a key like 'errors.planService.connectionFailed'
+                : 'errors.plans.connectionTestFailed' // General error key
 
             setState(prev => ({
                 ...prev,
@@ -195,8 +195,8 @@ export function usePlanInfo() {
             setPlanInfo(info)
         } catch (error) {
             const errorMessage = error instanceof PlanServiceError
-                ? error.message
-                : 'Failed to load plan information'
+                ? error.message // Could be a key
+                : 'errors.plans.loadFailed' // General error key
             setError(errorMessage)
         } finally {
             setIsLoading(false)

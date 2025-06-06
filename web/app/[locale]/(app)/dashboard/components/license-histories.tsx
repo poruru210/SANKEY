@@ -38,9 +38,9 @@ export function LicenseHistories({
     const t = useTranslations()
 
     const formatDate = (dateString?: string) => {
-        if (!dateString) return 'N/A'
+        if (!dateString) return t('common.notAvailable');
         try {
-            return new Date(dateString).toLocaleDateString('en-US', {
+            return new Date(dateString).toLocaleDateString(t('common.locale'), {
                 year: 'numeric',
                 month: 'short',
                 day: '2-digit',
@@ -108,7 +108,7 @@ export function LicenseHistories({
                                                     variant="ghost"
                                                     size="sm"
                                                     className="p-1 h-auto hover:bg-emerald-500/10"
-                                                    title="変更履歴を表示"
+                                                    title={t('licenseHistories.showHistoryTitle')}
                                                 >
                                                     <History className="w-4 h-4 text-emerald-400" />
                                                 </Button>
@@ -133,7 +133,7 @@ export function LicenseHistories({
                                             <span className="theme-text-primary">{history.xAccount}</span>
                                         </div>
                                         <div>
-                                            <span className="theme-text-emerald">Last updated:</span>{" "}
+                                            <span className="theme-text-emerald">{t('licenseHistories.lastUpdatedLabel')}</span>{" "}
                                             <span className="theme-text-primary">{formatDate(actionDate)}</span>
                                         </div>
                                     </div>

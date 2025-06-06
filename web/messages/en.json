@@ -19,7 +19,21 @@
     "title": "Application Timeline",
     "description": "Status change history for {applicationName}",
     "noData": "No timeline data available",
-    "reason": "Reason"
+    "reason": "Reason",
+    "actions": {
+      "approve": "Approved",
+      "approved": "Approved",
+      "awaitingnotification": "Awaiting Notification",
+      "reject": "Rejected",
+      "rejected": "Rejected",
+      "cancel": "Cancelled",
+      "cancelled": "Cancelled",
+      "revoke": "Revoked",
+      "revoked": "Revoked",
+      "active": "Active",
+      "activated": "Activated",
+      "pending": "Pending"
+    }
   },
   "actions": {
     "approve": "Approve",
@@ -39,7 +53,10 @@
     "loadingApplications": "Loading applications...",
     "processing": "Processing...",
     "refresh": "Refresh",
-    "retry": "Retry"
+    "retry": "Retry",
+    "notAvailable": "N/A",
+    "error": "Error",
+    "unknownError": "Unknown error occurred"
   },
   "dashboard": {
     "activeApplications": "Active Licenses",
@@ -52,6 +69,346 @@
     "title": "License Management Dashboard",
     "totalIssued": "Total Issued",
     "within30Days": "Within 30 days"
+  },
+  "activeLicenses": {
+    "showHistoryTitle": "Show History",
+    "lastUpdatedLabel": "Last updated:"
+  },
+  "licenseHistories": {
+    "showHistoryTitle": "Show History",
+    "lastUpdatedLabel": "Last updated:"
+  },
+  "countdown": {
+    "soon": "Sending soon",
+    "timeLeft": "Sending in {minutes}m {seconds}s",
+    "sent": "Sent"
+  },
+  "developer": {
+    "title": "Developer Integration Guide",
+    "subtitle": "Complete guide for integrating SANKEY license verification into your Expert Advisors",
+    "integrationSteps": {
+      "title": "Integration Steps",
+      "description": "Step-by-step guide to integrate SANKEY license verification"
+    },
+    "toasts": {
+      "gasDownloadSuccess": {
+        "title": "Download Successful",
+        "description": "GAS template has been downloaded."
+      },
+      "gasDownloadError": {
+        "title": "Download Error",
+        "noErrorInfo": "Failed to retrieve the file, and no error information is available.",
+        "general": "An error occurred while downloading the GAS template."
+      }
+    },
+    "moduleDownload": {
+      "mqh": {
+        "name": "MQH Library",
+        "description": "Include our header file for easy license verification in MQL4/MQL5.",
+        "requirements": "MQL4/MQL5 environment",
+        "fileName": "SANKEY_License.mqh",
+        "downloadButton": "Download MQH",
+        "title": "MQH Library Download",
+        "status": {
+          "downloaded": "Downloaded"
+        },
+        "labels": {
+          "fileName": "File Name",
+          "size": "Size",
+          "version": "Version",
+          "requirements": "System Requirements"
+        },
+        "buttons": {
+          "download": "Download",
+          "downloadCompleted": "Download Completed"
+        },
+        "requirementsList": {
+          "mt5": "MetaTrader 5 Build 3560 or higher",
+          "mql5Compiler": "MQL5 Compiler compatible",
+          "includeFolder": "Place in Include folder"
+        }
+      },
+      "dll": {
+        "name": "DLL Library",
+        "description": "Windows DLL for license verification functions. Required for MQH.",
+        "requirements": "Windows environment",
+        "fileName": "SANKEY_License.dll",
+        "downloadButton": "Download DLL",
+        "title": "DLL Library Download",
+        "requirementsList": {
+          "windows": "Windows 10/11 (64-bit)",
+          "vcRedist": "Visual C++ Redistributable 2019 or higher",
+          "librariesFolder": "Place in Libraries folder"
+        }
+      },
+      "gas": {
+        "name": "GAS Template",
+        "description": "Google Apps Script template for verifying licenses via HTTP API.",
+        "requirements": "Google Account",
+        "fileName": "SANKEY_GAS_Template.js",
+        "downloadButton": "Download GAS",
+        "title": "GAS Template Download",
+        "note": "Note: This is a template. You'll need to deploy it as a web app in your Google Apps Script environment."
+      },
+      "installation": {
+        "title": "Installation Steps",
+        "description": "Place the downloaded files in the correct locations.",
+        "mqh": {
+          "title": "MQH File Placement",
+          "step1": "Open MetaTrader 5",
+          "step2": "File → Open Data Folder",
+          "step3": "Place in MQL5 → Include folder",
+          "path": "...\\MetaTrader 5\\MQL5\\Include\\SANKEY_License.mqh"
+        },
+        "dll": {
+          "title": "DLL File Placement",
+          "step1": "Open MetaTrader 5",
+          "step2": "File → Open Data Folder",
+          "step3": "Place in MQL5 → Libraries folder",
+          "path": "...\\MetaTrader 5\\MQL5\\Libraries\\SANKEY_License.dll"
+        },
+        "importantNotes": {
+          "title": "Important Notes",
+          "note1": "• To allow DLL usage, check \"Allow DLL imports\" in MetaTrader 5 settings.",
+          "note2": "• Restart MetaTrader 5 after placing files.",
+          "note3": "• If antivirus software blocks the DLL, add an exclusion."
+        }
+      }
+    },
+    "mtSelector": {
+      "platformLabel": "Platform:",
+      "mt4Button": "MT4",
+      "mt5Button": "MT5",
+      "title": "Integration Example",
+      "implementationCodeTitle": "{version} Implementation Code",
+      "codeComments": {
+        "loadFailed": "License file loading failed",
+        "decryptionFailed": "Decryption failed (Code: {errorCode})",
+        "decryptionSuccess": "Decryption successful\n{json}"
+      },
+      "differences": {
+        "title": "Key Differences",
+        "mt4": {
+          "title": "MT4 Version",
+          "point1": "• Uses AccountNumber() function",
+          "point2": "• File handle error checked with < 0",
+          "point3": "• Uses MQL4/Files folder"
+        },
+        "mt5": {
+          "title": "MT5 Version",
+          "point1": "• Uses AccountInfoInteger(ACCOUNT_LOGIN)",
+          "point2": "• Checked with INVALID_HANDLE",
+          "point3": "• Uses MQL5/Files folder"
+        }
+      }
+    },
+    "playground": {
+      "cardTitle": "Playground",
+      "description": "Generate and validate license keys for testing purposes.",
+      "resetButton": "Reset All",
+      "tabs": {
+        "generate": "Generate License",
+        "validate": "Validate License"
+      },
+      "generate": {
+        "title": "Generate New License",
+        "description": "Enter EA information to generate a license key.",
+        "preset1d": "1 Day",
+        "preset7d": "7 Days",
+        "preset30d": "30 Days",
+        "preset90d": "90 Days",
+        "preset365d": "1 Year",
+        "preset730d": "2 Years",
+        "expiryDateDisplay": "Expires: {date}"
+      },
+      "eaNameLabel": "EA Name",
+      "eaNamePlaceholder": "Enter EA name",
+      "accountNumberLabel": "Account ID",
+      "accountNumberPlaceholder": "Enter MT4/MT5 Account No.",
+      "brokerLabel": "Broker",
+      "brokerPlaceholder": "Enter broker name",
+      "expiryPresetLabel": "Expiry Presets",
+      "customExpiryLabel": "Custom Expiry (days)",
+      "neverExpires": "Never Expires",
+      "generateButton": "Generate License",
+      "buttons": {
+        "generating": "Generating...",
+        "validateLicense": "Validate License",
+        "validating": "Validating...",
+        "show": "Show",
+        "hide": "Hide",
+        "useInValidationForm": "Use in Validation Form"
+      },
+      "generatedLicense": {
+        "title": "Generated License",
+        "description": "Encrypted license key.",
+        "licenseKeyLabel": "License Key",
+        "pleaseGenerate": "Please generate a license first."
+      },
+      "validate": {
+        "title": "Validate License",
+        "description": "Enter license key to check its details.",
+        "licenseKeyLabel": "License Key",
+        "licenseKeyPlaceholder": "Enter encrypted license string",
+        "accountIdLabel": "Account ID"
+      },
+      "licenseInfo": {
+        "title": "License Information",
+        "description": "Decrypted license details.",
+        "eaNameLabel": "EA Name",
+        "accountIdLabel": "Account ID",
+        "expiryDateLabel": "Expiry Date",
+        "issuedAtLabel": "Issued At",
+        "jsonViewLabel": "JSON View",
+        "hiddenMessage": "License information is hidden.",
+        "pleaseValidate": "Please validate a license first.",
+        "daysUnit": "days"
+      },
+      "status": {
+        "active": "Active",
+        "expired": "Expired",
+        "expiringSoon": "Expiring Soon ({days} days left)",
+        "notYetActive": "Not Yet Active (starts in {days} days)"
+      },
+      "toasts": {
+        "generateSuccess": {
+          "title": "License Generated",
+          "description": "Sample license key has been created."
+        },
+        "generateError": {
+          "title": "Generation Failed",
+          "description": "Could not generate license key. Check inputs."
+        },
+        "copySuccess": {
+          "title": "Copied to Clipboard",
+          "description": "{label} copied to clipboard."
+        },
+        "copyError": {
+          "title": "Copy Failed",
+          "description": "Failed to access clipboard."
+        },
+        "validationError": {
+          "title": "Validation Error",
+          "eaNameAndAccountIdRequired": "EA Name and Account ID are required.",
+          "licenseKeyAndAccountIdRequired": "License Key and Account ID are required."
+        },
+        "validateSuccess": {
+            "title": "License Validated",
+            "description": "License information has been decrypted."
+        },
+        "licenseSetForValidation": {
+            "title": "License Set",
+            "description": "Generated license has been set in the validation form."
+        }
+      }
+    },
+    "step1": {
+      "title": "Prerequisites",
+      "description": "Create necessary items in your Google Form for license applications.",
+      "formPrep": {
+        "title": "Google Form Preparation",
+        "description": "Create the following question items in your application form (items marked with",
+        "requiredBadge": "Required",
+        "requiredText": " are mandatory):",
+        "table": {
+          "question": "Question Item",
+          "required": "Required",
+          "example": "Example Answer",
+          "eaName": {
+            "question": "EA Name",
+            "example": "MyTradingEA v1.0"
+          },
+          "accountNumber": {
+            "question": "Account Number",
+            "example": "1234567890"
+          },
+          "brokerName": {
+            "question": "Broker Name",
+            "example": "XM Trading"
+          },
+          "email": {
+            "question": "Email Address",
+            "example": "user@example.com"
+          },
+          "xAccount": {
+            "question": "X Account Name",
+            "example": "@username"
+          }
+        },
+        "openExternalLinkButton": "Open Google Forms"
+      }
+    },
+    "step2": {
+      "title": "Google Form Integration (GAS)",
+      "description": "Create a new Google Apps Script project and set it up using the provided template.",
+      "createProject": {
+        "title": "Create New Project",
+        "step1": "Go to",
+        "step1LinkText": "Google Apps Script",
+        "step2": "Click 'New project'",
+        "step3": "Rename the project to 'EA License Application'"
+      },
+      "prepareCode": {
+        "title": "Prepare Code File",
+        "description": "Click the button below to download the GAS template file (`gas-template.gs`).",
+        "downloadButton": "Download GAS Template",
+        "downloadingButton": "Downloading..."
+      },
+      "pasteCode": {
+        "title": "Paste Code",
+        "description": "Open the downloaded `gas-template.gs` file, copy its entire content, and paste it into the Google Apps Script editor, replacing any existing code."
+      },
+      "adjustFormFields": {
+        "title": "Adjust FORM_FIELDS",
+        "description": "Adjust the `FORM_FIELDS` object in the script to match your actual Google Form questions. The keys (e.g., `EA_NAME`) are fixed, but the values (e.g., `\"Enter your EA name\"`) must match your form's question text.",
+        "exampleTitle": "Example:",
+        "exampleDescription": "If your form question is \"Enter your EA name\"",
+        "codeExample": "// FORM_FIELDS: {\n//   EA_NAME: \"Enter your EA name\",\n//   // ...\n// }"
+      }
+    },
+    "step3": {
+      "title": "Test Integration",
+      "description": "Run test functions within Google Apps Script to confirm settings and communication.",
+      "checkSettings": {
+        "title": "Check Configuration Values",
+        "step1": "Click 'Run' in the Google Apps Script editor menu.",
+        "step2": "Hover over 'Run function' and select 'validateConfig' from the dropdown.",
+        "step3": "After execution, check the 'Execution log' at the bottom of the editor for the message:",
+        "successMessage": "✅ Configuration is valid",
+        "onErrorTitle": "If errors occur:",
+        "onErrorDescription": "Re-check the `CONFIG` section values in your script."
+      },
+      "communicationTest": {
+        "title": "Communication Test",
+        "step1": "Again, click 'Run' in the menu.",
+        "step2": "Hover over 'Run function' and select 'testWebhook'.",
+        "step3": "After execution, check the 'Execution log' for the message:",
+        "successMessage": "✅ Test successful"
+      }
+    },
+    "step4": {
+      "title": "Download License Authentication Module",
+      "description": "Get the license authentication module to embed in your EA."
+    },
+    "step5": {
+      "title": "Embed Authentication Module in EA",
+      "description": "Integrate the downloaded module into your Expert Advisor.",
+      "overview": {
+        "title": "Overview",
+        "description": "Embed SANKEY license authentication functionality into your Expert Advisor and implement the proper authentication flow."
+      },
+      "implementationCode": {
+        "title": "Implementation Code"
+      }
+    },
+    "step6": {
+      "title": "Set EA Download URL",
+      "description": "Configure the URL where authenticated users can download the EA.",
+      "overview": {
+        "title": "Overview",
+        "description": "Build a system where users who have completed license authentication can securely download EA files."
+      }
+    }
   },
   "dialog": {
     "approveDescription": "Are you sure you want to approve this application? A license key will be issued to the user.",
@@ -91,6 +448,9 @@
     "title": "Filters",
     "xAccount": "X Account"
   },
+  "footer": {
+    "copyright": "© 2024 SANKEY. All rights reserved."
+  },
   "login": {
     "accessDenied": "Access denied",
     "checkingAuth": "Checking authentication...",
@@ -120,7 +480,10 @@
   "pagination": {
     "of": "of",
     "showing": "Showing",
-    "to": "to"
+    "to": "to",
+    "applications": "applications",
+    "licenses": "licenses",
+    "historyRecords": "history records"
   },
   "settings": {
     "active": "active",
@@ -155,9 +518,49 @@
     "title": "Settings",
     "unlimited": "Unlimited",
     "updatePlan": "Update Plan",
-    "used": "used"
+    "used": "used",
+    "toasts": {
+      "loadingPlanError": "Error loading plan information",
+      "retryButton": "Retry"
+    },
+    "plan": {
+      "unknownPlan": "Unknown Plan",
+      "noLimits": "No plan limits available",
+      "tierFree": "Free Plan",
+      "tierBasic": "Basic Plan",
+      "tierPro": "Pro Plan",
+      "rateLimitLabel": "Rate Limit:",
+      "burstLimitLabel": "Burst Limit:",
+      "quotaLabel": "Quota:",
+      "changingStatus": "Changing...",
+      "limitsPattern": "{quotaLimit} per {quotaPeriod}, {rateLimit} req/s",
+      "quotaPeriodDay": "Day",
+      "quotaPeriodMonth": "Month"
+    },
+    "itemsPerPageOption": "{count} items"
   },
-  "status": {},
+  "errors": {
+    "plans": {
+      "loadFailed": "Failed to load plan information.",
+      "changeFailed": "Failed to change plan.",
+      "connectionTestFailed": "Plan service connection test failed."
+    },
+    "planService": {
+      "getFailed": "Failed to retrieve plan information from the server.",
+      "changeFailed": "Failed to change plan details on the server.",
+      "connectionTestFailed": "Connection test to plan service failed."
+    }
+  },
+  "status": {
+    "pending": "Pending",
+    "awaitingnotification": "Awaiting Notification",
+    "active": "Active",
+    "expired": "Expired",
+    "revoked": "Revoked",
+    "rejected": "Rejected",
+    "cancelled": "Cancelled",
+    "expiringSoon": "Expiring Soon"
+  },
   "tabs": {
     "active": "Active Licenses",
     "activeDescription": "Currently active EA licenses",

@@ -5,6 +5,7 @@ import {ThemeToggle} from "@/components/theme-toggle"
 import {LanguageToggle} from "@/components/language-toggle"
 import { useTheme } from "@/lib/theme-context"
 import { useEffect, useState } from "react"
+import { useTranslations } from "next-intl";
 
 interface AuthLayoutProps {
     children: React.ReactNode
@@ -12,6 +13,7 @@ interface AuthLayoutProps {
 }
 
 export default function AuthLayout({ children }: AuthLayoutProps) {
+    const t = useTranslations();
     const { resolvedTheme } = useTheme()
     const [mounted, setMounted] = useState(false)
 
@@ -34,7 +36,7 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
                     {children}
                 </div>
                 <div className="w-full text-center py-4">
-                    <div className="text-xs theme-text-muted">© 2024 SANKEY. All rights reserved.</div>
+                    <div className="text-xs theme-text-muted">{t('footer.copyright')}</div>
                 </div>
             </div>
         )
@@ -59,7 +61,7 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
 
                 {/* Footer */}
                 <div className="w-full text-center py-4">
-                    <div className="text-xs theme-text-muted">© 2024 SANKEY. All rights reserved.</div>
+                    <div className="text-xs theme-text-muted">{t('footer.copyright')}</div>
                 </div>
             </div>
         </>

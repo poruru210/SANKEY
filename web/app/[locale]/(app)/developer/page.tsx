@@ -26,8 +26,10 @@ import {ModuleDownload} from "./components/module-download"
 import {MtVersionSelector} from "./components/mt-version-selector"
 import {StepGroup, StepControl} from "./components//step-control-component"
 import LicensePlayground from './components/license-playground'
+import { useTranslations } from "next-intl";
 
 export default function Page() {
+    const t = useTranslations();
     const { downloadGasTemplate, isLoading, error } = useDeveloper();
     const { toast } = useToast();
 
@@ -45,22 +47,22 @@ export default function Page() {
                 window.URL.revokeObjectURL(url);
 
                 toast({
-                    title: "ダウンロード成功",
-                    description: "GASテンプレートがダウンロードされました。",
+                    title: t('developer.toasts.gasDownloadSuccess.title'),
+                    description: t('developer.toasts.gasDownloadSuccess.description'),
                     variant: "default",
                 });
             } else if (!error) {
                 toast({
-                    title: "ダウンロード失敗",
-                    description: "ファイルの取得に失敗しましたが、エラー情報がありません。",
+                    title: t('developer.toasts.gasDownloadError.title'),
+                    description: t('developer.toasts.gasDownloadError.noErrorInfo'),
                     variant: "destructive",
                 });
             }
         } catch (e: any) {
             console.error("Download failed:", e);
             toast({
-                title: "ダウンロードエラー",
-                description: e.message || "GASテンプレートのダウンロード中にエラーが発生しました。",
+                title: t('developer.toasts.gasDownloadError.title'),
+                description: e.message || t('developer.toasts.gasDownloadError.general'),
                 variant: "destructive",
             });
         }
@@ -69,8 +71,8 @@ export default function Page() {
     React.useEffect(() => {
         if (error) {
             toast({
-                title: "エラー",
-                description: error || "不明なエラーが発生しました。",
+                title: t('common.error'),
+                description: error || t('common.unknownError'),
                 variant: "destructive",
             });
         }
@@ -88,9 +90,8 @@ export default function Page() {
                             <div className="flex items-center space-x-3">
                                 <Shield className="w-8 h-8 text-emerald-400"/>
                                 <div>
-                                    <h1 className="text-3xl font-bold theme-text-primary">開発者統合ガイド</h1>
-                                    <p className="theme-text-secondary">Expert Advisor
-                                        SANKEYライセンス認証を統合するための完全ガイド</p>
+                                    <h1 className="text-3xl font-bold theme-text-primary">{t('developer.title')}</h1>
+                                    <p className="theme-text-secondary">{t('developer.subtitle')}</p>
                                 </div>
                             </div>
                         </div>
@@ -102,10 +103,10 @@ export default function Page() {
                         <CardHeader className="space-y-4">
                             <CardTitle className="theme-text-primary flex items-center">
                                 <Settings className="w-6 h-6 mr-2 text-emerald-400"/>
-                                Integration Steps
+                                {t('developer.integrationSteps.title')}
                             </CardTitle>
                             <CardDescription className="theme-text-secondary">
-                                Step-by-step guide to integrate SANKEY license verification
+                                {t('developer.integrationSteps.description')}
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
@@ -113,45 +114,45 @@ export default function Page() {
                                 {/* Step 1: 事前準備 */}
                                 <StepControl
                                     id={1}
-                                    title="事前準備"
-                                    description="ライセンス申請用のGoogleフォームに必要な項目を作成します。"
+                                    title={t('developer.step1.title')}
+                                    description={t('developer.step1.description')}
                                     icon={<FileText className="w-5 h-5"/>}
                                     status="completed"
                                 >
                                     <div className="space-y-6">
                                         <div>
-                                            <h4 className="font-semibold theme-text-primary mb-2">Googleフォームの準備</h4>
-                                            <p className="theme-text-secondary mb-3">申請フォームに以下の質問項目を作成してください（<Badge variant="outline" className="theme-badge-blue">必須</Badge>マークの項目は必須）：</p>
+                                            <h4 className="font-semibold theme-text-primary mb-2">{t('developer.step1.formPrep.title')}</h4>
+                                            <p className="theme-text-secondary mb-3">{t('developer.step1.formPrep.description')} (<Badge variant="outline" className="theme-badge-blue">{t('developer.step1.formPrep.requiredBadge')}</Badge>{t('developer.step1.formPrep.requiredText')}）：</p>
                                             <div className="space-y-2 theme-text-secondary">
                                                 <div className="grid grid-cols-3 gap-x-4 font-medium theme-text-primary border-b pb-1 mb-1">
-                                                    <div>質問項目</div>
-                                                    <div className="text-center">必須</div>
-                                                    <div>回答例</div>
+                                                    <div>{t('developer.step1.formPrep.table.question')}</div>
+                                                    <div className="text-center">{t('developer.step1.formPrep.table.required')}</div>
+                                                    <div>{t('developer.step1.formPrep.table.example')}</div>
                                                 </div>
                                                 <div className="grid grid-cols-3 gap-x-4">
-                                                    <div>EA名</div>
+                                                    <div>{t('developer.step1.formPrep.table.eaName.question')}</div>
                                                     <div className="text-center">✓</div>
-                                                    <div>MyTradingEA v1.0</div>
+                                                    <div>{t('developer.step1.formPrep.table.eaName.example')}</div>
                                                 </div>
                                                 <div className="grid grid-cols-3 gap-x-4">
-                                                    <div>アカウント番号</div>
+                                                    <div>{t('developer.step1.formPrep.table.accountNumber.question')}</div>
                                                     <div className="text-center">✓</div>
-                                                    <div>1234567890</div>
+                                                    <div>{t('developer.step1.formPrep.table.accountNumber.example')}</div>
                                                 </div>
                                                 <div className="grid grid-cols-3 gap-x-4">
-                                                    <div>ブローカー名</div>
+                                                    <div>{t('developer.step1.formPrep.table.brokerName.question')}</div>
                                                     <div className="text-center">✓</div>
-                                                    <div>XM Trading</div>
+                                                    <div>{t('developer.step1.formPrep.table.brokerName.example')}</div>
                                                 </div>
                                                 <div className="grid grid-cols-3 gap-x-4">
-                                                    <div>メールアドレス</div>
+                                                    <div>{t('developer.step1.formPrep.table.email.question')}</div>
                                                     <div className="text-center">✓</div>
-                                                    <div>user@example.com</div>
+                                                    <div>{t('developer.step1.formPrep.table.email.example')}</div>
                                                 </div>
                                                 <div className="grid grid-cols-3 gap-x-4">
-                                                    <div>Xアカウント名</div>
+                                                    <div>{t('developer.step1.formPrep.table.xAccount.question')}</div>
                                                     <div className="text-center"></div>
-                                                    <div>@username</div>
+                                                    <div>{t('developer.step1.formPrep.table.xAccount.example')}</div>
                                                 </div>
                                             </div>
                                         </div>
@@ -162,7 +163,7 @@ export default function Page() {
                                             onClick={() => window.open("https://forms.google.com", "_blank")}
                                         >
                                             <Link className="w-4 h-4 mr-2"/>
-                                            外部リンクを開く
+                                            {t('developer.step1.formPrep.openExternalLinkButton')}
                                         </Button>
                                     </div>
                                 </StepControl>
@@ -170,49 +171,46 @@ export default function Page() {
                                 {/* Step 2: GAS連携設定 */}
                                 <StepControl
                                     id={2}
-                                    title="Google Form連携設定（GAS）"
-                                    description="Google Apps Scriptで新しいプロジェクトを作成し、提供されたテンプレートを元に設定を行います。"
+                                    title={t('developer.step2.title')}
+                                    description={t('developer.step2.description')}
                                     icon={<Code className="w-5 h-5"/>}
                                     status="pending"
                                 >
                                     <div className="space-y-6">
                                         <div>
-                                            <h4 className="font-semibold theme-text-primary mb-2">新しいプロジェクトを作成</h4>
+                                            <h4 className="font-semibold theme-text-primary mb-2">{t('developer.step2.createProject.title')}</h4>
                                             <ol className="list-decimal pl-5 space-y-1 theme-text-secondary mb-4">
-                                                <li>「<a href="https://script.google.com" target="_blank" rel="noopener noreferrer" className="text-emerald-400 hover:underline">Google Apps Script</a>」にアクセス</li>
-                                                <li>「新しいプロジェクト」をクリック</li>
-                                                <li>プロジェクト名を「EA License Application」に変更</li>
+                                                <li>{t('developer.step2.createProject.step1')} <a href="https://script.google.com" target="_blank" rel="noopener noreferrer" className="text-emerald-400 hover:underline">{t('developer.step2.createProject.step1LinkText')}</a></li>
+                                                <li>{t('developer.step2.createProject.step2')}</li>
+                                                <li>{t('developer.step2.createProject.step3')}</li>
                                             </ol>
                                         </div>
 
                                         <div>
-                                            <h4 className="font-semibold theme-text-primary mb-2">コードファイルの準備</h4>
-                                            <p className="theme-text-secondary mb-3">以下のボタンをクリックして、GASテンプレートファイル（`gas-template.gs`）をダウンロードします。</p>
+                                            <h4 className="font-semibold theme-text-primary mb-2">{t('developer.step2.prepareCode.title')}</h4>
+                                            <p className="theme-text-secondary mb-3">{t('developer.step2.prepareCode.description')}</p>
                                             <Button
                                                 className="bg-emerald-500 hover:bg-emerald-600 text-white"
                                                 onClick={handleDownloadGasTemplate}
                                                 disabled={isLoading}
                                             >
                                                 <Download className="w-4 h-4 mr-2" />
-                                                {isLoading ? "ダウンロード中..." : "GASテンプレートをダウンロード"}
+                                                {isLoading ? t('developer.step2.prepareCode.downloadingButton') : t('developer.step2.prepareCode.downloadButton')}
                                             </Button>
                                         </div>
 
                                         <div>
-                                            <h4 className="font-semibold theme-text-primary mb-2">コードの貼り付け</h4>
-                                            <p className="theme-text-secondary mb-3">ダウンロードした `gas-template.gs` ファイルを開き、その内容全体をコピーして、Google Apps Scriptエディタに貼り付けてください。既存のコードは全て置き換えます。</p>
+                                            <h4 className="font-semibold theme-text-primary mb-2">{t('developer.step2.pasteCode.title')}</h4>
+                                            <p className="theme-text-secondary mb-3">{t('developer.step2.pasteCode.description')}</p>
                                         </div>
 
                                         <div>
-                                            <h4 className="font-semibold theme-text-primary mb-2">FORM_FIELDS の調整</h4>
-                                            <p className="theme-text-secondary mb-3">実際のGoogleフォームの質問文に合わせて、スクリプト内の `FORM_FIELDS` オブジェクトを調整してください。キー（例: `EA_NAME`）は固定ですが、値（例: `"あなたのEA名を入力してください"`）をフォームの質問文と一致させる必要があります。</p>
-                                            <p className="theme-text-secondary mb-1"><strong>例：</strong> フォームの質問が「あなたのEA名を入力してください」の場合</p>
+                                            <h4 className="font-semibold theme-text-primary mb-2">{t('developer.step2.adjustFormFields.title')}</h4>
+                                            <p className="theme-text-secondary mb-3">{t('developer.step2.adjustFormFields.description')}</p>
+                                            <p className="theme-text-secondary mb-1"><strong>{t('developer.step2.adjustFormFields.exampleTitle')}</strong> {t('developer.step2.adjustFormFields.exampleDescription')}</p>
                                             <pre className="bg-slate-900 rounded-lg p-4 overflow-x-auto">
                                               <code className="text-sm text-emerald-300">
-                                                {`// FORM_FIELDS: {
-//   EA_NAME: "あなたのEA名を入力してください",
-//   // ...
-// }`}
+                                                {t('developer.step2.adjustFormFields.codeExample')}
                                               </code>
                                             </pre>
                                         </div>
@@ -222,28 +220,28 @@ export default function Page() {
                                 {/* Step 3: 連携テスト */}
                                 <StepControl
                                     id={3}
-                                    title="連携テストを行う"
-                                    description="Google Apps Script内でテスト関数を実行し、設定と通信が正常に行われるか確認します。"
+                                    title={t('developer.step3.title')}
+                                    description={t('developer.step3.description')}
                                     icon={<TestTube className="w-5 h-5"/>}
                                     status="in-progress"
                                 >
                                     <div className="space-y-6">
                                         <div>
-                                            <h4 className="font-semibold theme-text-primary mb-2">設定値の確認</h4>
+                                            <h4 className="font-semibold theme-text-primary mb-2">{t('developer.step3.checkSettings.title')}</h4>
                                             <ol className="list-decimal pl-5 space-y-1 theme-text-secondary mb-3">
-                                                <li>Google Apps Scriptエディタの上部メニューの「実行」をクリック。</li>
-                                                <li>「関数を実行」にマウスオーバーし、ドロップダウンから「validateConfig」を選択。</li>
-                                                <li>実行後、エディタ下部の「実行ログ」で「<code className="bg-emerald-100 dark:bg-emerald-800 text-emerald-700 dark:text-emerald-200 px-1.5 py-1 rounded text-sm font-mono">✅ 設定は正常です</code>」というメッセージが表示されることを確認してください。</li>
+                                                <li>{t('developer.step3.checkSettings.step1')}</li>
+                                                <li>{t('developer.step3.checkSettings.step2')}</li>
+                                                <li>{t('developer.step3.checkSettings.step3')} (<code className="bg-emerald-100 dark:bg-emerald-800 text-emerald-700 dark:text-emerald-200 px-1.5 py-1 rounded text-sm font-mono">{t('developer.step3.checkSettings.successMessage')}</code>)</li>
                                             </ol>
-                                            <p className="theme-text-secondary mb-4"><strong>エラーが出た場合:</strong> スクリプト内の `CONFIG` セクションの設定値を再確認してください。</p>
+                                            <p className="theme-text-secondary mb-4"><strong>{t('developer.step3.checkSettings.onErrorTitle')}</strong> {t('developer.step3.checkSettings.onErrorDescription')}</p>
                                         </div>
 
                                         <div>
-                                            <h4 className="font-semibold theme-text-primary mb-2">通信テスト</h4>
+                                            <h4 className="font-semibold theme-text-primary mb-2">{t('developer.step3.communicationTest.title')}</h4>
                                             <ol className="list-decimal pl-5 space-y-1 theme-text-secondary mb-3">
-                                                <li>再度、上部メニューの「実行」をクリック。</li>
-                                                <li>「関数を実行」にマウスオーバーし、ドロップダウンから「testWebhook」を選択。</li>
-                                                <li>実行後、「実行ログ」で「<code className="bg-emerald-100 dark:bg-emerald-800 text-emerald-700 dark:text-emerald-200 px-1.5 py-1 rounded text-sm font-mono">✅ テスト成功</code>」というメッセージが表示されることを確認してください。</li>
+                                                <li>{t('developer.step3.communicationTest.step1')}</li>
+                                                <li>{t('developer.step3.communicationTest.step2')}</li>
+                                                <li>{t('developer.step3.communicationTest.step3')} (<code className="bg-emerald-100 dark:bg-emerald-800 text-emerald-700 dark:text-emerald-200 px-1.5 py-1 rounded text-sm font-mono">{t('developer.step3.communicationTest.successMessage')}</code>)</li>
                                             </ol>
                                         </div>
                                     </div>
@@ -252,8 +250,8 @@ export default function Page() {
                                 {/* Step 4: モジュールダウンロード */}
                                 <StepControl
                                     id={4}
-                                    title="ライセンス認証用モジュールをダウンロードする"
-                                    description="EAに組み込むためのライセンス認証モジュールを取得します"
+                                    title={t('developer.step4.title')}
+                                    description={t('developer.step4.description')}
                                     icon={<Download className="w-5 h-5"/>}
                                     status="pending"
                                 >
@@ -263,21 +261,21 @@ export default function Page() {
                                 {/* Step 5: EA組み込み */}
                                 <StepControl
                                     id={5}
-                                    title="EAに認証モジュールを組み込む"
-                                    description="ダウンロードしたモジュールをExpert Advisorに統合します"
+                                    title={t('developer.step5.title')}
+                                    description={t('developer.step5.description')}
                                     icon={<Code className="w-5 h-5"/>}
                                     status="pending"
                                 >
                                     <div className="space-y-6">
                                         <div>
-                                            <h4 className="font-semibold theme-text-primary mb-2">概要</h4>
+                                            <h4 className="font-semibold theme-text-primary mb-2">{t('developer.step5.overview.title')}</h4>
                                             <p>
-                                                Expert AdvisorにSANKEYライセンス認証機能を組み込み、適切な認証フローを実装します。
+                                                {t('developer.step5.overview.description')}
                                             </p>
                                         </div>
 
                                         <div>
-                                            <h4 className="font-semibold theme-text-primary mb-3">実装コード</h4>
+                                            <h4 className="font-semibold theme-text-primary mb-3">{t('developer.step5.implementationCode.title')}</h4>
                                             <MtVersionSelector/>
                                         </div>
                                     </div>
@@ -286,16 +284,16 @@ export default function Page() {
                                 {/* Step 6: ダウンロードURL設定 */}
                                 <StepControl
                                     id={6}
-                                    title="EAのダウンロードURLを設定する"
-                                    description="認証済みユーザーがEAをダウンロードできるURLを設定します"
+                                    title={t('developer.step6.title')}
+                                    description={t('developer.step6.description')}
                                     icon={<Link className="w-5 h-5"/>}
                                     status="pending"
                                 >
                                     <div className="space-y-6">
                                         <div>
-                                            <h4 className="font-semibold theme-text-primary mb-2">概要</h4>
+                                            <h4 className="font-semibold theme-text-primary mb-2">{t('developer.step6.overview.title')}</h4>
                                             <p>
-                                                ライセンス認証が完了したユーザーが安全にEAファイルをダウンロードできるシステムを構築します。
+                                                {t('developer.step6.overview.description')}
                                             </p>
                                         </div>
                                     </div>
