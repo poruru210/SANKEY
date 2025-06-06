@@ -3,20 +3,22 @@
 import type React from "react"
 
 import { useState, useEffect } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useSearchParams } from "next/navigation"
 import { signIn, useSession } from "next-auth/react"
+import { useRouter } from "@/i18n/routing"
+import { useLocale, useTranslations } from "next-intl"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Shield, Key, FileKey, Loader2, AlertCircle } from "lucide-react"
 import Image from "next/image"
-import { useI18n } from "@/lib/i18n-context"
 
 export default function LoginPage() {
     const router = useRouter()
-    const searchParams = useSearchParams() //  searchParams is already defined at the top level
+    const searchParams = useSearchParams()
     const { data: session, status } = useSession()
-    const { t, language: i18nLanguage } = useI18n() // Renamed to i18nLanguage
+    const currentLocale = useLocale()
+    const t = useTranslations()
 
     const [isLoading, setIsLoading] = useState(false)
     const [error, setError] = useState("")
@@ -74,6 +76,7 @@ export default function LoginPage() {
     }, [status, router, returnUrl])
 
     const handleSignIn = async () => {
+
         setIsLoading(true)
         setError("")
 
@@ -81,7 +84,16 @@ export default function LoginPage() {
             const decodedReturnUrl = decodeURIComponent(returnUrl)
 
             // returnUrlが安全かどうかチェックして、callbackUrlを設定
-            let callbackUrl = '/dashboard'
+            let callbackUrl = `/${currentLocale}/dashboard`
+
+            console.log('🔍 handleSignIn Debug:', {
+                currentLocale,
+                returnUrl,
+                decodedReturnUrl,
+                finalCallbackUrl: callbackUrl,
+                windowLocation: window.location.href
+            });
+
             try {
                 const url = new URL(decodedReturnUrl, window.location.origin)
                 if (url.origin === window.location.origin) {
@@ -93,16 +105,9 @@ export default function LoginPage() {
                 }
             }
 
-            const langFromUrl = searchParams.get('lang')
-            let uiLocalesForCognito = i18nLanguage // Default to i18n language
+            console.log(`[LoginPage] handleSignIn: locale='${currentLocale}', callbackUrl='${callbackUrl}'`)
 
-            if (langFromUrl === 'en' || langFromUrl === 'ja') {
-                uiLocalesForCognito = langFromUrl
-            }
-
-            console.log(`[LoginPage] handleSignIn: langFromUrl='${langFromUrl}', i18nLanguage='${i18nLanguage}', uiLocalesForCognito='${uiLocalesForCognito}'`)
-
-            await signIn('cognito', { callbackUrl }, { lang: uiLocalesForCognito })
+            await signIn('cognito', { callbackUrl }, { lang: currentLocale })
         } catch (err: any) {
             console.error("Sign in error:", err)
             setError(t("login.loginFailed"))

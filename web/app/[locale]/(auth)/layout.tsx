@@ -8,6 +8,7 @@ import { useEffect, useState } from "react"
 
 interface AuthLayoutProps {
     children: React.ReactNode
+    // paramsは削除 - クライアントコンポーネントでは使用しない
 }
 
 export default function AuthLayout({ children }: AuthLayoutProps) {

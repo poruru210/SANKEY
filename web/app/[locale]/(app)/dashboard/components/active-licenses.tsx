@@ -9,7 +9,7 @@ import { PaginationControls } from "./pagination-controls"
 import { ConfirmationDialog } from "./confirmation-dialog"
 import { LicenseDisplayModal } from "./license-display-modal"
 import { ApplicationTimelineDrawer } from "./application-timeline-drawer"
-import { useI18n } from "@/lib/i18n-context"
+import { useTranslations } from "next-intl"
 import { ActiveLicenseUI, EAApplicationHistory } from "@/types/ea-application"
 import { getStatusTranslationKey, getStatusStyle } from "../utils/status-utils"
 import { useApplicationLicense } from "@/hooks/use-license"
@@ -41,7 +41,7 @@ export function ActiveLicenses({
                                    timelineError,
                                    onLoadTimeline,
                                }: ActiveLicensesProps) {
-    const { t } = useI18n()
+    const t = useTranslations()
 
     const {
         decryptedLicense,

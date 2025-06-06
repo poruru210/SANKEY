@@ -2,7 +2,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Clock, CheckCircle, Key, FileKey } from "lucide-react"
-import {useI18n} from "@/lib/i18n-context";
+import { useTranslations } from "next-intl"
 
 interface StatsCardsProps {
     pendingCount: number
@@ -12,7 +12,7 @@ interface StatsCardsProps {
 }
 
 export function StatsCards({ pendingCount, activeCount, totalIssued, expiringSoon }: StatsCardsProps) {
-    const { t } = useI18n()
+    const t = useTranslations()
 
     return (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">

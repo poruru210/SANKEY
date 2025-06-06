@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslations } from 'next-intl'
 import {
     Sheet,
     SheetContent,
@@ -44,6 +45,7 @@ export function ApplicationTimelineDrawer({
                                               onLoadTimeline,
                                               children
                                           }: ApplicationTimelineDrawerProps) {
+    const t = useTranslations()
     const [isOpen, setIsOpen] = useState(false)
 
     const handleOpenChange = async (open: boolean) => {
@@ -60,7 +62,7 @@ export function ApplicationTimelineDrawer({
 
     const formatDate = (dateString: string) => {
         try {
-            return new Date(dateString).toLocaleString('en-US', {
+            return new Date(dateString).toLocaleString(t('common.locale'), {
                 year: 'numeric',
                 month: 'short',
                 day: '2-digit',
@@ -119,6 +121,31 @@ export function ApplicationTimelineDrawer({
         }
     }
 
+    // アクション名の翻訳（セーフガード付き）
+    const getLocalizedAction = (action: string) => {
+        try {
+            const actionKey = `timeline.actions.${action.toLowerCase()}`
+            const translated = t(actionKey)
+            // 翻訳が見つからない場合は元の値を返す
+            return translated === actionKey ? action : translated
+        } catch (error) {
+            console.warn('Translation missing for action:', action)
+            return action
+        }
+    }
+
+    // ステータス名の翻訳（セーフガード付き）
+    const getLocalizedStatus = (status: string) => {
+        try {
+            const statusKey = `status.${status.toLowerCase()}`
+            const translated = t(statusKey)
+            return translated === statusKey ? status : translated
+        } catch (error) {
+            console.warn('Translation missing for status:', status)
+            return status
+        }
+    }
+
     return (
         <Sheet open={isOpen} onOpenChange={handleOpenChange}>
             <SheetTrigger asChild>
@@ -131,10 +158,10 @@ export function ApplicationTimelineDrawer({
                 <SheetHeader>
                     <SheetTitle className="flex items-center text-left">
                         <History className="w-5 h-5 mr-2 text-emerald-400" />
-                        Application Timeline
+                        {t('timeline.title')}
                     </SheetTitle>
                     <SheetDescription className="text-left">
-                        {applicationName}のステータス変更履歴
+                        {t('timeline.description', { applicationName })}
                     </SheetDescription>
                 </SheetHeader>
 
@@ -143,7 +170,7 @@ export function ApplicationTimelineDrawer({
                         <div className="flex items-center justify-center py-8">
                             <Loader2 className="w-6 h-6 animate-spin text-emerald-400" />
                             <span className="ml-2 text-sm text-muted-foreground">
-                                読み込み中...
+                                {t('common.loading')}
                             </span>
                         </div>
                     )}
@@ -161,7 +188,7 @@ export function ApplicationTimelineDrawer({
                         <div className="flex items-center justify-center py-8">
                             <History className="w-6 h-6 text-gray-400" />
                             <span className="ml-2 text-sm text-muted-foreground">
-                                履歴データがありません
+                                {t('timeline.noData')}
                             </span>
                         </div>
                     )}
@@ -189,13 +216,13 @@ export function ApplicationTimelineDrawer({
                                                         variant="outline"
                                                         className={getActionColor(item.action)}
                                                     >
-                                                        {item.action}
+                                                        {getLocalizedAction(item.action)}
                                                     </Badge>
                                                     {item.previousStatus && item.newStatus && (
                                                         <div className="flex items-center text-xs text-muted-foreground">
-                                                            <span>{item.previousStatus}</span>
+                                                            <span>{getLocalizedStatus(item.previousStatus)}</span>
                                                             <ArrowRight className="w-3 h-3 mx-1" />
-                                                            <span>{item.newStatus}</span>
+                                                            <span>{getLocalizedStatus(item.newStatus)}</span>
                                                         </div>
                                                     )}
                                                 </div>
@@ -214,6 +241,7 @@ export function ApplicationTimelineDrawer({
 
                                                 {item.reason && (
                                                     <div className="text-xs text-muted-foreground p-2 bg-muted rounded">
+                                                        <div className="font-medium mb-1">{t('timeline.reason')}:</div>
                                                         {item.reason}
                                                     </div>
                                                 )}

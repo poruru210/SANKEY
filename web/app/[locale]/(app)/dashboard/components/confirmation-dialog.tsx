@@ -10,7 +10,7 @@ import {
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { CheckCircle, X, Trash2, AlertTriangle, Clock } from "lucide-react"
-import { useI18n } from "@/lib/i18n-context"
+import { useTranslations } from "next-intl"
 
 interface ConfirmationDialogProps {
     open: boolean
@@ -35,7 +35,7 @@ export function ConfirmationDialog({
                                        targetName,
                                        countdown
                                    }: ConfirmationDialogProps) {
-    const { t } = useI18n()
+    const t = useTranslations()
 
     const getActionButton = () => {
         const baseClasses = "inline-flex items-center justify-center"

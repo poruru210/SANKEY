@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { CheckCircle, Clock, Mail, Hash, X } from "lucide-react"
 import { PaginationControls } from "./pagination-controls"
 import { ConfirmationDialog } from "./confirmation-dialog"
-import { useI18n } from "@/lib/i18n-context"
+import { useTranslations } from "next-intl"
 import { PendingApplicationUI } from "@/types/ea-application"
 import { getStatusTranslationKey, getStatusStyle } from "../utils/status-utils"
 
@@ -66,7 +66,7 @@ export function PendingApplications({
                                         totalItems,
                                         itemsPerPage,
                                     }: PendingApplicationsProps) {
-    const { t } = useI18n()
+    const t = useTranslations()
 
     // 確認ダイアログの状態管理
     const [dialogState, setDialogState] = useState<{

@@ -1,6 +1,6 @@
 "use client"
 
-import {useState} from "react"
+import {useEffect} from "react"
 import {Tabs, TabsContent, TabsList, TabsTrigger} from "@/components/ui/tabs"
 import {
     AlertDialog,
@@ -13,6 +13,7 @@ import {
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import {Shield, Clock, CheckCircle, History, X, AlertTriangle, RefreshCw} from "lucide-react"
+import { useTranslations, useLocale } from "next-intl"
 
 // Import dashboard components
 import {StatsCards} from "./components/stats-cards"
@@ -20,13 +21,23 @@ import {FilterSection} from "./components/filter-section"
 import {PendingApplications} from "./components/pending-applications"
 import {ActiveLicenses} from "./components/active-licenses"
 import {LicenseHistories} from "./components/license-histories"
-import {useI18n} from "@/lib/i18n-context"
 import {useDashboard} from "@/hooks/use-dashboard"
 
 export default function DashboardPage() {
-    const {t} = useI18n()
+    const t = useTranslations()
+    const locale = useLocale()
 
     const {data, state, actions} = useDashboard()
+
+    // dashboard/page.tsx の先頭に追加
+    console.log('🔍 DashboardPage: Component rendered');
+
+    useEffect(() => {
+        console.log('🔍 DashboardPage: Component mounted');
+        return () => {
+            console.log('🔍 DashboardPage: Component unmounted');
+        };
+    }, []);
 
     const handleApprove = async (applicationId: string) => {
         try {

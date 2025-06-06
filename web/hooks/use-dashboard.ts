@@ -1,9 +1,9 @@
-// hooks/use-dashboard.ts - ライセンス機能分離版
+// hooks/use-dashboard.ts - APIリクエスト重複解消版
 'use client'
 
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useEAApplications } from '@/hooks/use-ea-applications'
-import { useApplicationLicense } from '@/hooks/use-license' // 新しいライセンスhookを追加
+import { useApplicationLicense } from '@/hooks/use-license'
 import { useToast } from '@/hooks/use-toast'
 import type {
     EAApplication,
@@ -13,19 +13,19 @@ import type {
     PendingApplicationUI,
     ActiveLicenseUI,
     LicenseHistoryUI,
-    EAApplicationHistory // ✅ Timeline用の型を追加
+    EAApplicationHistory
 } from '@/types/ea-application'
 
-/**
- * ライセンス機能分離版ダッシュボードHook
- * - EA Applications管理とライセンス管理を分離
- * - 適切なエラーハンドリング
- * - Toast通知対応
- */
 export function useDashboard() {
     const { toast } = useToast()
 
-    // === 初期化状態管理 ===
+    // === 重複防止用のRef ===
+    const initializationRef = useRef({
+        isInitializing: false,
+        hasInitialized: false
+    })
+
+    // === 初期化状態管理（簡素化） ===
     const [initializationState, setInitializationState] = useState<{
         attempted: boolean
         succeeded: boolean
@@ -70,16 +70,110 @@ export function useDashboard() {
     const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
     const [isMobile, setIsMobile] = useState(false)
 
-    // ✅ アプリケーション詳細履歴（Timeline）管理ステート ===
+    // === アプリケーション詳細履歴（Timeline）管理ステート ===
     const [selectedApplicationTimeline, setSelectedApplicationTimeline] = useState<EAApplicationHistory[]>([])
     const [timelineLoading, setTimelineLoading] = useState(false)
     const [timelineError, setTimelineError] = useState<string | null>(null)
 
     // === External Hooks ===
     const eaHook = useEAApplications()
-    const licenseHook = useApplicationLicense() // 新しいライセンスhook
+    const licenseHook = useApplicationLicense()
 
-    // === データ処理とフィルタリング ===
+    // === 🔧 重複防止機能付き初期化（クリーンアップ版） ===
+    useEffect(() => {
+        // 複数の条件で重複防止
+        if (initializationRef.current.hasInitialized ||
+            initializationRef.current.isInitializing ||
+            initializationState.attempted ||
+            eaHook.loading) {
+            return
+        }
+
+        // データが既にある場合は初期化完了とする
+        if (eaHook.applications.length > 0) {
+            initializationRef.current.hasInitialized = true
+            setInitializationState({
+                attempted: true,
+                succeeded: true,
+                error: null,
+                retryCount: 0
+            })
+            return
+        }
+
+        const initializeAPI = async () => {
+            // 重複防止：再度チェック
+            if (initializationRef.current.isInitializing) {
+                return
+            }
+
+            // 重複防止フラグ設定
+            initializationRef.current.isInitializing = true
+
+            setInitializationState(prev => ({
+                ...prev,
+                attempted: true
+            }))
+
+            try {
+                await eaHook.loadApplications()
+
+                // 成功時
+                initializationRef.current.hasInitialized = true
+                setInitializationState({
+                    attempted: true,
+                    succeeded: true,
+                    error: null,
+                    retryCount: 0
+                })
+
+            } catch (error) {
+                const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+                console.error('🚨 Dashboard: API initialization failed:', error)
+
+                setInitializationState({
+                    attempted: true,
+                    succeeded: false,
+                    error: errorMessage,
+                    retryCount: 0
+                })
+
+                toast({
+                    title: "接続エラー",
+                    description: `API接続に失敗しました: ${errorMessage}`,
+                    variant: "destructive"
+                })
+            } finally {
+                // 初期化フラグをリセット
+                initializationRef.current.isInitializing = false
+            }
+        }
+
+        initializeAPI()
+
+    }, []) // 依存配列は空配列のまま（初回のみ実行）
+
+    // === データが取得された時の処理（分離） ===
+    useEffect(() => {
+        if (eaHook.applications.length > 0 && !initializationState.succeeded) {
+            initializationRef.current.hasInitialized = true
+            setInitializationState(prev => ({
+                ...prev,
+                succeeded: true,
+                error: null
+            }))
+
+            if (!initializationRef.current.isInitializing) {
+                toast({
+                    title: "データを読み込みました",
+                    description: "EA Applications データが正常に取得されました",
+                    variant: "default"
+                })
+            }
+        }
+    }, [eaHook.applications.length, initializationState.succeeded, toast])
+
+    // === データ処理とフィルタリング（最適化） ===
     const processedData = useMemo(() => {
         if (!eaHook.applications.length) {
             return {
@@ -108,7 +202,7 @@ export function useDashboard() {
             ['Expired', 'Revoked', 'Rejected', 'Cancelled'].includes(app.status)
         )
 
-        // UI用データ変換（✅ 古いフィールド参照を修正）
+        // UI用データ変換
         const pendingUI: PendingApplicationUI[] = pending.map(app => ({
             id: app.id,
             accountNumber: app.accountNumber,
@@ -130,8 +224,8 @@ export function useDashboard() {
             email: app.email,
             xAccount: app.xAccount,
             licenseKey: app.licenseKey || '',
-            activatedAt: app.updatedAt, // ✅ approvedAt → updatedAt に修正
-            expiryDate: app.expiryDate || '', // ✅ expiresAt → expiryDate に修正
+            activatedAt: app.updatedAt,
+            expiryDate: app.expiryDate || '',
             status: app.status
         }))
 
@@ -143,17 +237,17 @@ export function useDashboard() {
             email: app.email,
             xAccount: app.xAccount,
             licenseKey: app.licenseKey || '',
-            issuedAt: app.appliedAt, // ✅ 申請日時を発行日時として使用
-            lastUpdatedAt: app.updatedAt, // ✅ 最終更新日時を追加
+            issuedAt: app.appliedAt,
+            lastUpdatedAt: app.updatedAt,
             status: app.status,
             action: app.status
         }))
 
-        // 統計計算（✅ expiresAt → expiryDate に修正）
+        // 統計計算
         const now = new Date()
         const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
         const expiringSoon = active.filter(app => {
-            if (!app.expiryDate) return false // ✅ expiresAt → expiryDate
+            if (!app.expiryDate) return false
             const expireDate = new Date(app.expiryDate)
             return expireDate <= thirtyDaysFromNow
         }).length
@@ -174,7 +268,7 @@ export function useDashboard() {
         }
     }, [eaHook.applications, filters])
 
-    // === ページネーション計算 ===
+    // === ページネーション計算（最適化） ===
     const paginatedData = useMemo(() => {
         const { pendingUI, activeUI, historyUI } = processedData
 
@@ -191,68 +285,13 @@ export function useDashboard() {
         }
     }, [processedData, pendingPagination, activePagination, historyPagination])
 
-    // === 🔧 堅牢な初期化（一度のみ実行） ===
-    useEffect(() => {
-        if (initializationState.attempted) return
-        if (eaHook.applications.length > 0) {
-            setInitializationState({
-                attempted: true,
-                succeeded: true,
-                error: null,
-                retryCount: 0
-            })
-            return
-        }
-
-        const initializeAPI = async () => {
-            setInitializationState(prev => ({
-                ...prev,
-                attempted: true
-            }))
-
-            try {
-                await eaHook.loadApplications()
-                setInitializationState({
-                    attempted: true,
-                    succeeded: true,
-                    error: null,
-                    retryCount: 0
-                })
-
-                toast({
-                    title: "データを読み込みました",
-                    description: "EA Applications データが正常に取得されました",
-                    variant: "default"
-                })
-
-            } catch (error) {
-                const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-                console.error('🚨 API initialization failed:', error)
-
-                setInitializationState({
-                    attempted: true,
-                    succeeded: false,
-                    error: errorMessage,
-                    retryCount: 0
-                })
-
-                toast({
-                    title: "接続エラー",
-                    description: `API接続に失敗しました: ${errorMessage}`,
-                    variant: "destructive"
-                })
-            }
-        }
-
-        initializeAPI()
-    }, [])
-
-    // === ページネーション更新 ===
+    // === ページネーション更新（useCallback最適化） ===
     useEffect(() => {
         const { pendingUI, activeUI, historyUI } = processedData
         const calculateTotalPages = (totalItems: number, itemsPerPage: number) =>
             Math.ceil(totalItems / itemsPerPage) || 1
 
+        // 実際に値が変わった場合のみ更新
         setPendingPagination(prev => {
             const newTotalItems = pendingUI.length
             const newTotalPages = calculateTotalPages(newTotalItems, prev.itemsPerPage)
@@ -281,7 +320,7 @@ export function useDashboard() {
         })
     }, [processedData.pendingUI.length, processedData.activeUI.length, processedData.historyUI.length])
 
-    // === モバイル検出 ===
+    // === モバイル検出（最適化） ===
     useEffect(() => {
         const checkMobile = () => setIsMobile(window.innerWidth < 1024)
         checkMobile()
@@ -289,14 +328,14 @@ export function useDashboard() {
         return () => window.removeEventListener('resize', checkMobile)
     }, [])
 
-    // eaHookのTimelineステートを監視
+    // === Timeline監視（最適化） ===
     useEffect(() => {
         if (eaHook.applicationTimeline.length > 0) {
             setSelectedApplicationTimeline(eaHook.applicationTimeline)
         }
     }, [eaHook.applicationTimeline])
 
-    // === アクション処理（Toast通知付き） ===
+    // === アクション処理（Toast通知付き）===
     const approveApplication = useCallback(async (applicationId: string) => {
         const application = eaHook.applications.find(app => app.id === applicationId)
         if (!application) {
@@ -406,10 +445,7 @@ export function useDashboard() {
         }
 
         try {
-            // 新しいライセンスhookを使用してライセンス無効化
             await licenseHook.revokeLicense(application.id)
-
-            // 成功後にアプリケーション一覧を再読み込み
             await eaHook.loadApplications()
 
             toast({
@@ -430,7 +466,6 @@ export function useDashboard() {
 
     const decryptLicense = useCallback(async (applicationId: string) => {
         try {
-            // 新しいライセンスhookを使用してライセンス復号化
             const result = await licenseHook.decryptLicense(applicationId)
             toast({
                 title: "ライセンスを復号化しました",
@@ -449,14 +484,12 @@ export function useDashboard() {
         }
     }, [licenseHook, toast])
 
-    // アプリケーション詳細履歴（Timeline）取得アクション ===
     const loadApplicationTimeline = useCallback(async (applicationId: string) => {
         setTimelineLoading(true)
         setTimelineError(null)
-        setSelectedApplicationTimeline([]) // 先にクリア
+        setSelectedApplicationTimeline([])
 
         try {
-            // eaHookのTimeline取得を実行（結果はuseEffectで自動的に反映される）
             await eaHook.loadApplicationTimeline(applicationId)
 
             toast({
@@ -484,10 +517,16 @@ export function useDashboard() {
         setTimelineError(null)
     }, [])
 
-    // === 統合された更新機能（リフレッシュ兼リトライ） ===
+    // === 統合された更新機能（クリーンアップ版） ===
     const refreshData = useCallback(async () => {
+        // 既に読み込み中の場合はスキップ
+        if (eaHook.loading) {
+            return
+        }
+
         // エラー状態の場合は初期化状態をリセット
         if (initializationState.error) {
+            initializationRef.current.hasInitialized = false
             setInitializationState({
                 attempted: false,
                 succeeded: false,
@@ -499,7 +538,6 @@ export function useDashboard() {
         try {
             await eaHook.loadApplications()
 
-            // 成功した場合は初期化状態を更新
             setInitializationState(prev => ({
                 attempted: true,
                 succeeded: true,
@@ -529,9 +567,9 @@ export function useDashboard() {
             })
             throw error
         }
-    }, [eaHook.loadApplications, toast, initializationState])
+    }, [eaHook.loadApplications, eaHook.loading, toast, initializationState])
 
-    // === フィルター操作 ===
+    // === フィルター操作（最適化） ===
     const updateFilter = useCallback((key: keyof ApplicationFilters, value: string) => {
         setFilters(prev => {
             if (prev[key] === value) return prev
@@ -554,7 +592,7 @@ export function useDashboard() {
         return Object.values(filters).some(value => value !== '')
     }, [filters])
 
-    // === ページネーション操作 ===
+    // === ページネーション操作（最適化） ===
     const updatePendingPage = useCallback((page: number) => {
         setPendingPagination(prev => prev.currentPage === page ? prev : { ...prev, currentPage: page })
     }, [])
@@ -567,12 +605,12 @@ export function useDashboard() {
         setHistoryPagination(prev => prev.currentPage === page ? prev : { ...prev, currentPage: page })
     }, [])
 
-    // === ブローカー一覧 ===
+    // === ブローカー一覧（最適化） ===
     const brokers = useMemo(() => {
         return Array.from(new Set(eaHook.applications.map(app => app.broker))).sort()
     }, [eaHook.applications])
 
-    // === 戻り値 ===
+    // === 戻り値（最適化） ===
     return useMemo(() => ({
         data: {
             applications: processedData.filteredApplications,
@@ -581,7 +619,7 @@ export function useDashboard() {
             pending: paginatedData.pending,
             active: paginatedData.active,
             history: paginatedData.history,
-            selectedApplicationTimeline, // ✅ 追加
+            selectedApplicationTimeline,
         },
 
         state: {
@@ -595,8 +633,8 @@ export function useDashboard() {
             activePagination,
             historyPagination,
             initialization: initializationState,
-            timelineLoading, // ✅ 追加
-            timelineError,   // ✅ 追加
+            timelineLoading,
+            timelineError,
         },
 
         actions: {
@@ -613,8 +651,8 @@ export function useDashboard() {
             updateActivePage,
             updateHistoryPage,
             clearError: () => setInitializationState(prev => ({ ...prev, error: null })),
-            loadApplicationTimeline,    // ✅ 追加
-            clearApplicationTimeline,   // ✅ 追加
+            loadApplicationTimeline,
+            clearApplicationTimeline,
         },
 
         meta: {
@@ -626,9 +664,7 @@ export function useDashboard() {
             isDecrypting: licenseHook.isDecrypting,
             retry: eaHook.retry,
             canRetry: initializationState.error !== null,
-            hasApplicationTimeline: selectedApplicationTimeline.length > 0, // ✅ 追加
-
-            // ライセンス関連の詳細状態
+            hasApplicationTimeline: selectedApplicationTimeline.length > 0,
             licenseDecryptedData: licenseHook.decryptedLicense,
             licenseDecryptError: licenseHook.decryptError,
             licenseRevokeError: licenseHook.revokeError
@@ -659,10 +695,10 @@ export function useDashboard() {
         updatePendingPage,
         updateActivePage,
         updateHistoryPage,
-        selectedApplicationTimeline, // ✅ 追加
-        timelineLoading,            // ✅ 追加
-        timelineError,              // ✅ 追加
-        loadApplicationTimeline,    // ✅ 追加
-        clearApplicationTimeline    // ✅ 追加
+        selectedApplicationTimeline,
+        timelineLoading,
+        timelineError,
+        loadApplicationTimeline,
+        clearApplicationTimeline
     ])
 }

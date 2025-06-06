@@ -1,7 +1,7 @@
 "use client"
 
 import {ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight} from "lucide-react"
-import {useI18n} from "@/lib/i18n-context";
+import { useTranslations } from "next-intl"
 
 interface PaginationControlsProps {
     currentPage: number
@@ -20,7 +20,7 @@ export function PaginationControls({
                                        itemType,
                                        itemsPerPage
                                    }: PaginationControlsProps) {
-    const {t} = useI18n()
+    const t = useTranslations()
     const itemsPerPage2 = itemsPerPage // This should be passed as a prop if it varies
     const startItem = (currentPage - 1) * itemsPerPage2 + 1
     const endItem = Math.min(currentPage * itemsPerPage2, totalItems)
