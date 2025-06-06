@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Copy, Check } from "lucide-react"
+import { useTranslations } from "next-intl";
 
 interface CodeBlockProps {
   code: string
@@ -11,6 +12,7 @@ interface CodeBlockProps {
 }
 
 export function CodeBlock({ code, language = "cpp", title }: CodeBlockProps) {
+  const t = useTranslations();
   const [copied, setCopied] = useState(false)
 
   const copyToClipboard = async () => {
@@ -51,7 +53,7 @@ export function CodeBlock({ code, language = "cpp", title }: CodeBlockProps) {
           size="sm"
           onClick={copyToClipboard}
           className="absolute top-2 right-2 h-8 w-8 p-0 theme-text-emerald hover:theme-text-primary hover:bg-emerald-500/20"
-          title={copied ? "Copied!" : "Copy code"}
+          title={copied ? t('codeBlock.copied') : t('codeBlock.copyCode')}
         >
           {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
         </Button>

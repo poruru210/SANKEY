@@ -4,8 +4,10 @@ import { Moon, Sun } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useTheme } from "@/lib/theme-context"
 import { useEffect, useState } from "react"
+import { useTranslations } from "next-intl";
 
 export function ThemeToggle() {
+  const t = useTranslations();
   const { setTheme, resolvedTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
 
@@ -23,7 +25,7 @@ export function ThemeToggle() {
             className="theme-text-secondary hover:theme-text-primary hover:bg-emerald-500/20 focus:theme-text-primary focus:bg-emerald-500/20"
         >
           <div className="w-4 h-4" />
-          <span className="sr-only">Toggle theme</span>
+          <span className="sr-only">{t('themeToggle.toggleTheme')}</span>
         </Button>
     )
   }
@@ -36,7 +38,7 @@ export function ThemeToggle() {
           className="theme-text-secondary hover:theme-text-primary hover:bg-emerald-500/20 focus:theme-text-primary focus:bg-emerald-500/20"
       >
         {resolvedTheme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-        <span className="sr-only">Toggle theme</span>
+        <span className="sr-only">{t('themeToggle.toggleTheme')}</span>
       </Button>
   )
 }
