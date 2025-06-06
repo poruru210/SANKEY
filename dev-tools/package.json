@@ -1,0 +1,26 @@
+{
+  "name": "@sankey/scripts",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SanKey project utility scripts",
+  "main": "index.js",
+  "scripts": {
+    "update-env": "node update-env.js",
+    "generate-data": "node generate-test-data.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-cloudformation": "^3.695.0",
+    "@aws-sdk/client-cognito-identity-provider": "^3.695.0",
+    "@aws-sdk/client-dynamodb": "^3.817.0",
+    "commander": "^12.1.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "aws",
+    "cdk",
+    "cognito",
+    "sankey"
+  ]
+}

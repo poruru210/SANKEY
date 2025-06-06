@@ -1,0 +1,42 @@
+{
+  "name": "lambda",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "watch": "tsc -p tsconfig.json -w",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest --coverage",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@aws-lambda-powertools/logger": "^2.19.1",
+    "@aws-lambda-powertools/tracer": "^2.20.0",
+    "@aws-sdk/client-api-gateway": "^3.812.0",
+    "@aws-sdk/client-cognito-identity-provider": "^3.812.0",
+    "@aws-sdk/client-dynamodb": "^3.817.0",
+    "@aws-sdk/client-sqs": "^3.817.0",
+    "@aws-sdk/client-ssm": "^3.525.0",
+    "@aws-sdk/lib-dynamodb": "^3.817.0",
+    "@middy/core": "^6.3.1",
+    "@middy/event-normalizer": "^6.3.1",
+    "@middy/http-cors": "^6.3.1",
+    "@middy/http-error-handler": "^6.3.1",
+    "@middy/http-event-normalizer": "^6.3.1",
+    "mustache": "^4.2.0",
+    "resend": "^4.5.1"
+  },
+  "devDependencies": {
+    "@testcontainers/localstack": "^11.0.0",
+    "@types/aws-lambda": "^8.10.149",
+    "@types/mustache": "^4.2.0",
+    "@types/node": "^18.11.18",
+    "@vitest/ui": "^3.2.1",
+    "aws-sdk-client-mock": "^4.1.0",
+    "aws-sdk-client-mock-jest": "^4.1.0",
+    "testcontainers": "^11.0.0",
+    "typescript": "^4.9.5",
+    "vitest": "^3.2.1"
+  }
+}

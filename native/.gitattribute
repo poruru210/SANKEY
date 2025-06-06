@@ -1,0 +1,13 @@
+# --- Ensure CRLF for Windows scripts ---
+*.bat text eol=crlf
+
+# --- Ensure LF for Unix-like source code ---
+*.sh text eol=lf
+*.cpp text eol=lf
+*.h   text eol=lf
+*.c   text eol=lf
+*.cmake text eol=lf
+
+# --- Ignore IDE-specific or binary artifacts ---
+*.sln text eol=crlf
+*.vcxproj* text eol=crlf

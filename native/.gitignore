@@ -1,0 +1,44 @@
+# === Build Directories ===
+/out/
+out/
+/build*/  # catch-all fallback for accidental local builds
+/CMakeFiles/
+/CMakeCache.txt
+/*.cmake
+/*.vcxproj*
+/*.sln
+
+# === Visual Studio Specific ===
+*.user
+*.VC.db
+*.VC.opendb
+*.suo
+*.ncb
+*.log
+*.tlog
+*.obj
+*.idb
+*.ipch
+*.pch
+*.ilk
+*.exp
+*.lib
+
+# === Output binaries ===
+*.dll
+*.exe
+*.pdb
+*.manifest
+
+# === GoogleTest cache/builds ===
+/_deps/
+/Testing/
+
+# === OS-specific ===
+.DS_Store
+Thumbs.db
+
+# === Python or misc ===
+__pycache__/
+*.pyc
+

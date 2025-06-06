@@ -1,0 +1,745 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 240 10% 98%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
+    --radius: 0.5rem;
+    --chart-1: 12 76% 61%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+
+    /* Light theme colors */
+    --light-bg-primary: 248 250 252;
+    --light-bg-secondary: 241 245 249;
+    --light-bg-tertiary: 233 238 242;
+    --light-text-primary: 15 23 42;
+    --light-text-secondary: 71 85 105;
+    --light-text-muted: 121 135 154;
+    --light-border: 226 232 240;
+    --light-emerald: 16 185 129;
+    --light-emerald-light: 167 243 208;
+
+    /* Stepper UI Colors */
+    /* Completed State */
+    --stepper-completed-bg-light: rgb(6, 95, 70);
+    --stepper-completed-text-light: rgb(255, 255, 255);
+    --stepper-completed-bg: var(--stepper-completed-bg-light);
+    --stepper-completed-text: var(--stepper-completed-text-light);
+
+    /* In-Progress State */
+    --stepper-inprogress-bg-light: rgba(16, 185, 129, 0.1);
+    --stepper-inprogress-text-light: rgb(16, 185, 129);
+    --stepper-inprogress-border-light: rgb(16, 185, 129);
+    --stepper-inprogress-bg: var(--stepper-inprogress-bg-light);
+    --stepper-inprogress-text: var(--stepper-inprogress-text-light);
+    --stepper-inprogress-border: var(--stepper-inprogress-border-light);
+
+    /* Pending State */
+    --stepper-pending-bg-light: rgba(16, 185, 129, 0.1);
+    --stepper-pending-text-light: rgb(16, 185, 129);
+    --stepper-pending-border-light: rgb(16, 185, 129);
+    --stepper-pending-bg: var(--stepper-pending-bg-light);
+    --stepper-pending-text: var(--stepper-pending-text-light);
+    --stepper-pending-border: var(--stepper-pending-border-light);
+
+    /* Stepper Expanded Content Colors */
+    --stepper-inner-border-color: rgba(16, 185, 129, 0.2);
+    --stepper-content-text-light: rgb(71, 85, 105); /* slate-600 */
+    --stepper-content-text: var(--stepper-content-text-light);
+
+    /* Stepper In-Progress Animation Border Color */
+    --stepper-inprogress-pulse-border-color: rgb(52, 211, 153); /* emerald-400 */
+    --stepper-inprogress-pulse-border-color-half-opacity: rgba(52, 211, 153, 0.5);
+
+    /* === Approve Button === */
+    --btn-approve-bg-light: rgb(4, 120, 87);
+    --btn-approve-text-light: rgb(255, 255, 255);
+    --btn-approve-hover-bg-light: rgb(3, 100, 73);
+    --btn-approve-border-light: transparent;
+
+    --btn-approve-bg: var(--btn-approve-bg-light);
+    --btn-approve-text: var(--btn-approve-text-light);
+    --btn-approve-hover-bg: var(--btn-approve-hover-bg-light);
+    --btn-approve-border: var(--btn-approve-border-light);
+
+    /* === Reject Button === */
+    --btn-reject-bg-light: transparent;
+    --btn-reject-text-light: rgb(220, 38, 38);
+    --btn-reject-border-light: rgb(220, 38, 38);
+    --btn-reject-hover-bg-light: rgba(220, 38, 38, 0.05);
+
+    --btn-reject-bg: var(--btn-reject-bg-light);
+    --btn-reject-text: var(--btn-reject-text-light);
+    --btn-reject-border: var(--btn-reject-border-light);
+    --btn-reject-hover-bg: var(--btn-reject-hover-bg-light);
+
+    /* === Deactivate Button === */
+    --btn-deactivate-bg-light: transparent;
+    --btn-deactivate-text-light: rgb(249, 115, 22); /* orange-600 */
+    --btn-deactivate-border-light: rgb(249, 115, 22);
+    --btn-deactivate-hover-bg-light: rgba(249, 115, 22, 0.05);
+
+    --btn-deactivate-bg: var(--btn-deactivate-bg-light);
+    --btn-deactivate-text: var(--btn-deactivate-text-light);
+    --btn-deactivate-border: var(--btn-deactivate-border-light);
+    --btn-deactivate-hover-bg: var(--btn-deactivate-hover-bg-light);
+
+    /* === Status Badges === */
+    /* Active Badge */
+    --badge-active-bg-light: rgb(209, 250, 229);
+    --badge-active-text-light: rgb(5, 150, 105);
+    --badge-active-bg: var(--badge-active-bg-light);
+    --badge-active-text: var(--badge-active-text-light);
+
+    /* Pending Badge */
+    --badge-pending-bg-light: rgb(254, 243, 199);
+    --badge-pending-text-light: rgb(217, 119, 6);
+    --badge-pending-bg: var(--badge-pending-bg-light);
+    --badge-pending-text: var(--badge-pending-text-light);
+
+    /* Rejected Badge */
+    --badge-rejected-bg-light: rgb(254, 226, 226); /* red-100 */
+    --badge-rejected-text-light: rgb(185, 28, 28); /* red-700 */
+    --badge-rejected-bg: var(--badge-rejected-bg-light);
+    --badge-rejected-text: var(--badge-rejected-text-light);
+
+    /* AwaitingNotification Badge */
+    --badge-awaitingnotification-bg-light: rgb(219, 234, 254); /* blue-100 */
+    --badge-awaitingnotification-text-light: rgb(29, 78, 216); /* blue-700 */
+    --badge-awaitingnotification-bg: var(--badge-awaitingnotification-bg-light);
+    --badge-awaitingnotification-text: var(--badge-awaitingnotification-text-light);
+
+    /* Cancelled Badge */
+    --badge-cancelled-bg-light: rgb(229, 231, 235);
+    --badge-cancelled-text-light: rgb(75, 85, 99);
+    --badge-cancelled-bg: var(--badge-cancelled-bg-light);
+    --badge-cancelled-text: var(--badge-cancelled-text-light);
+
+    /* Expired Badge */
+    --badge-expired-bg-light: rgb(229, 231, 235); /* gray-200 */
+    --badge-expired-text-light: rgb(55, 65, 81); /* gray-700 */
+    --badge-expired-bg: var(--badge-expired-bg-light);
+    --badge-expired-text: var(--badge-expired-text-light);
+
+    /* Revoked Badge */
+    --badge-revoked-bg-light: rgb(254, 226, 226); /* red-100, same as rejected */
+    --badge-revoked-text-light: rgb(185, 28, 28); /* red-700, same as rejected */
+    --badge-revoked-bg: var(--badge-revoked-bg-light);
+    --badge-revoked-text: var(--badge-revoked-text-light);
+
+    /* Deactivated Badge */
+    --badge-deactivated-bg-light: rgb(229, 231, 235); /* gray-200, same as expired */
+    --badge-deactivated-text-light: rgb(55, 65, 81); /* gray-700, same as expired */
+    --badge-deactivated-bg: var(--badge-deactivated-bg-light);
+    --badge-deactivated-text: var(--badge-deactivated-text-light);
+
+    /* === Refresh Button === */
+    --btn-refresh-bg-light: rgba(16, 185, 129, 0.125);
+    --btn-refresh-text-light: rgb(16, 185, 129);
+    --btn-refresh-border-light: rgba(16, 185, 129, 0.25);
+    --btn-refresh-hover-bg-light: rgba(16, 185, 129, 0.1875);
+    --btn-refresh-bg: var(--btn-refresh-bg-light);
+    --btn-refresh-text: var(--btn-refresh-text-light);
+    --btn-refresh-border: var(--btn-refresh-border-light);
+    --btn-refresh-hover-bg: var(--btn-refresh-hover-bg-light);
+
+    /* === Dismiss Button === */
+    --btn-dismiss-bg-light: rgb(229, 231, 235); /* gray-200 */
+    --btn-dismiss-text-light: rgb(55, 65, 81); /* gray-700 */
+    --btn-dismiss-hover-bg-light: rgb(209, 213, 219); /* gray-300 */
+    --btn-dismiss-bg: var(--btn-dismiss-bg-light);
+    --btn-dismiss-text: var(--btn-dismiss-text-light);
+    --btn-dismiss-hover-bg: var(--btn-dismiss-hover-bg-light);
+
+    /* === Tabs Trigger === */
+    --tab-active-bg-light: rgb(16, 185, 129); /* emerald-500 */
+    --tab-active-text-light: rgb(255, 255, 255); /* white */
+    --tab-inactive-text-light: rgb(107, 114, 128); /* gray-500 */
+    --tab-inactive-hover-bg-light: rgba(16, 185, 129, 0.05); /* emerald-500/5 */
+    --tab-inactive-hover-text-light: rgb(16, 185, 129); /* emerald-500 */
+    --tab-active-bg: var(--tab-active-bg-light);
+    --tab-active-text: var(--tab-active-text-light);
+    --tab-inactive-text: var(--tab-inactive-text-light);
+    --tab-inactive-hover-bg: var(--tab-inactive-hover-bg-light);
+    --tab-inactive-hover-text: var(--tab-inactive-hover-text-light);
+
+    /* Dialog Destructive Button (Red, filled) */
+    --btn-dialog-destructive-bg-light: rgb(220, 38, 38); /* red-600 */
+    --btn-dialog-destructive-text-light: rgb(255, 255, 255);
+    --btn-dialog-destructive-hover-bg-light: rgb(185, 28, 28); /* red-700 */
+    --btn-dialog-destructive-bg: var(--btn-dialog-destructive-bg-light);
+    --btn-dialog-destructive-text: var(--btn-dialog-destructive-text-light);
+    --btn-dialog-destructive-hover-bg: var(--btn-dialog-destructive-hover-bg-light);
+
+    /* Dialog Warning Button (Orange, filled) - for Deactivate */
+    --btn-dialog-warning-bg-light: rgb(249, 115, 22); /* orange-600 */
+    --btn-dialog-warning-text-light: rgb(255, 255, 255);
+    --btn-dialog-warning-hover-bg-light: rgb(234, 88, 12); /* orange-700 */
+    --btn-dialog-warning-bg: var(--btn-dialog-warning-bg-light);
+    --btn-dialog-warning-text: var(--btn-dialog-warning-text-light);
+    --btn-dialog-warning-hover-bg: var(--btn-dialog-warning-hover-bg-light);
+
+    /* Dialog Cancel/Secondary Button (Grayish, outline) */
+    --btn-secondary-text-light: var(--text-primary); /* Use primary text color */
+    --btn-secondary-border-light: rgb(209, 213, 219); /* gray-300 */
+    --btn-secondary-hover-bg-light: rgb(243, 244, 246); /* gray-100 */
+    --btn-secondary-hover-border-light: rgb(156, 163, 175); /* gray-400 for hover border */
+
+    --btn-secondary-text: var(--btn-secondary-text-light);
+    --btn-secondary-border: var(--btn-secondary-border-light);
+    --btn-secondary-hover-bg: var(--btn-secondary-hover-bg-light);
+    --btn-secondary-hover-border: var(--btn-secondary-hover-border-light);
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 212.7 26.8% 83.9%;
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+
+    /* Stepper UI Overrides for Dark Mode */
+    /* Completed State */
+    --stepper-completed-bg-dark: rgb(16, 185, 129);
+    --stepper-completed-text-dark: rgb(15, 23, 42);
+    --stepper-completed-bg: var(--stepper-completed-bg-dark);
+    --stepper-completed-text: var(--stepper-completed-text-dark);
+
+    /* In-Progress State */
+    --stepper-inprogress-bg-dark: rgba(16, 185, 129, 0.15); /* Adjusted from 0.1 to 0.15 for dark */
+    --stepper-inprogress-text-dark: rgb(110, 231, 183);
+    --stepper-inprogress-border-dark: rgb(110, 231, 183);
+    --stepper-inprogress-bg: var(--stepper-inprogress-bg-dark);
+    --stepper-inprogress-text: var(--stepper-inprogress-text-dark);
+    --stepper-inprogress-border: var(--stepper-inprogress-border-dark);
+
+    /* Pending State */
+    --stepper-pending-bg-dark: rgba(16, 185, 129, 0.15); /* Adjusted from 0.1 to 0.15 for dark */
+    --stepper-pending-text-dark: rgb(110, 231, 183);
+    --stepper-pending-border-dark: rgb(110, 231, 183);
+    --stepper-pending-bg: var(--stepper-pending-bg-dark);
+    --stepper-pending-text: var(--stepper-pending-text-dark);
+    --stepper-pending-border: var(--stepper-pending-border-dark);
+
+    /* Stepper Expanded Content Overrides for Dark Mode */
+    /* --stepper-inner-border-color is inherited from :root (suitable for both themes) */
+    --stepper-content-text-dark: rgb(248, 250, 252); /* almost white */
+    --stepper-content-text: var(--stepper-content-text-dark); /* Override for dark mode */
+
+    /* === Approve Button === */
+    --btn-approve-bg-dark: rgb(16, 185, 129);
+    --btn-approve-text-dark: rgb(15, 23, 42);
+    --btn-approve-hover-bg-dark: rgb(10, 134, 93);
+    --btn-approve-border-dark: transparent;
+
+    --btn-approve-bg: var(--btn-approve-bg-dark);
+    --btn-approve-text: var(--btn-approve-text-dark);
+    --btn-approve-hover-bg: var(--btn-approve-hover-bg-dark);
+    --btn-approve-border: var(--btn-approve-border-dark);
+
+    /* === Reject Button === */
+    --btn-reject-bg-dark: rgba(239, 68, 68, 0.1);
+    --btn-reject-text-dark: rgb(248, 113, 113);
+    --btn-reject-border-dark: rgb(239, 68, 68);
+    --btn-reject-hover-bg-dark: rgba(239, 68, 68, 0.2);
+
+    --btn-reject-bg: var(--btn-reject-bg-dark);
+    --btn-reject-text: var(--btn-reject-text-dark);
+    --btn-reject-border: var(--btn-reject-border-dark);
+    --btn-reject-hover-bg: var(--btn-reject-hover-bg-dark);
+
+    /* === Deactivate Button === */
+    --btn-deactivate-bg-dark: rgba(249, 115, 22, 0.1);
+    --btn-deactivate-text-dark: rgb(251, 146, 60); /* orange-400 */
+    --btn-deactivate-border-dark: rgb(249, 115, 22);
+    --btn-deactivate-hover-bg-dark: rgba(249, 115, 22, 0.2);
+
+    --btn-deactivate-bg: var(--btn-deactivate-bg-dark);
+    --btn-deactivate-text: var(--btn-deactivate-text-dark);
+    --btn-deactivate-border: var(--btn-deactivate-border-dark);
+    --btn-deactivate-hover-bg: var(--btn-deactivate-hover-bg-dark);
+
+    /* === Status Badges === */
+    /* Active Badge */
+    --badge-active-bg-dark: rgb(6, 95, 70);
+    --badge-active-text-dark: rgb(255, 255, 255);
+    --badge-active-bg: var(--badge-active-bg-dark);
+    --badge-active-text: var(--badge-active-text-dark);
+
+    /* Pending Badge */
+    --badge-pending-bg-dark: rgb(191, 96, 20);
+    --badge-pending-text-dark: rgb(255, 255, 255);
+    --badge-pending-bg: var(--badge-pending-bg-dark);
+    --badge-pending-text: var(--badge-pending-text-dark);
+
+    /* Rejected Badge */
+    --badge-rejected-bg-dark: rgb(186, 42, 42);
+    --badge-rejected-text-dark: rgb(255, 255, 255);
+    --badge-rejected-bg: var(--badge-rejected-bg-dark);
+    --badge-rejected-text: var(--badge-rejected-text-dark);
+
+    /* AwaitingNotification Badge */
+    --badge-awaitingnotification-bg-dark: rgb(40, 90, 220);
+    --badge-awaitingnotification-text-dark: rgb(255, 255, 255);
+    --badge-awaitingnotification-bg: var(--badge-awaitingnotification-bg-dark);
+    --badge-awaitingnotification-text: var(--badge-awaitingnotification-text-dark);
+
+    /* Cancelled Badge */
+    --badge-cancelled-bg-dark: rgb(75, 85, 99);
+    --badge-cancelled-text-dark: rgb(255, 255, 255);
+    --badge-cancelled-bg: var(--badge-cancelled-bg-dark);
+    --badge-cancelled-text: var(--badge-cancelled-text-dark);
+
+    /* Expired Badge */
+    --badge-expired-bg-dark: rgb(75, 85, 99);
+    --badge-expired-text-dark: rgb(255, 255, 255);
+    --badge-expired-bg: var(--badge-expired-bg-dark);
+    --badge-expired-text: var(--badge-expired-text-dark);
+
+    /* Revoked Badge */
+    --badge-revoked-bg-dark: rgb(186, 42, 42); /* Same as Rejected */
+    --badge-revoked-text-dark: rgb(255, 255, 255); /* Same as Rejected */
+    --badge-revoked-bg: var(--badge-revoked-bg-dark);
+    --badge-revoked-text: var(--badge-revoked-text-dark);
+
+    /* Deactivated Badge */
+    --badge-deactivated-bg-dark: rgb(75, 85, 99); /* Same as Expired */
+    --badge-deactivated-text-dark: rgb(255, 255, 255); /* Same as Expired */
+    --badge-deactivated-bg: var(--badge-deactivated-bg-dark);
+    --badge-deactivated-text: var(--badge-deactivated-text-dark);
+
+    /* === Refresh Button === */
+    --btn-refresh-bg-dark: rgba(16, 185, 129, 0.15);
+    --btn-refresh-text-dark: rgb(16, 185, 129);
+    --btn-refresh-border-dark: rgba(16, 185, 129, 0.3);
+    --btn-refresh-hover-bg-dark: rgba(16, 185, 129, 0.25);
+    --btn-refresh-bg: var(--btn-refresh-bg-dark);
+    --btn-refresh-text: var(--btn-refresh-text-dark);
+    --btn-refresh-border: var(--btn-refresh-border-dark);
+    --btn-refresh-hover-bg: var(--btn-refresh-hover-bg-dark);
+
+    /* === Dismiss Button === */
+    --btn-dismiss-bg-dark: rgb(55, 65, 81); /* gray-700 */
+    --btn-dismiss-text-dark: rgb(229, 231, 235); /* gray-200 */
+    --btn-dismiss-hover-bg-dark: rgb(75, 85, 99); /* gray-600 */
+    --btn-dismiss-bg: var(--btn-dismiss-bg-dark);
+    --btn-dismiss-text: var(--btn-dismiss-text-dark);
+    --btn-dismiss-hover-bg: var(--btn-dismiss-hover-bg-dark);
+
+    /* === Tabs Trigger === */
+    --tab-active-bg-dark: rgb(16, 185, 129); /* emerald-500 */
+    --tab-active-text-dark: rgb(15, 23, 42); /* dark text for contrast on bright bg */
+    --tab-inactive-text-dark: rgb(156, 163, 175); /* gray-400 */
+    --tab-inactive-hover-bg-dark: rgba(16, 185, 129, 0.1); /* emerald-500/10 */
+    --tab-inactive-hover-text-dark: rgb(16, 185, 129); /* emerald-500 */
+    --tab-active-bg: var(--tab-active-bg-dark);
+    --tab-active-text: var(--tab-active-text-dark);
+    --tab-inactive-text: var(--tab-inactive-text-dark);
+    --tab-inactive-hover-bg: var(--tab-inactive-hover-bg-dark);
+    --tab-inactive-hover-text: var(--tab-inactive-hover-text-dark);
+
+    /* Dialog Destructive Button */
+    --btn-dialog-destructive-bg-dark: rgb(185, 28, 28); /* red-700 */
+    --btn-dialog-destructive-text-dark: rgb(255, 255, 255);
+    --btn-dialog-destructive-hover-bg-dark: rgb(153, 27, 27); /* red-800 */
+    --btn-dialog-destructive-bg: var(--btn-dialog-destructive-bg-dark);
+    --btn-dialog-destructive-text: var(--btn-dialog-destructive-text-dark);
+    --btn-dialog-destructive-hover-bg: var(--btn-dialog-destructive-hover-bg-dark);
+
+    /* Dialog Warning Button */
+    --btn-dialog-warning-bg-dark: rgb(234, 88, 12); /* orange-700 */
+    --btn-dialog-warning-text-dark: rgb(255, 255, 255);
+    --btn-dialog-warning-hover-bg-dark: rgb(194, 65, 12); /* orange-800 */
+    --btn-dialog-warning-bg: var(--btn-dialog-warning-bg-dark);
+    --btn-dialog-warning-text: var(--btn-dialog-warning-text-dark);
+    --btn-dialog-warning-hover-bg: var(--btn-dialog-warning-hover-bg-dark);
+
+    /* Dialog Cancel/Secondary Button */
+    --btn-secondary-text-dark: var(--text-primary); /* Use primary text color (dark mode version) */
+    --btn-secondary-border-dark: rgb(55, 65, 81); /* gray-700 */
+    --btn-secondary-hover-bg-dark: rgb(31, 41, 55); /* gray-800 */
+    --btn-secondary-hover-border-dark: rgb(75, 85, 99); /* gray-600 for hover border */
+
+    --btn-secondary-text: var(--btn-secondary-text-dark);
+    --btn-secondary-border: var(--btn-secondary-border-dark);
+    --btn-secondary-hover-bg: var(--btn-secondary-hover-bg-dark);
+    --btn-secondary-hover-border: var(--btn-secondary-hover-border-dark);
+  }
+
+  .light {
+    /* Light mode background gradients */
+    --bg-gradient-from: rgb(248, 250, 252);
+    --bg-gradient-via: rgb(241, 245, 249);
+    --bg-gradient-to: rgb(248, 250, 252);
+
+    /* Light mode particles */
+    --particles-color: rgb(16, 185, 129);
+    --particles-links-color: rgb(16, 185, 129);
+
+    /* Light mode card backgrounds */
+    --card-bg: rgba(255, 255, 255, 0.8);
+    --card-border: rgba(16, 185, 129, 0.2);
+
+    /* Light mode text colors */
+    --text-primary: rgb(15, 23, 42);
+    --text-secondary: rgb(71, 85, 105);
+    --text-muted: rgb(121, 135, 154);
+    --text-emerald: rgb(5, 150, 105);
+
+    /* Light mode input styles */
+    --input-bg: rgb(255, 255, 255);
+    --input-text: rgb(15, 23, 42);
+    --input-placeholder: rgb(107, 114, 128);
+    --input-border: rgba(16, 185, 129, 0.3);
+  }
+
+  .dark {
+    /* Dark mode background gradients */
+    --bg-gradient-from: rgb(15, 23, 42);
+    --bg-gradient-via: rgb(30, 41, 59);
+    --bg-gradient-to: rgb(15, 23, 42);
+
+    /* Dark mode particles */
+    --particles-color: rgb(16, 185, 129);
+    --particles-links-color: rgb(16, 185, 129);
+
+    /* Dark mode card backgrounds */
+    --card-bg: rgba(30, 41, 59, 0.6);
+    --card-border: rgba(16, 185, 129, 0.2);
+
+    /* Dark mode text colors */
+    --text-primary: rgb(248, 250, 252);
+    --text-secondary: rgba(16, 185, 129, 0.7);
+    --text-muted: rgba(16, 185, 129, 0.4);
+    --text-emerald: rgb(16, 185, 129);
+
+    /* Dark mode input styles */
+    --input-bg: rgba(30, 41, 59, 0.5);
+    --input-text: rgb(248, 250, 252);
+    --input-placeholder: rgba(16, 185, 129, 0.5);
+    --input-border: rgba(16, 185, 129, 0.2);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Custom theme classes */
+.theme-bg-gradient {
+  background: linear-gradient(to bottom right, var(--bg-gradient-from), var(--bg-gradient-via), var(--bg-gradient-to));
+}
+
+.theme-card-bg {
+  background-color: var(--card-bg);
+  border-color: var(--card-border);
+}
+
+.theme-text-primary {
+  color: var(--text-primary);
+}
+
+.theme-text-secondary {
+  color: var(--text-secondary);
+}
+
+.theme-text-muted {
+  color: var(--text-muted);
+}
+
+.theme-text-emerald {
+  color: var(--text-emerald);
+}
+
+/* Input field styles */
+.theme-input {
+  background-color: var(--input-bg);
+  color: var(--input-text);
+  border-color: var(--input-border);
+  border-width: 1px;
+  border-style: solid;
+}
+
+.theme-input::placeholder {
+  color: var(--input-placeholder);
+}
+
+.theme-input:focus {
+  border-color: rgb(16, 185, 129);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+}
+
+/* Input placeholder and select text size */
+.theme-input {
+  font-size: 0.875rem; /* 14px */
+}
+
+.theme-input::placeholder {
+  font-size: 0.875rem; /* 14px */
+}
+
+.theme-select {
+  font-size: 0.875rem; /* 14px */
+  border-width: 1px;
+  border-style: solid;
+}
+
+/* Light mode specific styles */
+.light .theme-card-bg {
+  background-color: rgba(255, 255, 255, 0.95);
+  border-color: rgba(16, 185, 129, 0.2);
+}
+
+/* Ensure dialogs use the same background in light mode */
+.light [role="dialog"] {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+}
+
+.light .bg-slate-800 {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+}
+
+.light .bg-slate-900 {
+  background-color: rgb(255, 255, 255);
+}
+
+.light .bg-slate-700 {
+  background-color: rgb(241, 245, 249);
+}
+
+.light .text-white {
+  color: rgb(15, 23, 42);
+}
+
+.light .text-emerald-100 {
+  color: rgb(5, 150, 105);
+}
+
+.light .text-emerald-200 {
+  color: rgb(16, 185, 129);
+}
+
+.light .text-emerald-300 {
+  color: rgb(34, 197, 94);
+}
+
+.light .border-emerald-500\/20 {
+  border-color: rgba(16, 185, 129, 0.2);
+}
+
+.light .bg-emerald-500\/10 {
+  background-color: rgba(16, 185, 129, 0.1);
+}
+
+.light .bg-emerald-500\/20 {
+  background-color: rgba(16, 185, 129, 0.2);
+}
+
+.light .hover\:bg-emerald-500\/20:hover {
+  background-color: rgba(16, 185, 129, 0.2);
+}
+
+.light .bg-slate-900\/40 {
+  background-color: rgba(255, 255, 255, 0.8);
+}
+
+.light .bg-slate-900\/50 {
+  background-color: rgba(255, 255, 255, 0.9);
+}
+
+.light .bg-slate-800\/60 {
+  background-color: rgba(255, 255, 255, 0.7);
+}
+
+.light .bg-slate-900\/95 {
+  background-color: rgba(255, 255, 255, 0.95);
+}
+
+.light .backdrop-blur-md {
+  backdrop-filter: blur(4px);
+}
+
+/* Light mode button styles - keep white text on dark green backgrounds */
+.light .bg-emerald-500 {
+  background-color: rgb(4, 120, 87);
+  color: rgb(255, 255, 255);
+}
+
+.light .hover\:bg-emerald-600:hover {
+  background-color: rgb(3, 100, 73);
+  color: rgb(255, 255, 255);
+}
+
+.light .focus\:bg-emerald-600:focus {
+  background-color: rgb(3, 100, 73);
+  color: rgb(255, 255, 255);
+}
+
+/* Light mode badge styles - keep white text on dark green backgrounds */
+.light .bg-emerald-500.hover\:bg-emerald-600 {
+  background-color: rgb(4, 120, 87); /* Adjusted to match new base for bg-emerald-500 */
+  color: rgb(255, 255, 255);
+}
+
+/* Light mode filter clear button improvement */
+.light .filter-clear-button {
+  background-color: rgba(16, 185, 129, 0.1);
+  border-color: rgba(16, 185, 129, 0.3);
+  color: rgb(5, 150, 105);
+}
+
+.light .filter-clear-button:hover {
+  background-color: rgba(16, 185, 129, 0.2);
+  border-color: rgba(16, 185, 129, 0.4);
+  color: rgb(4, 120, 87);
+}
+
+.light .filter-clear-button:focus {
+  background-color: rgba(16, 185, 129, 0.2);
+  border-color: rgba(16, 185, 129, 0.4);
+  color: rgb(4, 120, 87);
+}
+
+.light .filter-clear-button:disabled {
+  background-color: rgba(226, 232, 240, 0.6); /* --light-border に近い色味 */
+  border-color: rgba(203, 213, 225, 0.6);     /* tailwind slate-300 */
+  color: rgb(148, 163, 184);                 /* --light-text-muted */
+  cursor: not-allowed;
+}
+
+/* Reject button styles for dark mode */
+.dark .reject-button {
+  @apply border-red-500 text-red-400 hover:bg-red-500/20 hover:text-red-300 focus:text-red-300 focus:bg-red-500/20;
+  background-color: rgba(30, 41, 59, 0.5); /* Same as dark mode card background */
+}
+
+.light .reject-button {
+  @apply border-red-500 text-red-600 hover:bg-red-50 hover:text-red-700 focus:text-red-700 focus:bg-red-50;
+  background-color: rgba(255, 255, 255, 0.8); /* Same as light mode card background */
+}
+
+/* Deactivate button styles */
+.dark .deactivate-button {
+  @apply border-red-500 text-red-400 hover:bg-red-500/20 hover:border-red-400 hover:text-red-300 focus:text-red-300 focus:bg-red-500/20 focus:border-red-400;
+  background-color: rgba(30, 41, 59, 0.5); /* Same as dark mode card background */
+}
+
+.light .deactivate-button {
+  @apply border-red-500 text-red-600 hover:bg-red-50 hover:border-red-600 hover:text-red-700 focus:text-red-700 focus:bg-red-50 focus:border-red-600;
+  background-color: rgba(255, 255, 255, 0.8); /* Same as light mode card background */
+}
+
+/* Common button size styles */
+.action-button {
+  width: 7rem; /* w-28 equivalent - 112px */
+  min-width: 7rem;
+}
+
+/* Approve button styles */
+.approve-button {
+  @apply bg-emerald-500 hover:bg-emerald-600 text-white focus:text-white focus:bg-emerald-600;
+  width: 7rem;
+  min-width: 7rem;
+}
+
+.light .approve-button {
+  background-color: rgb(4, 120, 87);
+  color: rgb(255, 255, 255);
+}
+
+.light .approve-button:hover {
+  background-color: rgb(3, 100, 73);
+  color: rgb(255, 255, 255);
+}
+
+.light .approve-button:focus {
+  background-color: rgb(3, 100, 73);
+  color: rgb(255, 255, 255);
+}
+
+/* ダイアログ専用スタイル */
+.theme-dialog-bg {
+  background-color: rgb(255, 255, 255);
+  border-color: rgba(16, 185, 129, 0.2);
+}
+
+.dark .theme-dialog-bg {
+  background-color: rgb(30, 41, 59);
+  border-color: rgba(16, 185, 129, 0.2);
+}
+
+/* ダイアログ内のコンテンツ背景 */
+.theme-dialog-content-bg {
+  background-color: rgb(248, 250, 252);
+}
+
+.dark .theme-dialog-content-bg {
+  background-color: rgb(15, 23, 42);
+}
+
+/* ドロップダウンメニュー専用背景 */
+.theme-dropdown-bg {
+  background-color: rgb(255, 255, 255);
+  border-color: rgba(16, 185, 129, 0.2);
+}
+
+.dark .theme-dropdown-bg {
+  background-color: rgb(30, 41, 59);
+  border-color: rgba(16, 185, 129, 0.2);
+}
+
+/* ダイアログのオーバーレイ */
+.theme-dialog-overlay {
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+.dark .theme-dialog-overlay {
+  background-color: rgba(0, 0, 0, 0.7);
+}

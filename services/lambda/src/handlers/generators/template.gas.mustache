@@ -1,0 +1,364 @@
+/**
+ * EA License Application - Google Apps Script Template (JWT版)
+ *
+ * 設定手順:
+ * 1. 下記の CONFIG セクションに設定値を入力
+ * 2. Google FormでonFormSubmitトリガーを設定
+ * 3. フォーム送信時に自動でWebhookが実行されます
+ */
+
+// ============================================
+// 設定セクション(ここを編集してください)
+// ============================================
+var CONFIG = {
+  // あなたの設定値(システム管理者から取得)
+  WEBHOOK_URL: "{{webhookUrl}}",
+  USER_ID: "{{userId}}",
+  MASTER_KEY: "{{masterKey}}",
+
+  // フォームの項目名(実際のフォーム項目に合わせて調整)
+  FORM_FIELDS: {
+    EA_NAME: "EA",
+    ACCOUNT_NUMBER: "口座番号",
+    BROKER: "ブローカー",
+    EMAIL: "メールアドレス",
+    X_ACCOUNT: "ユーザー名"
+  }
+};
+
+// ============================================
+// メイン処理
+// ============================================
+
+/**
+ * Googleフォーム送信時に実行される関数
+ */
+function onFormSubmit(e) {
+  try {
+    console.log('フォーム送信を検知しました');
+
+    // 設定値の事前検証
+    if (!validateConfig()) {
+      throw new Error('設定値が正しくありません。CONFIG セクションを確認してください。');
+    }
+
+    // フォームデータの取得
+    var formData = extractFormData(e);
+    console.log('抽出されたフォームデータ:', formData);
+
+    // データの検証
+    var validationResult = validateFormData(formData);
+    if (!validationResult.isValid) {
+      console.error('バリデーションエラー:', validationResult.errors);
+      sendErrorNotification('フォームデータの検証に失敗しました: ' + validationResult.errors.join(', '));
+      return;
+    }
+
+    // Webhookの送信
+    var result = sendWebhook(formData);
+
+    if (result.success) {
+      console.log('Webhook送信成功:', result.response);
+      sendSuccessNotification(formData, result.response);
+    } else {
+      console.error('Webhook送信失敗:', result.error);
+      sendErrorNotification('申請の送信に失敗しました: ' + result.error);
+    }
+
+  } catch (error) {
+    console.error('処理中にエラーが発生しました:', error);
+    sendErrorNotification('システムエラーが発生しました: ' + error.toString());
+  }
+}
+
+/**
+ * フォームデータの抽出
+ */
+function extractFormData(e) {
+  var itemResponses = e.response.getItemResponses();
+  var formData = {};
+
+  // Googleフォームで自動収集されるメールアドレスを取得
+  var responseEmail = '';
+  try {
+    responseEmail = e.response.getRespondentEmail() || '';
+    console.log('自動収集メールアドレス:', responseEmail);
+  } catch (emailError) {
+    console.log('メールアドレス取得エラー:', emailError);
+  }
+
+  for (var i = 0; i < itemResponses.length; i++) {
+    var itemResponse = itemResponses[i];
+    var title = itemResponse.getItem().getTitle();
+    var response = itemResponse.getResponse();
+
+    console.log('フォーム項目: "' + title + '" = "' + response + '"');
+
+    if (title === CONFIG.FORM_FIELDS.EA_NAME || title.indexOf('EA') !== -1) {
+      formData.eaname = response;
+    } else if (title === CONFIG.FORM_FIELDS.ACCOUNT_NUMBER || title.indexOf('口座') !== -1) {
+      formData.accountnumber = response;
+    } else if (title === CONFIG.FORM_FIELDS.BROKER || title.indexOf('ブローカー') !== -1) {
+      formData.broker = response;
+    } else if (title === CONFIG.FORM_FIELDS.EMAIL || title.indexOf('メール') !== -1) {
+      formData.email = response;
+    } else if (title === CONFIG.FORM_FIELDS.X_ACCOUNT || title.indexOf('ユーザー') !== -1) {
+      formData.xaccount = response;
+    }
+  }
+
+  if (responseEmail) {
+    formData.email = responseEmail;
+  }
+
+  console.log('マッピング結果:', formData);
+
+  return {
+    eaName: formData.eaname || '',
+    accountNumber: formData.accountnumber || '',
+    broker: formData.broker || '',
+    email: formData.email || '',
+    xAccount: formData.xaccount || ''
+  };
+}
+
+/**
+ * フォームデータのバリデーション
+ */
+function validateFormData(formData) {
+  var errors = [];
+  var requiredFields = ['eaName', 'accountNumber', 'broker', 'email', 'xAccount'];
+
+  for (var i = 0; i < requiredFields.length; i++) {
+    var field = requiredFields[i];
+    if (!formData[field] || formData[field].toString().trim() === '') {
+      errors.push(field + ' は必須項目です');
+    }
+  }
+
+  if (formData.email && formData.email.indexOf('@') === -1) {
+    errors.push('正しいメールアドレスを入力してください');
+  }
+
+  if (formData.xAccount && formData.xAccount.indexOf('@') !== 0) {
+    errors.push('Xアカウント名は@から始まる形式で入力してください');
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors: errors
+  };
+}
+
+/**
+ * Webhookの送信(JWT版)
+ */
+function sendWebhook(formData) {
+  try {
+    var jwt = createJWT({
+      userId: CONFIG.USER_ID,
+      formData: formData,
+      timestamp: new Date().toISOString()
+    });
+
+    console.log('JWT署名済みリクエストデータ準備完了', {
+      jwtLength: jwt.length,
+      userId: CONFIG.USER_ID
+    });
+
+    var response = UrlFetchApp.fetch(CONFIG.WEBHOOK_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      payload: JSON.stringify({
+        userId: CONFIG.USER_ID,
+        data: jwt,
+        iv: "",
+        hmac: "jwt-signed",
+        method: "JWT"
+      }),
+      muteHttpExceptions: true
+    });
+
+    var responseCode = response.getResponseCode();
+    var responseText = response.getContentText();
+
+    console.log('レスポンス:', {
+      code: responseCode,
+      body: responseText
+    });
+
+    if (responseCode === 200) {
+      try {
+        return {
+          success: true,
+          response: JSON.parse(responseText)
+        };
+      } catch (parseError) {
+        return {
+          success: true,
+          response: { message: responseText }
+        };
+      }
+    } else if (responseCode === 503) {
+      console.log('サービス一時利用不可 - 3秒後にリトライします');
+      Utilities.sleep(3000);
+      return sendWebhook(formData);
+    } else {
+      return {
+        success: false,
+        error: 'HTTP ' + responseCode + ': ' + responseText
+      };
+    }
+
+  } catch (error) {
+    console.error('sendWebhook エラー:', error);
+    return {
+      success: false,
+      error: error.toString()
+    };
+  }
+}
+
+/**
+ * JWTの作成
+ */
+function createJWT(payload) {
+  try {
+    var header = {
+      alg: "HS256",
+      typ: "JWT"
+    };
+
+    var jwtPayload = {
+      data: payload,
+      iat: Math.floor(Date.now() / 1000),
+      exp: Math.floor(Date.now() / 1000) + 300,
+      userId: CONFIG.USER_ID
+    };
+
+    var headerEncoded = base64UrlEncode(JSON.stringify(header));
+    var payloadEncoded = base64UrlEncode(JSON.stringify(jwtPayload));
+    var signatureInput = headerEncoded + "." + payloadEncoded;
+    var keyBytes = Utilities.base64Decode(CONFIG.MASTER_KEY);
+    var signatureInputBytes = Utilities.newBlob(signatureInput).getBytes();
+    var signatureBytes = Utilities.computeHmacSha256Signature(signatureInputBytes, keyBytes);
+    var signature = base64UrlEncode(signatureBytes);
+
+    return signatureInput + "." + signature;
+
+  } catch (error) {
+    console.error('JWT作成エラー:', error);
+    throw new Error('JWT作成に失敗しました: ' + error.toString());
+  }
+}
+
+/**
+ * Base64URL エンコード(JWT用)
+ */
+function base64UrlEncode(data) {
+  var base64 = Utilities.base64Encode(data);
+  return base64
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '');
+}
+
+/**
+ * 成功通知
+ */
+function sendSuccessNotification(formData, response) {
+  var subject = 'EA申請が送信されました - ' + formData.eaName;
+  var body = '\nEA申請が正常に送信されました。\n\n【申請内容】\n' +
+    'EA名: ' + formData.eaName + '\n' +
+    'ブローカー: ' + formData.broker + '\n' +
+    'アカウント番号: ' + formData.accountNumber + '\n' +
+    'メールアドレス: ' + formData.email + '\n' +
+    'Xアカウント: ' + formData.xAccount + '\n\n' +
+    '【申請ID】\n' + (response.applicationId || 'N/A') + '\n\n' +
+    '【ステータス】\n' + (response.status || 'Pending') + '\n\n' +
+    '申請の審査状況については、登録されたメールアドレスにご連絡いたします。\n';
+
+  console.log('成功通知:', subject);
+  // GmailApp.sendEmail(formData.email, subject, body);
+}
+
+/**
+ * エラー通知
+ */
+function sendErrorNotification(errorMessage) {
+  var subject = 'EA申請でエラーが発生しました';
+  var body = '\nEA申請の処理中にエラーが発生しました。\n\n【エラー内容】\n' +
+    errorMessage + '\n\n' +
+    '【対処方法】\n- しばらく時間をおいてから再度お試しください\n' +
+    '- 問題が継続する場合は、サポートまでお問い合わせください\n\n' +
+    '【発生時刻】\n' + new Date().toLocaleString('ja-JP') + '\n';
+
+  console.error('エラー通知:', errorMessage);
+  // GmailApp.sendEmail('admin@example.com', subject, body);
+}
+
+// ============================================
+// テスト・デバッグ用関数
+// ============================================
+
+/**
+ * Webhookテスト
+ */
+function testWebhook() {
+  try {
+    if (!validateConfig()) {
+      console.error('❌ 設定が不正です');
+      return;
+    }
+
+    var testData = {
+      eaName: "Test EA",
+      accountNumber: "1234567890",
+      broker: "Test Broker",
+      email: "test@example.com",
+      xAccount: "@testuser"
+    };
+
+    console.log('JWT版Webhook送信テストを実行します...');
+    var result = sendWebhook(testData);
+
+    if (result.success) {
+      console.log('✅ テスト成功:', result.response);
+    } else {
+      console.log('❌ テスト失敗:', result.error);
+    }
+
+  } catch (error) {
+    console.error('❌ テスト中にエラー:', error);
+  }
+}
+
+/**
+ * 設定値の検証
+ */
+function validateConfig() {
+  var issues = [];
+
+  if (!CONFIG.WEBHOOK_URL || CONFIG.WEBHOOK_URL.indexOf('your-api') !== -1) {
+    issues.push('WEBHOOK_URL が設定されていません');
+  }
+
+  if (!CONFIG.USER_ID || CONFIG.USER_ID.indexOf('xxxx') !== -1) {
+    issues.push('USER_ID が設定されていません');
+  }
+
+  if (!CONFIG.MASTER_KEY || CONFIG.MASTER_KEY.indexOf('your-') !== -1) {
+    issues.push('MASTER_KEY が設定されていません');
+  }
+
+  if (issues.length > 0) {
+    console.error('❌ 設定エラー:', issues);
+    return false;
+  }
+
+  console.log('✅ 設定は正常です');
+  return true;
+}

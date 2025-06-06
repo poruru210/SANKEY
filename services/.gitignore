@@ -1,0 +1,39 @@
+# Node.js モジュール
+node_modules/
+
+# pnpm
+.pnpm-debug.log*
+.pnpm-store/
+
+# ビルド成果物
+dist/
+
+# AWS CDK のアセンブリ出力
+cdk.out/
+
+# テストカバレッジ
+/coverage/
+
+# 環境変数ファイル
+.env
+.env.local
+
+# OS 一時ファイル
+.DS_Store
+Thumbs.db
+
+# ログ
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# エディタ / IDE
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# その他
+/*.log
