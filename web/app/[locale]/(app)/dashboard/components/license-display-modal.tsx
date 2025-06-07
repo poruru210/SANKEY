@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Copy, Eye, X } from "lucide-react"
-import { useI18n } from "@/lib/i18n-context"
+import { useTranslations } from "next-intl"
 
 interface LicenseDisplayModalProps {
     open: boolean
@@ -27,7 +27,7 @@ export function LicenseDisplayModal({
                                         loading,
                                         eaName,
                                     }: LicenseDisplayModalProps) {
-    const { t } = useI18n()
+    const t = useTranslations()
 
     const handleClose = () => {
         onOpenChange(false)

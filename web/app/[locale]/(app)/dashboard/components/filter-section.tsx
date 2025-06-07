@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Search, Filter, X, Key, Hash } from "lucide-react"
-import {useI18n} from "@/lib/i18n-context";
+import { useTranslations } from "next-intl"
 
 
 interface FilterSectionProps {
@@ -43,7 +43,7 @@ export function FilterSection({
                                   filteredPendingCount,
                                   filteredActiveCount,
                               }: FilterSectionProps) {
-    const { t } = useI18n()
+    const t = useTranslations()
 
     return (
         <Card className="theme-card-bg border-emerald-500/20 backdrop-blur-sm mb-6">

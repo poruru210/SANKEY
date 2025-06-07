@@ -3,9 +3,9 @@
 import {useState} from "react"
 import {useRouter, usePathname} from "next/navigation"
 import {Button} from "@/components/ui/button"
-import {Shield, FileKey, Settings, LogOut, ChevronLeft, Loader2, AlertTriangle} from "lucide-react"
+import {Shield, FileKey, Settings, LogOut, Loader2, AlertTriangle} from "lucide-react"
 import Image from "next/image"
-import {useI18n} from "@/lib/i18n-context"
+import { useTranslations } from "next-intl"
 import {useSession} from 'next-auth/react'
 import {signOutCompletely} from '@/lib/auth-actions'
 
@@ -31,7 +31,7 @@ export function Sidebar({
                             sidebarOpen,
                             setSidebarOpen,
                         }: SidebarProps) {
-    const {t} = useI18n()
+    const t = useTranslations()
     const router = useRouter()
     const pathname = usePathname()
     const {data: session, status} = useSession()

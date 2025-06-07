@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import {CheckCircle, X, Mail, Hash, History, Clock, AlertTriangle} from "lucide-react"
 import { PaginationControls } from "./pagination-controls"
 import { ApplicationTimelineDrawer } from "./application-timeline-drawer"
-import { useI18n } from "@/lib/i18n-context"
+import { useTranslations } from "next-intl"
 import { LicenseHistoryUI, EAApplicationHistory } from "@/types/ea-application"
 import { getStatusTranslationKey, getStatusStyle } from "../utils/status-utils"
 
@@ -35,7 +35,7 @@ export function LicenseHistories({
                                      timelineError,
                                      onLoadTimeline,
                                  }: LicenseHistoryProps) {
-    const { t } = useI18n()
+    const t = useTranslations()
 
     const formatDate = (dateString?: string) => {
         if (!dateString) return 'N/A'

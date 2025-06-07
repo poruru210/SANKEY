@@ -9,7 +9,7 @@ import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "@/compo
 import {Badge} from "@/components/ui/badge";
 import {Input} from "@/components/ui/input";
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from "@/components/ui/select";
-import {useI18n} from "@/lib/i18n-context";
+import { useTranslations } from "next-intl";
 import {useTheme} from "next-themes";
 import {
     Dialog,
@@ -23,7 +23,7 @@ import { usePlan } from "@/hooks/use-plan";
 import { PlanTier } from "@/lib/services/plan.service";
 
 export default function SettingsPage() {
-    const { t } = useI18n()
+    const t = useTranslations()
     const { theme } = useTheme()
 
     // Plan API Hook
