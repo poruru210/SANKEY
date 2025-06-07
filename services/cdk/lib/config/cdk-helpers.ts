@@ -407,10 +407,10 @@ export class CdkHelpers {
 
         return new apigw.RestApi(scope, id, {
             restApiName: apiName,
-            description: options.description || 'Sankey License Service API',
+            description: options.description || 'Sankey Application API',
             defaultCorsPreflightOptions: corsOptions,
             deployOptions: {
-                stageName: 'prod',
+                stageName: environment,
                 throttlingRateLimit: options.throttlingRateLimit || 2,
                 throttlingBurstLimit: options.throttlingBurstLimit || 5,
             },
