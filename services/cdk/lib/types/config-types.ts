@@ -9,7 +9,7 @@ export type LogLevel = 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
 /**
  * 環境名の型定義
  */
-export type Environment = 'dev' | 'staging' | 'prod';
+export type Environment = 'dev' | 'prod';
 
 /**
  * DynamoDB課金モードの型定義

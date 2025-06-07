@@ -61,54 +61,6 @@ export class EnvironmentConfig {
                 defaultTtlMonths: 3,
             },
         },
-
-        staging: {
-            // 基本設定
-            logLevel: 'INFO',
-            removalPolicy: cdk.RemovalPolicy.RETAIN,
-            domain: 'staging.sankey.trade',
-
-            // セキュリティ設定
-            security: {
-                enableDeletionProtection: true,
-                corsOrigins: ['https://staging.sankey.trade'],
-            },
-
-            // 認証設定
-            auth: {
-                authDomainPrefix: 'sankey-auth-staging',
-                callbackUrls: ['https://staging.sankey.trade/api/auth/callback/cognito'],
-                logoutUrls: ['https://staging.sankey.trade/login'],
-            },
-
-            // Lambda設定
-            lambda: {
-                memorySize: 256,
-                timeoutSeconds: 60,
-                runtime: 'nodejs22.x',
-            },
-
-            // DynamoDB設定
-            dynamodb: {
-                billingMode: 'PROVISIONED',
-                readCapacity: 3,
-                writeCapacity: 3,
-            },
-
-            // モニタリング設定
-            monitoring: {
-                enableDetailedMonitoring: true,
-                enableXRayTracing: false,
-                createAlarms: false,
-            },
-
-            // 通知設定
-            notification: {
-                emailFromAddress: 'noreply@staging.sankey.trade',
-                defaultTtlMonths: 6,
-            },
-        },
-
         prod: {
             // 基本設定
             logLevel: 'WARN',
