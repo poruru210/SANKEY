@@ -10,6 +10,7 @@ export default async function middleware(request: NextRequest) {
 
     // Skip middleware for static files, API routes, and Next.js internals
     if (
+        request.method === 'OPTIONS' ||
         pathname.startsWith('/api') ||
         pathname.startsWith('/_next') ||
         pathname.startsWith('/_vercel') ||

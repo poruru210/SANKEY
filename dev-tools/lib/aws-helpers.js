@@ -34,7 +34,7 @@ function createAwsClients(profile, region) {
 }
 
 /**
- * Sankeyスタック検索関数
+ * Sankeyスタック検索関数（staging削除、環境別API Gateway対応）
  * @param {CloudFormationClient} cloudFormationClient
  * @param {Object} options - Debug options
  * @returns {Array} Stack combinations
@@ -44,10 +44,11 @@ async function findSankeyStacks(cloudFormationClient, options) {
         const command = new DescribeStacksCommand({});
         const response = await cloudFormationClient.send(command);
 
-        // Sankeyスタックのパターンマッチング
-        const authStackPattern = /^Sankey(Dev|Staging|Prod)AuthStack$/;
-        const apiStackPattern = /^Sankey(Dev|Staging|Prod)ApiStack$/;
-        const dbStackPattern = /^Sankey(Dev|Staging|Prod)DbStack$/;
+        // Sankeyスタックのパターンマッチング（staging削除）
+        const authStackPattern = /^Sankey(Dev|Prod)AuthStack$/;
+        const apiStackPattern = /^Sankey(Dev|Prod)ApiStack$/;  // 環境別API Gateway
+        const dbStackPattern = /^Sankey(Dev|Prod)DbStack$/;
+        const notificationStackPattern = /^Sankey(Dev|Prod)NotificationStack$/;
 
         const authStacks = response.Stacks.filter(stack =>
             authStackPattern.test(stack.StackName) &&
@@ -64,25 +65,33 @@ async function findSankeyStacks(cloudFormationClient, options) {
             stack.StackStatus !== 'DELETE_COMPLETE'
         );
 
+        const notificationStacks = response.Stacks.filter(stack =>
+            notificationStackPattern.test(stack.StackName) &&
+            stack.StackStatus !== 'DELETE_COMPLETE'
+        );
+
         // 環境ごとにペアを作成
         const combinations = [];
 
         for (const authStack of authStacks) {
-            const envMatch = authStack.StackName.match(/^Sankey(Dev|Staging|Prod)AuthStack$/);
+            const envMatch = authStack.StackName.match(/^Sankey(Dev|Prod)AuthStack$/);
             if (envMatch) {
                 const environment = envMatch[1];
                 const expectedApiStackName = `Sankey${environment}ApiStack`;
                 const expectedDbStackName = `Sankey${environment}DbStack`;
+                const expectedNotificationStackName = `Sankey${environment}NotificationStack`;
 
                 const apiStack = apiStacks.find(stack => stack.StackName === expectedApiStackName);
                 const dbStack = dbStacks.find(stack => stack.StackName === expectedDbStackName);
+                const notificationStack = notificationStacks.find(stack => stack.StackName === expectedNotificationStackName);
 
-                if (apiStack && dbStack) {
+                if (apiStack && dbStack && notificationStack) {
                     combinations.push({
                         environment: environment.toLowerCase(),
                         authStack: authStack,
                         apiStack: apiStack,
-                        dbStack: dbStack
+                        dbStack: dbStack,
+                        notificationStack: notificationStack
                     });
                 }
             }

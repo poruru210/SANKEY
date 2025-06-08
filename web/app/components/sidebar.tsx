@@ -167,9 +167,9 @@ export function Sidebar({
                                                 <Image
                                                     src="/sankey-logo.svg"
                                                     alt="SANKEY Logo"
-                                                    width={24}
-                                                    height={24}
-                                                    className="w-6 h-6"
+                                                    width={32}
+                                                    height={32}
+                                                    className="w-8 h-8"
                                                 />
                                             </div>
                                         </div>
