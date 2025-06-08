@@ -109,7 +109,6 @@ if (environment === 'dev') {
   console.log(`💡 Available environments: ${EnvironmentConfig.getAvailableEnvironments().join(', ')}`);
   console.log(`💡 Usage examples:`);
   console.log(`   - npm run deploy:dev`);
-  console.log(`   - npm run deploy:staging`);
   console.log(`   - npm run deploy:prod`);
   console.log(`   - cdk deploy --context environment=${environment}`);
 }
