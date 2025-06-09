@@ -93,7 +93,7 @@ export class SankeyNotificationStack extends cdk.Stack {
         const ssmPolicy = CdkHelpers.createSsmPolicy(
             this.region,
             this.account,
-            `${CdkHelpers.getSsmEnvironmentPrefix(this.envName)}/*`
+            `${CdkHelpers.getSsmEnvironmentPrefix(this.envName)}/users/*/master-key`
         );
         emailFunction.addToRolePolicy(ssmPolicy);
     }
