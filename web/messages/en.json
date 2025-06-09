@@ -52,11 +52,200 @@
     "expiringSoon": "Expiring Soon",
     "pendingApplications": "Pending Applications",
     "subtitle": "Manage EA license applications and approvals",
-    "title": "License Management Dashboard",
+    "title": "Dashboard",
     "totalIssued": "Total Issued",
     "within30Days": "Within 30 days"
   },
   "developer": {
+    "title": "Development Guide",
+    "subtitle": "Complete guide for integrating SANKEY license verification into your Expert Advisors",
+    "integrationSteps": "Integration Steps",
+    "integrationStepsDesc": "Step-by-step guide to integrate SANKEY license verification",
+    "playground": {
+      "title": "Playground",
+      "description": "Test license generation and validation",
+      "reset": "Reset",
+      "generateTab": "License Generation",
+      "validateTab": "License Validation",
+      "generateTitle": "Generate New License",
+      "generateDesc": "Enter EA information to generate a license key",
+      "validateTitle": "Validate License",
+      "validateDesc": "Enter a license key to verify its contents",
+      "eaName": "EA Name",
+      "eaNamePlaceholder": "MyTradingEA v1.0",
+      "accountId": "Account ID",
+      "accountIdPlaceholder": "1234567890",
+      "expiryDays": "Expiration (Days)",
+      "licenseKey": "License Key",
+      "licenseKeyPlaceholder": "Enter encrypted license string",
+      "generateLicense": "Generate License",
+      "validateLicense": "Validate License",
+      "generating": "Generating...",
+      "validating": "Validating...",
+      "generatedLicense": "Generated License",
+      "generatedLicenseDesc": "Encrypted license key",
+      "licenseInfo": "License Information",
+      "licenseInfoDesc": "Decrypted license details",
+      "useInValidation": "Use in validation form",
+      "showJson": "JSON Display",
+      "show": "Show",
+      "hide": "Hide",
+      "copy": "Copy",
+      "copied": "Copied!",
+      "expiry": "Expiry",
+      "issuedAt": "Issued At",
+      "jsonDisplay": "JSON Display",
+      "valid": "Valid",
+      "warning": "Warning",
+      "expired": "Expired",
+      "daysRemaining": "days remaining",
+      "expiryPresets": {
+        "7days": "7 days",
+        "30days": "30 days",
+        "90days": "90 days",
+        "1year": "1 year",
+        "2years": "2 years",
+        "unlimited": "Unlimited"
+      },
+      "errors": {
+        "inputRequired": "EA name and Account ID are required",
+        "validationRequired": "License key and Account ID are required",
+        "generationFailed": "License generation failed",
+        "validationFailed": "License validation failed",
+        "copyFailed": "Failed to copy to clipboard"
+      },
+      "success": {
+        "generated": "License generated successfully",
+        "generatedDesc": "Encrypted license key has been generated",
+        "validated": "License validated successfully",
+        "validatedDesc": "License information has been decrypted",
+        "copied": "Copied to clipboard",
+        "copiedDesc": "{item} has been copied to clipboard",
+        "licenseSet": "License set successfully",
+        "licenseSetDesc": "Generated license has been set in validation form"
+      }
+    },
+    "steps": {
+      "preparation": {
+        "title": "Preparation",
+        "description": "Create necessary items for license application Google Form",
+        "googleForm": "Google Form Preparation",
+        "googleFormDesc": "Create the following question items in your application form (items marked with <required>{required}</required> are required):",
+        "questionItem": "Question Item",
+        "required": "Required",
+        "example": "Example",
+        "eaName": "EA Name",
+        "accountNumber": "Account Number",
+        "brokerName": "Broker Name",
+        "emailAddress": "Email Address",
+        "xAccount": "X Account Name",
+        "openExternal": "Open External Link"
+      },
+      "gasIntegration": {
+        "title": "Google Form Integration (GAS)",
+        "description": "Create a new Google Apps Script project and configure using the provided template",
+        "newProject": "Create New Project",
+        "newProjectSteps": [
+          "Access \"Google Apps Script\"",
+          "Click \"New Project\"",
+          "Change project name to \"EA License Application\""
+        ],
+        "codePreparation": "Code File Preparation",
+        "codePreparationDesc": "Click the button below to download the GAS template file (`gas-template.gs`).",
+        "downloadTemplate": "Download GAS Template",
+        "downloading": "Downloading...",
+        "codePasting": "Code Pasting",
+        "codePastingDesc": "Open the downloaded `gas-template.gs` file, copy its entire contents, and paste it into the Google Apps Script editor. Replace all existing code.",
+        "formFieldsAdjustment": "FORM_FIELDS Adjustment",
+        "formFieldsAdjustmentDesc": "Adjust the `FORM_FIELDS` object in the script to match your actual Google Form questions. The keys (e.g., `EA_NAME`) are fixed, but the values (e.g., `\"Please enter your EA name\"`) need to match your form's question text.",
+        "formFieldsExample": "Example: If your form question is \"Please enter your EA name\""
+      },
+      "integrationTest": {
+        "title": "Perform Integration Test",
+        "description": "Execute test functions within Google Apps Script to verify configuration and communication",
+        "configValidation": "Configuration Validation",
+        "configValidationSteps": [
+          "Click \"Run\" in the Google Apps Script editor menu",
+          "Hover over \"Execute function\" and select \"validateConfig\" from the dropdown",
+          "After execution, check the \"Execution log\" at the bottom of the editor for the message \"✅ Configuration is normal\""
+        ],
+        "configValidationNote": "If an error occurs: Please recheck the configuration values in the `CONFIG` section of the script.",
+        "communicationTest": "Communication Test",
+        "communicationTestSteps": [
+          "Again, click \"Run\" in the top menu",
+          "Hover over \"Execute function\" and select \"testWebhook\" from the dropdown",
+          "After execution, check the \"Execution log\" for the message \"✅ Test successful\""
+        ]
+      },
+      "moduleDownload": {
+        "title": "Download License Authentication Modules",
+        "description": "Obtain license authentication modules for integration into EA",
+        "mqhLibrary": "MQH Library",
+        "mqhDescription": "Dedicated library MQH header file",
+        "dllLibrary": "DLL Library",
+        "dllDescription": "Windows DLL for license authentication",
+        "filename": "Filename:",
+        "size": "Size:",
+        "version": "Version:",
+        "systemRequirements": "System Requirements",
+        "checksum": "Checksum",
+        "download": "Download",
+        "downloadComplete": "Download Complete",
+        "downloaded": "Downloaded",
+        "installationSteps": "Installation Steps",
+        "installationDesc": "Place downloaded files in the correct locations",
+        "mqhPlacement": "MQH File Placement",
+        "mqhSteps": [
+          "Open MetaTrader 5",
+          "File → Open Data Folder",
+          "Place in MQL5 → Include folder"
+        ],
+        "dllPlacement": "DLL File Placement",
+        "dllSteps": [
+          "Open MetaTrader 5",
+          "File → Open Data Folder",
+          "Place in MQL5 → Libraries folder"
+        ],
+        "importantNotes": "Important Notes",
+        "notes": [
+          "To allow DLL usage, check \"Allow DLL imports\" in MetaTrader 5 settings",
+          "Restart MetaTrader 5 after placing files",
+          "If antivirus software blocks the DLL, configure exclusion settings"
+        ]
+      },
+      "eaIntegration": {
+        "title": "Integrate Authentication Module into EA",
+        "description": "Integrate downloaded modules into Expert Advisor",
+        "overview": "Overview",
+        "overviewDesc": "Integrate SANKEY license authentication functionality into Expert Advisor and implement proper authentication flow.",
+        "implementationCode": "Implementation Code",
+        "platform": "Platform:",
+        "codeExample": "{platform} Implementation Code",
+        "mainDifferences": "Main Differences",
+        "mt4Differences": [
+          "Uses AccountNumber() function",
+          "File handle error check with < 0",
+          "Uses MQL4/Files folder"
+        ],
+        "mt5Differences": [
+          "Uses AccountInfoInteger(ACCOUNT_LOGIN)",
+          "Checks with INVALID_HANDLE",
+          "Uses MQL5/Files folder"
+        ]
+      },
+      "downloadUrlSetup": {
+        "title": "Set EA Download URL",
+        "description": "Configure URL for authenticated users to download EA",
+        "overviewDesc": "Build a system that allows users who have completed license authentication to safely download EA files."
+      }
+    },
+    "config": {
+      "title": "Your Configuration Values",
+      "userId": "User ID",
+      "webhookUrl": "Webhook URL",
+      "masterKey": "Master Key",
+      "copied": "Copied!"
+    },
     "apiReference": "API Reference",
     "apiReferenceDesc": "Available functions and their usage",
     "bestPractices": "Best Practices",
@@ -74,8 +263,6 @@
     "handleTimeouts": "Handle network timeouts",
     "integrationGuide": "EA License Integration Guide",
     "integrationGuideDesc": "Complete guide for integrating SANKEY license verification into your Expert Advisors",
-    "integrationSteps": "Integration Steps",
-    "integrationStepsDesc": "Step-by-step guide to integrate SANKEY license verification",
     "limitFrequency": "Limit verification frequency",
     "mqhDesc": "Include our header file for easy license verification",
     "mqhLibrary": "MQH Library",
@@ -97,8 +284,6 @@
     "step4Comment2": "Your EA logic here...",
     "step4Desc": "Add periodic license checks to prevent unauthorized usage.",
     "step4Title": "Periodic Verification",
-    "subtitle": "Complete guide for integrating SANKEY license verification into your Expert Advisors",
-    "title": "Developer Integration Guide",
     "useEncryption": "Use encrypted communication",
     "verifyLicenseDesc": "Verifies if the provided license key is valid for the given account number.",
     "verifyLicenseReturn": "true if license is valid, false otherwise",

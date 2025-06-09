@@ -1,12 +1,14 @@
 "use client"
 
 import { useState } from "react"
+import { useTranslations } from "next-intl"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Code } from "lucide-react"
 
 export function MtVersionSelector() {
+  const t = useTranslations('developer.steps.eaIntegration')
   const [selectedVersion, setSelectedVersion] = useState<"MT4" | "MT5">("MT4")
 
   const codeExamples = {
@@ -117,82 +119,82 @@ int OnInit()
   }
 
   return (
-    <div className="space-y-4">
-      {/* Version Selector */}
-      <div className="flex items-center space-x-2">
-        <span className="text-sm font-medium theme-text-secondary">プラットフォーム:</span>
-        <div className="flex space-x-2">
-          <Button
-            variant={selectedVersion === "MT4" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setSelectedVersion("MT4")}
-            className={
-              selectedVersion === "MT4"
-                ? "bg-emerald-500 hover:bg-emerald-600 text-white"
-                : "border-emerald-500/40 theme-text-emerald hover:bg-emerald-500/20"
-            }
-          >
-            MT4
-          </Button>
-          <Button
-            variant={selectedVersion === "MT5" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setSelectedVersion("MT5")}
-            className={
-              selectedVersion === "MT5"
-                ? "bg-emerald-500 hover:bg-emerald-600 text-white"
-                : "border-emerald-500/40 theme-text-emerald hover:bg-emerald-500/20"
-            }
-          >
-            MT5
-          </Button>
+      <div className="space-y-4">
+        {/* Version Selector */}
+        <div className="flex items-center space-x-2">
+          <span className="text-sm font-medium theme-text-secondary">{t('platform')}:</span>
+          <div className="flex space-x-2">
+            <Button
+                variant={selectedVersion === "MT4" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setSelectedVersion("MT4")}
+                className={
+                  selectedVersion === "MT4"
+                      ? "bg-emerald-500 hover:bg-emerald-600 text-white"
+                      : "border-emerald-500/40 theme-text-emerald hover:bg-emerald-500/20"
+                }
+            >
+              MT4
+            </Button>
+            <Button
+                variant={selectedVersion === "MT5" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setSelectedVersion("MT5")}
+                className={
+                  selectedVersion === "MT5"
+                      ? "bg-emerald-500 hover:bg-emerald-600 text-white"
+                      : "border-emerald-500/40 theme-text-emerald hover:bg-emerald-500/20"
+                }
+            >
+              MT5
+            </Button>
+          </div>
         </div>
-      </div>
 
-      {/* Code Block */}
-      <Card className="theme-card-bg border-emerald-500/20">
-        <CardHeader className="pb-3">
-          <CardTitle className="theme-text-primary flex items-center text-lg">
-            <Code className="w-5 h-5 mr-2 text-emerald-400" />
-            {selectedVersion}版 実装コード
-            <Badge className="ml-2 bg-emerald-500 text-white text-xs">{selectedVersion}</Badge>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="bg-slate-900 rounded-lg p-4 overflow-x-auto">
+        {/* Code Block */}
+        <Card className="theme-card-bg border-emerald-500/20">
+          <CardHeader className="pb-3">
+            <CardTitle className="theme-text-primary flex items-center text-lg">
+              <Code className="w-5 h-5 mr-2 text-emerald-400" />
+              {t('codeExample', { platform: selectedVersion })}
+              <Badge className="ml-2 bg-emerald-500 text-white text-xs">{selectedVersion}</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="bg-slate-900 rounded-lg p-4 overflow-x-auto">
             <pre className="text-sm text-emerald-300">
               <code>{codeExamples[selectedVersion]}</code>
             </pre>
-          </div>
-        </CardContent>
-      </Card>
+            </div>
+          </CardContent>
+        </Card>
 
-      {/* Version Differences */}
-      <Card className="theme-card-bg border-emerald-500/20">
-        <CardHeader className="pb-3">
-          <CardTitle className="theme-text-primary text-base">主な違い</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-            <div>
-              <h6 className="font-medium theme-text-primary mb-2">MT4版</h6>
-              <ul className="space-y-1 theme-text-secondary">
-                <li>• AccountNumber()関数を使用</li>
-                <li>• ファイルハンドルエラーは &lt; 0 で判定</li>
-                <li>• MQL4/Filesフォルダを使用</li>
-              </ul>
+        {/* Version Differences */}
+        <Card className="theme-card-bg border-emerald-500/20">
+          <CardHeader className="pb-3">
+            <CardTitle className="theme-text-primary text-base">{t('mainDifferences')}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              <div>
+                <h6 className="font-medium theme-text-primary mb-2">MT4版</h6>
+                <ul className="space-y-1 theme-text-secondary">
+                  {t.raw('mt4Differences').map((diff: string, index: number) => (
+                      <li key={index}>• {diff}</li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <h6 className="font-medium theme-text-primary mb-2">MT5版</h6>
+                <ul className="space-y-1 theme-text-secondary">
+                  {t.raw('mt5Differences').map((diff: string, index: number) => (
+                      <li key={index}>• {diff}</li>
+                  ))}
+                </ul>
+              </div>
             </div>
-            <div>
-              <h6 className="font-medium theme-text-primary mb-2">MT5版</h6>
-              <ul className="space-y-1 theme-text-secondary">
-                <li>• AccountInfoInteger(ACCOUNT_LOGIN)を使用</li>
-                <li>• INVALID_HANDLEで判定</li>
-                <li>• MQL5/Filesフォルダを使用</li>
-              </ul>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+          </CardContent>
+        </Card>
+      </div>
   )
 }
