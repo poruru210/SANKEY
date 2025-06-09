@@ -59,15 +59,15 @@ const getStatusStyleProperties = (status: StepControlProps['status']): React.CSS
 
 // StepControl コンポーネント
 export const StepControl: React.FC<StepControlProps> = ({
-  id,
-  title,
-  description,
-  icon,
-  status = 'pending',
-  children,
-  defaultExpanded = false,
-  onToggle,
-}) => {
+                                                          id,
+                                                          title,
+                                                          description,
+                                                          icon,
+                                                          status = 'pending',
+                                                          children,
+                                                          defaultExpanded = false,
+                                                          onToggle,
+                                                        }) => {
   const [expanded, setExpanded] = useState(defaultExpanded);
 
   const handleToggle = () => {
@@ -88,71 +88,71 @@ export const StepControl: React.FC<StepControlProps> = ({
   };
 
   return (
-    <>
-      <style>{pulsingBorderStyle}</style>
-      <div
-        className={`border-2 rounded-lg overflow-hidden transition-all duration-300`}
-        style={
-          status === 'in-progress'
-            ? {
-                animation: 'border-pulse 2s ease-in-out infinite',
-                borderColor: 'var(--stepper-inprogress-pulse-border-color)'
-              }
-            : {
-                borderColor: 'var(--stepper-inner-border-color)'
-              }
-        }
-      >
-        {/* Step Header */}
+      <>
+        <style>{pulsingBorderStyle}</style>
         <div
-          className="p-4 cursor-pointer hover:bg-emerald-500/10 transition-colors"
-          onClick={handleToggle}
+            className={`border-2 rounded-lg overflow-hidden transition-all duration-300`}
+            style={
+              status === 'in-progress'
+                  ? {
+                    animation: 'border-pulse 2s ease-in-out infinite',
+                    borderColor: 'var(--stepper-inprogress-pulse-border-color)'
+                  }
+                  : {
+                    borderColor: 'var(--stepper-inner-border-color)'
+                  }
+            }
         >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <div
-                className={`flex items-center justify-center w-10 h-10 rounded-full flex-shrink-0 transition-all duration-300`}
-                style={getStatusStyleProperties(status)}
-              >
-                {getStatusIcon(status, id)}
-              </div>
-              {icon && (
-                <div className="text-emerald-400">
-                  {icon}
+          {/* Step Header */}
+          <div
+              className="p-4 cursor-pointer hover:bg-emerald-500/10 transition-colors"
+              onClick={handleToggle}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div
+                    className={`flex items-center justify-center w-10 h-10 rounded-full flex-shrink-0 transition-all duration-300`}
+                    style={getStatusStyleProperties(status)}
+                >
+                  {getStatusIcon(status, id)}
                 </div>
-              )}
-              <div className="min-w-0 flex-1">
-                <h3 className="font-semibold theme-text-primary text-sm sm:text-base truncate">{title}</h3>
-                {description && (
-                  <p className="text-xs sm:text-sm text-gray-400 mt-0.5 line-clamp-1 sm:line-clamp-none">{description}</p>
+                {icon && (
+                    <div className="text-emerald-400">
+                      {icon}
+                    </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-semibold theme-text-primary text-sm sm:text-base truncate">{title}</h3>
+                  {description && (
+                      <p className="text-xs sm:text-sm text-gray-400 mt-0.5 line-clamp-1 sm:line-clamp-none">{description}</p>
+                  )}
+                </div>
+              </div>
+              <div className="ml-4 flex-shrink-0">
+                {expanded ? (
+                    <ChevronDown className="w-5 h-5 text-gray-400" />
+                ) : (
+                    <ChevronRight className="w-5 h-5 text-gray-400" />
                 )}
               </div>
             </div>
-            <div className="ml-4 flex-shrink-0">
-              {expanded ? (
-                <ChevronDown className="w-5 h-5 text-gray-400" />
-              ) : (
-                <ChevronRight className="w-5 h-5 text-gray-400" />
-              )}
-            </div>
           </div>
-        </div>
 
-        {/* Step Content */}
-        {expanded && (
-          <div
-            className="border-t p-4 sm:p-6" // Kept padding and border-t for top border
-            style={{
-              backgroundColor: 'var(--card-bg)',
-              borderColor: 'var(--stepper-inner-border-color)', // Updated border color
-              color: 'var(--stepper-content-text)'              // New base text color for content
-            }}
-          >
-            {children}
-          </div>
-        )}
-      </div>
-    </>
+          {/* Step Content */}
+          {expanded && (
+              <div
+                  className="border-t p-4 sm:p-6" // Kept padding and border-t for top border
+                  style={{
+                    backgroundColor: 'var(--card-bg)',
+                    borderColor: 'var(--stepper-inner-border-color)', // Updated border color
+                    color: 'var(--stepper-content-text)'              // New base text color for content
+                  }}
+              >
+                {children}
+              </div>
+          )}
+        </div>
+      </>
   );
 };
 
@@ -162,13 +162,13 @@ interface StepGroupProps {
   className?: string;
 }
 
-export const StepGroup: React.FC<StepGroupProps> = ({ 
-  children, 
-  className = '' 
-}) => {
+export const StepGroup: React.FC<StepGroupProps> = ({
+                                                      children,
+                                                      className = ''
+                                                    }) => {
   return (
-    <div className={`space-y-4 ${className}`}>
-      {children}
-    </div>
+      <div className={`space-y-4 ${className}`}>
+        {children}
+      </div>
   );
 };
