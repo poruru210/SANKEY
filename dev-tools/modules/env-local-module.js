@@ -56,7 +56,7 @@ async function updateLocalEnv(config) {
         });
 
         // 連続する空行を1つにまとめる
-        const cleanedContent = [];
+        let cleanedContent = [];
         let lastWasEmpty = false;
 
         for (const line of filteredContent) {
@@ -79,11 +79,11 @@ async function updateLocalEnv(config) {
             }
             cleanedContent.push(`AUTH_SECRET="${awsConfig.authSecret}"`);
         }
-
+       
         // ✅ NEXTAUTH_URL を常に上書き
         cleanedContent = cleanedContent.filter(line => !line.startsWith('NEXTAUTH_URL='));
         cleanedContent.push(`NEXTAUTH_URL=${APP_URLS.LOCAL}`);
-
+    
         // 新しい設定を追加
         const newSettings = [
             '',

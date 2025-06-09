@@ -325,6 +325,5 @@ module.exports = {
     setupDnsForCustomDomain,
     verifyPrerequisites,
     listApiDomains,
-    CloudflareDnsClient,
-    setupCustomDomain: setupDnsForCustomDomain  // 後方互換性のためのエイリアス
+    CloudflareDnsClient
 };

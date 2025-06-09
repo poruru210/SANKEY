@@ -14,13 +14,14 @@ export interface SankeyApplicationStackProps extends cdk.StackProps {
     eaApplicationsTable: dynamodb.Table;
     licenseNotificationQueue: sqs.Queue;
     environment?: string;
+    certificateArnParameterPath?: string;
 }
 
 export class SankeyApplicationStack extends cdk.Stack {
     public readonly api: apigw.RestApi;
     public readonly authorizer: apigw.CognitoUserPoolsAuthorizer;
+    public readonly domainName: apigw.DomainName;
     private readonly envName: string;
-    private readonly config: ReturnType<typeof EnvironmentConfig.get>;
 
     // 共通設定
     private readonly corsOptions: apigw.CorsOptions;
@@ -30,7 +31,6 @@ export class SankeyApplicationStack extends cdk.Stack {
         super(scope, id, props);
 
         this.envName = props.environment || 'dev';
-        this.config = EnvironmentConfig.get(this.envName);
 
         // 共通設定を取得
         this.corsOptions = CdkHelpers.getDefaultCorsOptions(this.envName);
@@ -39,15 +39,32 @@ export class SankeyApplicationStack extends cdk.Stack {
         // 共通タグを適用
         CdkHelpers.applyCommonTags(this, this.envName, 'API');
 
+        // カスタムドメインの作成
+        this.domainName = CdkHelpers.createApiDomainName(
+            this,
+            'ApiCustomDomain',
+            this.envName,
+            {
+                certificateArnParameterPath: props.certificateArnParameterPath
+            }
+        );
+
         // API Gateway の初期化
-        this.api = CdkHelpers.createRestApi(this, 'LicenseApi', this.envName, {
-            description: 'License Service API with full CORS support',
+        this.api = CdkHelpers.createRestApi(this, 'SankeyApi', this.envName, {
+            description: 'Sankey API',
             throttlingRateLimit: 2,
             throttlingBurstLimit: 5,
         });
 
+        // カスタムドメインとAPI Gatewayのマッピング
+        new apigw.BasePathMapping(this, 'ApiBasePathMapping', {
+            domainName: this.domainName,
+            restApi: this.api,
+            stage: this.api.deploymentStage,
+        });
+
         // Cognito Authorizer の初期化
-        this.authorizer = new apigw.CognitoUserPoolsAuthorizer(this, 'LicenseApiAuthorizer', {
+        this.authorizer = new apigw.CognitoUserPoolsAuthorizer(this, 'SankeyAuthorizer', {
             cognitoUserPools: [props.userPool],
             authorizerName: 'CognitoAuthorizer',
             identitySource: 'method.request.header.Authorization',
@@ -464,6 +481,16 @@ export class SankeyApplicationStack extends cdk.Stack {
                 id: 'ApiId',
                 value: this.api.restApiId,
                 description: 'License API Gateway ID',
+            },
+            {
+                id: 'CustomDomainName',
+                value: this.domainName.domainName,
+                description: 'API Custom Domain Name',
+            },
+            {
+                id: 'CustomDomainNameTarget',
+                value: this.domainName.domainNameAliasDomainName,
+                description: 'Custom Domain Name Target for DNS setup',
             },
         ]);
     }

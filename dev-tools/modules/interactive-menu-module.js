@@ -17,6 +17,11 @@ const MENU_ITEMS = [
         description: 'Create/update Cloudflare Origin CA certificate and import to ACM'
     },
     {
+        id: 'setup-custom-domain',
+        label: '🌐 Setup Custom Domain DNS',
+        description: 'Configure DNS for API Gateway custom domain'
+    },
+    {
         id: 'setup-vercel',
         label: '🔧 Setup Vercel Environment Variables',
         description: 'Configure environment variables in Vercel project'
@@ -434,6 +439,7 @@ function getMenuItem(menuId) {
 function getBatchMenuItems() {
     return [
         'prepare-certificate',
+        'setup-custom-domain',
         'setup-vercel',
         'trigger-deploy'
     ];

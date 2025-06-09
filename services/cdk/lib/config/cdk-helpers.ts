@@ -5,6 +5,8 @@ import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as apigw from 'aws-cdk-lib/aws-apigateway';
+import * as ssm from 'aws-cdk-lib/aws-ssm';
+import * as acm from 'aws-cdk-lib/aws-certificatemanager';
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
 import { Construct } from 'constructs';
 
@@ -78,6 +80,58 @@ export class CdkHelpers {
         if (resourceType) parts.push(resourceType);
         parts.push(environment);
         return parts.join('-');
+    }
+
+    // ==========================================
+    // ドメイン関連
+    // ==========================================
+
+    /**
+     * API用のドメイン名を生成
+     */
+    static generateApiDomainName(environment: string): string {
+        const config = EnvironmentConfig.get(environment);
+        const baseDomain = config.domain;
+
+        if (environment === 'prod') {
+            return `api.${baseDomain}`;
+        } else {
+            return `api-${baseDomain}`;
+        }
+    }
+
+    /**
+     * API Gateway用のカスタムドメインを作成
+     */
+    static createApiDomainName(
+        scope: Construct,
+        id: string,
+        environment: string,
+        options: {
+            certificateArnParameterPath?: string;
+        } = {}
+    ): apigw.DomainName {
+        const domainName = this.generateApiDomainName(environment);
+        const certificateArnPath = options.certificateArnParameterPath || '/sankey/certificate-arn';
+
+        // SSMからACM証明書のARNを取得
+        const certificateArn = ssm.StringParameter.valueForStringParameter(
+            scope,
+            certificateArnPath
+        );
+
+        // ACM証明書を参照
+        const certificate = acm.Certificate.fromCertificateArn(
+            scope,
+            `${id}Certificate`,
+            certificateArn
+        );
+
+        return new apigw.DomainName(scope, id, {
+            domainName,
+            certificate,
+            endpointType: apigw.EndpointType.REGIONAL,
+        });
     }
 
     // ==========================================
@@ -256,6 +310,7 @@ export class CdkHelpers {
         options: {
             visibilityTimeout?: cdk.Duration;
             retentionPeriod?: cdk.Duration;
+            receiveMessageWaitTime?: cdk.Duration;
             deadLetterQueue?: {
                 maxReceiveCount: number;
                 retentionPeriod?: cdk.Duration;
@@ -276,6 +331,7 @@ export class CdkHelpers {
             queueName,
             visibilityTimeout: options.visibilityTimeout || cdk.Duration.minutes(5),
             retentionPeriod: options.retentionPeriod || cdk.Duration.days(14),
+            receiveMessageWaitTime: options?.receiveMessageWaitTime || cdk.Duration.days(10),
             deadLetterQueue: dlq ? {
                 queue: dlq,
                 maxReceiveCount: options.deadLetterQueue!.maxReceiveCount,
@@ -426,7 +482,7 @@ export class CdkHelpers {
      * SSMユーザープレフィックスを生成
      */
     static getSsmUserPrefix(environment: string): string {
-        return `/sankey-${environment}/users`;
+        return `/sankey/${environment}/users`;
     }
 
     /**
@@ -447,14 +503,21 @@ export class CdkHelpers {
      * SSM環境プレフィックスを生成
      */
     static getSsmEnvironmentPrefix(environment: string): string {
-        return `/sankey-${environment}`;
+        return `/sankey/${environment}`;
     }
 
     /**
      * SSM Resend APIキーパスを生成
      */
     static getSsmResendApiKeyPath(environment: string): string {
-        return `/sankey-${environment}/resend/api-key`;
+        return `/sankey/${environment}/resend/api-key`;
+    }
+
+    /**
+     * SSM証明書ARNパスを生成
+     */
+    static getSsmCertificateArnPath(): string {
+        return '/sankey/certificate-arn';
     }
 
     // ==========================================

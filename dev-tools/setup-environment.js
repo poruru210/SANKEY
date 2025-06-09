@@ -30,10 +30,10 @@ const {
 
 // 機能別モジュール
 const { getAwsConfiguration } = require('./modules/aws-config-module');
-const { setupCustomDomain } = require('./modules/custom-domain-module');
 const { updateLocalEnv, readAuthSecretFromEnvLocal } = require('./modules/env-local-module');
 const { updateVercelEnvironmentVariables, getExistingAuthSecret } = require('./modules/vercel-env-module');
 const { triggerDeployment, generateAuthSecret } = require('./lib/vercel-helpers');
+const { setupDnsForCustomDomain } = require('./modules/custom-domain-module');
 
 // コマンドライン引数の設定
 const program = new Command();
@@ -47,6 +47,7 @@ program
     .option('--debug', 'Enable debug output')
     // 直接実行モード用（後方互換性）
     .option('--prepare-certificate', 'Prepare wildcard certificate only')
+    .option('--setup-custom-domain', 'Setup custom domain DNS only')
     .option('--generate-env-local', 'Generate .env.local only')
     .option('--setup-vercel', 'Setup Vercel environment variables only')
     .option('--trigger-deploy', 'Trigger Vercel deployment only')
@@ -152,6 +153,147 @@ async function executeCertificatePreparation(context) {
         return { success: false, error };
     }
 }
+
+/**
+ * AWS API GatewayのRegional Domain Nameを取得
+ */
+async function getApiGatewayRegionalDomain(config) {
+    const { profile, region, environment, debug } = config;
+    
+    try {
+        // AWS SDKの設定
+        const AWS = require('aws-sdk');
+        
+        // プロファイルベースの認証設定
+        const credentials = new AWS.SharedIniFileCredentials({ profile });
+        const apigateway = new AWS.APIGateway({ 
+            region,
+            credentials
+        });
+
+        // カスタムドメイン名を生成（既存のCUSTOM_DOMAINSから）
+        const customDomainName = CUSTOM_DOMAINS.getApiDomain(environment);
+        log.debug(`Looking for custom domain: ${customDomainName}`, { debug });
+
+        // API Gatewayからカスタムドメイン情報を取得
+        const domainInfo = await apigateway.getDomainName({
+            domainName: customDomainName
+        }).promise();
+
+        if (domainInfo && domainInfo.regionalDomainName) {
+            log.debug(`Found regional domain: ${domainInfo.regionalDomainName}`, { debug });
+            return domainInfo.regionalDomainName;
+        }
+
+        throw new Error(`Regional domain name not found for ${customDomainName}`);
+
+    } catch (error) {
+        if (error.code === 'NotFoundException') {
+            throw new Error(`Custom domain '${CUSTOM_DOMAINS.getApiDomain(environment)}' not found in API Gateway. Please ensure CDK deployment is complete.`);
+        }
+        throw new Error(`Failed to get API Gateway regional domain: ${error.message}`);
+    }
+}
+
+/**
+ * カスタムドメイン DNS設定処理
+ */
+async function executeCustomDomainSetup(context) {
+    try {
+        // 環境選択
+        const environment = context.environment || await selectEnvironment(context);
+        showProgress(`Setting up custom domain DNS for ${environment} environment`);
+
+        // 1. AWS API GatewayのRegional Domain Nameを取得
+        log.info('🔍 Retrieving API Gateway regional domain...');
+        const targetDomain = await getApiGatewayRegionalDomain({
+            profile: context.profile,
+            region: context.region,
+            environment,
+            debug: context.debug
+        });
+
+        const customDomainName = CUSTOM_DOMAINS.getApiDomain(environment);
+        log.info(`📡 Target mapping: ${customDomainName} -> ${targetDomain}`);
+
+        // 2. 実行確認
+        const confirmed = await confirmExecution('Custom Domain DNS Setup', {
+            Environment: environment,
+            'Custom Domain': customDomainName,
+            'Target (Regional Domain)': targetDomain,
+            'DNS Provider': 'Cloudflare'
+        });
+
+        if (!confirmed) {
+            log.info('DNS setup cancelled');
+            return { success: false, cancelled: true };
+        }
+
+        // 3. DNS設定の実行
+        const result = await setupDnsForCustomDomain({
+            environment,
+            targetDomain,
+            profile: context.profile,
+            region: context.region,
+            dryRun: context.dryRun,
+            debug: context.debug
+        });
+
+        if (result.success) {
+            log.success('✅ Custom domain DNS setup completed successfully');
+            log.info(`🔗 API will be accessible at: https://${result.hostname}`);
+            
+            // DNS伝播の確認
+            if (!context.dryRun) {
+                log.info('⏳ Verifying DNS configuration...');
+                await new Promise(resolve => setTimeout(resolve, 3000));
+                
+                try {
+                    const dnsCheck = await verifyDnsConfiguration(result.hostname);
+                    if (dnsCheck.success) {
+                        log.success(`✅ DNS configuration verified: ${result.hostname} -> ${dnsCheck.addresses[0]}`);
+                    } else {
+                        log.warning(`⚠️  DNS propagation may take a few minutes to complete`);
+                        log.info('💡 You can test the API endpoint in a few minutes');
+                    }
+                } catch (dnsError) {
+                    log.debug(`DNS verification failed: ${dnsError.message}`, { debug: context.debug });
+                    log.warning('⚠️  DNS verification failed, but configuration was applied');
+                }
+            }
+
+            console.log('\n🚀 Next steps:');
+            console.log('   1. Wait 1-2 minutes for DNS propagation');
+            console.log(`   2. Test your API: curl https://${result.hostname}/health`);
+            console.log('   3. Check SSL certificate is working properly');
+        }
+
+        await confirmContinue();
+        return { success: true, result };
+
+    } catch (error) {
+        await handleMenuError(error, { showStack: context.debug });
+        return { success: false, error };
+    }
+}
+
+
+/**
+ * DNS設定の確認
+ */
+async function verifyDnsConfiguration(hostname) {
+    return new Promise((resolve) => {
+        const dns = require('dns');
+        dns.resolve(hostname, 'CNAME', (err, addresses) => {
+            if (err) {
+                resolve({ success: false, error: err.message });
+            } else {
+                resolve({ success: true, addresses });
+            }
+        });
+    });
+}
+
 
 /**
  * .env.local生成処理
@@ -421,6 +563,10 @@ async function runInteractiveMode(context) {
             case 'prepare-certificate':
                 await executeCertificatePreparation(context);
                 break;
+            
+            case 'setup-custom-domain':
+                await executeCustomDomainSetup(context);
+                break;
 
             case 'generate-env-local':
                 await executeEnvLocalGeneration(context);
@@ -461,6 +607,8 @@ async function runDirectMode(options) {
 
     if (options.prepareCertificate) {
         await executeCertificatePreparation(context);
+    } else if (options.setupCustomDomain) {
+        await executeCustomDomainSetup(context);
     } else if (options.generateEnvLocal) {
         await executeEnvLocalGeneration(context);
     } else if (options.setupVercel) {
