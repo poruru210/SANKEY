@@ -25,7 +25,7 @@ const ssmClient = tracer.captureAWSv3Client(new SSMClient({
 }));
 
 const TABLE_NAME = process.env.TABLE_NAME!;
-const SSM_PREFIX = process.env.SSM_PREFIX!;
+const SSM_USER_PREFIX = process.env.SSM_USER_PREFIX!;
 
 const errorResponse = (statusCode: number, message: string, details?: any) => ({
     statusCode,
@@ -278,7 +278,7 @@ const baseHandler: APIGatewayProxyHandler = async (event) => {
         });
 
         // SSMからmaster-keyを取得
-        const ssmKey = `${SSM_PREFIX}/${userId}/master-key`;
+        const ssmKey = `${SSM_USER_PREFIX}/${userId}/master-key`;
         let masterKey: string;
 
         try {

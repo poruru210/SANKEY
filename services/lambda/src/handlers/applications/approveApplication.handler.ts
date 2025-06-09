@@ -56,10 +56,13 @@ async function sendNotificationToQueue(
             userId
         };
 
+        // 環境変数から遅延時間を取得（デフォルト300秒）
+        const delaySeconds = parseInt(process.env.SQS_DELAY_SECONDS || '300', 10);
+
         const sendParams = {
             QueueUrl: process.env.NOTIFICATION_QUEUE_URL!,
             MessageBody: JSON.stringify(messageBody),
-            DelaySeconds: 300 // 5分遅延
+            DelaySeconds: delaySeconds  // 環境変数から取得した値を使用
         };
 
         const result = await sqsClient.send(new SendMessageCommand(sendParams));
@@ -67,7 +70,8 @@ async function sendNotificationToQueue(
         logger.info('Notification message sent to queue successfully', {
             messageId: result.MessageId,
             applicationSK,
-            userId
+            userId,
+            delaySeconds  // ログに遅延時間を追加
         });
 
         return result;
@@ -208,7 +212,8 @@ const baseHandler = async (
         });
 
         // Step 3: notificationScheduledAt を計算（5分後）
-        const notificationScheduledAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+        const delaySeconds = parseInt(process.env.SQS_DELAY_SECONDS || '300', 10);
+        const notificationScheduledAt = new Date(Date.now() + delaySeconds * 1000).toISOString();
 
         // Step 4: AwaitingNotification ステータスに更新 + notificationScheduledAt設定
         await repository.updateStatus(userId, fullApplicationSK, 'AwaitingNotification', {

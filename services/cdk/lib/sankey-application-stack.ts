@@ -6,7 +6,7 @@ import * as apigw from 'aws-cdk-lib/aws-apigateway';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
-import { EnvironmentConfig, CdkHelpers } from './config';
+import {EnvironmentConfig, CdkHelpers, EnvironmentSettings} from './config';
 
 export interface SankeyApplicationStackProps extends cdk.StackProps {
     userPool: cognito.UserPool;
@@ -22,6 +22,7 @@ export class SankeyApplicationStack extends cdk.Stack {
     public readonly authorizer: apigw.CognitoUserPoolsAuthorizer;
     public readonly domainName: apigw.DomainName;
     private readonly envName: string;
+    private readonly config: EnvironmentSettings;
 
     // 共通設定
     private readonly corsOptions: apigw.CorsOptions;
@@ -31,6 +32,7 @@ export class SankeyApplicationStack extends cdk.Stack {
         super(scope, id, props);
 
         this.envName = props.environment || 'dev';
+        this.config = EnvironmentConfig.get(this.envName);
 
         // 共通設定を取得
         this.corsOptions = CdkHelpers.getDefaultCorsOptions(this.envName);
@@ -198,6 +200,7 @@ export class SankeyApplicationStack extends cdk.Stack {
                 SSM_USER_PREFIX: CdkHelpers.getSsmUserPrefix(this.envName),
                 TABLE_NAME: props.eaApplicationsTable.tableName,
                 NOTIFICATION_QUEUE_URL: props.licenseNotificationQueue.queueUrl,
+                SQS_DELAY_SECONDS: this.config.notification.sqsDelaySeconds.toString(),
             }
         );
 

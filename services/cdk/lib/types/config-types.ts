@@ -66,6 +66,7 @@ export interface AuthSettings {
 export interface NotificationSettings {
     emailFromAddress: string;
     defaultTtlMonths: number;
+    sqsDelaySeconds: number;
 }
 
 /**

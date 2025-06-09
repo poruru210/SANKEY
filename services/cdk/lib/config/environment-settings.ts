@@ -59,6 +59,7 @@ export class EnvironmentConfig {
             notification: {
                 emailFromAddress: 'noreply@sankey.trade',
                 defaultTtlMonths: 3,
+                sqsDelaySeconds: 30,
             },
         },
         prod: {
@@ -105,6 +106,7 @@ export class EnvironmentConfig {
             notification: {
                 emailFromAddress: 'noreply@sankey.trade',
                 defaultTtlMonths: 12,
+                sqsDelaySeconds: 300,  // 本番環境は5分（300秒）
             },
         },
     };
