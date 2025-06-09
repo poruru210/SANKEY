@@ -1,7 +1,15 @@
 const https = require('https');
 const { log, displaySection } = require('../lib/logger');
-const { CUSTOM_DOMAINS, SSM_PARAMETERS } = require('../lib/constants');
+const {
+    CUSTOM_DOMAINS,
+    SSM_PARAMETERS,
+    CLOUDFLARE_API,
+    DNS_RECORD_TYPES,
+    DEFAULT_DNS_TTL,
+    ENVIRONMENTS
+} = require('../lib/constants');
 const { getCertificateArn } = require('./ssm-module');
+const { ConfigurationError, ApiError } = require('../lib/errors');
 
 /**
  * カスタムドメインDNS設定モジュール
@@ -15,7 +23,7 @@ class CloudflareDnsClient {
     constructor(apiToken, zoneId) {
         this.apiToken = apiToken;
         this.zoneId = zoneId;
-        this.baseUrl = 'https://api.cloudflare.com/client/v4';
+        this.baseUrl = CLOUDFLARE_API.BASE_URL;
     }
 
     /**
@@ -27,7 +35,7 @@ class CloudflareDnsClient {
         return new Promise((resolve, reject) => {
             const headers = {
                 'Content-Type': 'application/json',
-                'User-Agent': 'Sankey-Setup-Script/1.0',
+                'User-Agent': CLOUDFLARE_API.USER_AGENT,
                 'Authorization': `Bearer ${this.apiToken}`
             };
 
@@ -53,17 +61,17 @@ class CloudflareDnsClient {
                         if (parsed.success) {
                             resolve(parsed.result);
                         } else {
-                            const errors = parsed.errors?.map(e => `${e.code}: ${e.message}`).join(', ') || 'Unknown error';
-                            reject(new Error(`Cloudflare API error: ${errors}`));
+                            const errors = parsed.errors?.map(e => `${e.code}: ${e.message}`).join(', ') || `Status ${res.statusCode} - Unknown Cloudflare error`;
+                            reject(new ApiError(errors, 'Cloudflare DNS', res.statusCode));
                         }
-                    } catch (error) {
-                        reject(new Error(`Failed to parse response: ${error.message}`));
+                    } catch (parseError) {
+                        reject(new ApiError(`Failed to parse Cloudflare API response: ${parseError.message}`, 'Cloudflare DNS', res.statusCode, parseError));
                     }
                 });
             });
 
-            req.on('error', (error) => {
-                reject(new Error(`Request failed: ${error.message}`));
+            req.on('error', (networkError) => {
+                reject(new ApiError(`Cloudflare API request failed: ${networkError.message}`, 'Cloudflare DNS', null, networkError));
             });
 
             if (data) {
@@ -79,7 +87,7 @@ class CloudflareDnsClient {
      */
     async listDnsRecords(filters = {}) {
         const params = new URLSearchParams(filters).toString();
-        const endpoint = `/zones/${this.zoneId}/dns_records${params ? `?${params}` : ''}`;
+        const endpoint = `${CLOUDFLARE_API.ENDPOINTS.DNS_RECORDS(this.zoneId)}${params ? `?${params}` : ''}`;
         return await this.makeRequest('GET', endpoint);
     }
 
@@ -87,13 +95,13 @@ class CloudflareDnsClient {
      * Create or update DNS record
      */
     async updateDnsRecord(recordName, targetDomain, options = {}) {
-        const { proxied = true, ttl = 1, dryRun = false } = options;
+        const { proxied = true, ttl = DEFAULT_DNS_TTL, dryRun = false } = options;
 
-        const records = await this.listDnsRecords({ name: recordName, type: 'CNAME' });
+        const records = await this.listDnsRecords({ name: recordName, type: DNS_RECORD_TYPES.CNAME });
         const existingRecord = records.find(record => record.name === recordName);
 
         const recordData = {
-            type: 'CNAME',
+            type: DNS_RECORD_TYPES.CNAME,
             name: recordName,
             content: targetDomain,
             ttl,
@@ -114,7 +122,7 @@ class CloudflareDnsClient {
             
             const updatedRecord = await this.makeRequest(
                 'PUT', 
-                `/zones/${this.zoneId}/dns_records/${existingRecord.id}`, 
+                `${CLOUDFLARE_API.ENDPOINTS.DNS_RECORDS(this.zoneId)}/${existingRecord.id}`,
                 recordData
             );
             log.success(`✅ Updated DNS record: ${recordName} -> ${targetDomain}`);
@@ -122,7 +130,7 @@ class CloudflareDnsClient {
         } else {
             const newRecord = await this.makeRequest(
                 'POST', 
-                `/zones/${this.zoneId}/dns_records`, 
+                CLOUDFLARE_API.ENDPOINTS.DNS_RECORDS(this.zoneId),
                 recordData
             );
             log.success(`✅ Created DNS record: ${recordName} -> ${targetDomain}`);
@@ -149,7 +157,7 @@ class CloudflareDnsClient {
             return { action: 'dry-run-delete', record: existingRecord };
         }
 
-        await this.makeRequest('DELETE', `/zones/${this.zoneId}/dns_records/${existingRecord.id}`);
+        await this.makeRequest('DELETE', `${CLOUDFLARE_API.ENDPOINTS.DNS_RECORDS(this.zoneId)}/${existingRecord.id}`);
         log.success(`✅ Deleted DNS record: ${recordName}`);
         return { action: 'deleted' };
     }
@@ -182,7 +190,7 @@ async function setupDnsForCustomDomain(config) {
         const CLOUDFLARE_ZONE_ID = process.env.CLOUDFLARE_ZONE_ID;
 
         if (!CLOUDFLARE_API_TOKEN || !CLOUDFLARE_ZONE_ID) {
-            throw new Error('DNS setup requires CLOUDFLARE_API_TOKEN and CLOUDFLARE_ZONE_ID');
+            throw new ConfigurationError('DNS setup requires CLOUDFLARE_API_TOKEN and CLOUDFLARE_ZONE_ID environment variables.');
         }
 
         // Initialize Cloudflare client
@@ -196,7 +204,7 @@ async function setupDnsForCustomDomain(config) {
         // Update DNS record
         const result = await cloudflareClient.updateDnsRecord(hostname, targetDomain, {
             proxied: true,
-            ttl: 1,
+            ttl: DEFAULT_DNS_TTL,
             dryRun,
             debug
         });
@@ -267,7 +275,7 @@ async function listApiDomains(config) {
         const CLOUDFLARE_ZONE_ID = process.env.CLOUDFLARE_ZONE_ID;
 
         if (!CLOUDFLARE_API_TOKEN || !CLOUDFLARE_ZONE_ID) {
-            throw new Error('Listing domains requires CLOUDFLARE_API_TOKEN and CLOUDFLARE_ZONE_ID');
+            throw new ConfigurationError('Listing domains requires CLOUDFLARE_API_TOKEN and CLOUDFLARE_ZONE_ID environment variables.');
         }
 
         const cloudflareClient = new CloudflareDnsClient(CLOUDFLARE_API_TOKEN, CLOUDFLARE_ZONE_ID);
@@ -275,10 +283,10 @@ async function listApiDomains(config) {
         displaySection('Configured API Domains');
 
         // Check all possible API domains
-        const environments = ['dev', 'prod'];
+        const possibleEnvs = [ENVIRONMENTS.DEV, ENVIRONMENTS.PROD];
         const results = [];
 
-        for (const env of environments) {
+        for (const env of possibleEnvs) {
             const hostname = CUSTOM_DOMAINS.getApiDomain(env);
             const records = await cloudflareClient.listDnsRecords({ name: hostname });
             const record = records.find(r => r.name === hostname);

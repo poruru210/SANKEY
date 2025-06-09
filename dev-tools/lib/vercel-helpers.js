@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const { log } = require('./logger');
-const { CUSTOM_DOMAINS, APP_URLS, ENVIRONMENTS, VERCEL_ENVIRONMENTS } = require('./constants');
+const { CUSTOM_DOMAINS, APP_URLS, ENVIRONMENTS, VERCEL_ENVIRONMENTS, VERCEL_API } = require('./constants');
+const { ConfigurationError, ApiError } = require('./errors');
 
 /**
  * Vercel API ヘルパー関数群
@@ -14,7 +15,7 @@ class VercelClient {
     constructor(apiToken, projectId) {
         this.apiToken = apiToken;
         this.projectId = projectId;
-        this.baseUrl = 'https://api.vercel.com';
+        this.baseUrl = VERCEL_API.BASE_URL;
     }
 
     /**
@@ -35,21 +36,30 @@ class VercelClient {
             options.body = JSON.stringify(body);
         }
 
-        const response = await fetch(url, options);
-        
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(`Vercel API error: ${response.status} - ${errorData.error?.message || response.statusText}`);
-        }
+        try {
+            const response = await fetch(url, options);
 
-        return response.json();
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ error: { message: response.statusText } }));
+                throw new ApiError(
+                    `Vercel API request failed: ${errorData.error?.message || response.statusText}`,
+                    'Vercel',
+                    response.status
+                );
+            }
+            return response.json();
+        } catch (error) {
+            if (error instanceof ApiError) throw error;
+            // Network errors or other fetch-related issues
+            throw new ApiError(`Vercel API request failed: ${error.message}`, 'Vercel', null, error);
+        }
     }
 
     /**
      * 環境変数を取得
      */
-    async getEnvironmentVariables(environment = 'preview') {
-        const response = await this.makeRequest('GET', `/v9/projects/${this.projectId}/env`);
+    async getEnvironmentVariables(environment = VERCEL_ENVIRONMENTS.PREVIEW) {
+        const response = await this.makeRequest('GET', VERCEL_API.ENDPOINTS.GET_ENV_VARS(this.projectId));
         
         return response.envs.filter(env => {
             return env.target.includes(environment);
@@ -59,28 +69,28 @@ class VercelClient {
     /**
      * 環境変数を作成
      */
-    async createEnvironmentVariable(key, value, environment = 'preview') {
+    async createEnvironmentVariable(key, value, environment = VERCEL_ENVIRONMENTS.PREVIEW) {
         const target = Array.isArray(environment) ? environment : [environment];
         
-        return await this.makeRequest('POST', `/v10/projects/${this.projectId}/env`, {
+        return await this.makeRequest('POST', VERCEL_API.ENDPOINTS.CREATE_ENV_VAR(this.projectId), {
             key,
             value,
             target,
-            type: 'encrypted'
+            type: VERCEL_API.VAR_TYPE_ENCRYPTED
         });
     }
 
     /**
      * 環境変数を更新
      */
-    async updateEnvironmentVariable(envId, key, value, environment = 'preview') {
+    async updateEnvironmentVariable(envId, key, value, environment = VERCEL_ENVIRONMENTS.PREVIEW) {
         const target = Array.isArray(environment) ? environment : [environment];
         
-        return await this.makeRequest('PATCH', `/v9/projects/${this.projectId}/env/${envId}`, {
+        return await this.makeRequest('PATCH', VERCEL_API.ENDPOINTS.UPDATE_ENV_VAR(this.projectId, envId), {
             key,
             value,
             target,
-            type: 'encrypted'
+            type: VERCEL_API.VAR_TYPE_ENCRYPTED
         });
     }
 
@@ -88,13 +98,13 @@ class VercelClient {
      * 環境変数を削除
      */
     async deleteEnvironmentVariable(envId) {
-        return await this.makeRequest('DELETE', `/v9/projects/${this.projectId}/env/${envId}`);
+        return await this.makeRequest('DELETE', VERCEL_API.ENDPOINTS.DELETE_ENV_VAR(this.projectId, envId));
     }
 
     /**
      * 環境変数を一括更新
      */
-    async updateEnvironmentVariables(variables, environment = 'preview', options = {}) {
+    async updateEnvironmentVariables(variables, environment = VERCEL_ENVIRONMENTS.PREVIEW, options = {}) {
         const { forceUpdate = false } = options;
         
         const results = {
@@ -149,12 +159,12 @@ async function triggerDeployment(environment, options = {}) {
         const env = mapEnvironmentToVercel(environment);  // dev, prod対応
         log.info(`🚀 Triggering deployment for ${env} environment via Deploy Hook...`);
 
-        const deployHookUrl = env === 'production' 
+        const deployHookUrl = env === VERCEL_ENVIRONMENTS.PRODUCTION
             ? process.env.VERCEL_DEPLOY_HOOK_PROD
             : process.env.VERCEL_DEPLOY_HOOK_DEV;
 
         if (!deployHookUrl) {
-            throw new Error(`Deploy Hook URL not found for environment: ${env}. Please set VERCEL_DEPLOY_HOOK_${env.toUpperCase()}`);
+            throw new ConfigurationError(`Deploy Hook URL not found for environment: ${env}. Please set VERCEL_DEPLOY_HOOK_${env.toUpperCase()}`);
         }
 
         log.debug(`Deploy Hook URL: ${deployHookUrl}`, { debug });
@@ -165,11 +175,14 @@ async function triggerDeployment(environment, options = {}) {
         });
 
         if (!response.ok) {
-            const errorData = await response.text().catch(() => 'Unknown error');
-            throw new Error(`Deploy Hook failed: ${response.status} - ${errorData}`);
+            const errorData = await response.text().catch(() => `Status: ${response.status}`);
+            throw new ApiError(`Vercel Deploy Hook failed: ${errorData}`, 'Vercel Deploy Hook', response.status);
         }
 
-        const result = await response.json().catch(() => ({}));
+        const result = await response.json().catch((jsonError) => {
+            log.warning(`Failed to parse JSON response from Deploy Hook: ${jsonError.message}`);
+            return {}; // Continue even if JSON parsing fails, as deploy might still be triggered
+        });
 
         log.success(`✅ Deployment triggered successfully via Deploy Hook`);
 
@@ -177,7 +190,7 @@ async function triggerDeployment(environment, options = {}) {
             log.info(`📋 Deployment Job: ${result.job.id || 'Started'}`);
         }
 
-        const baseUrl = env === 'production'
+        const baseUrl = env === VERCEL_ENVIRONMENTS.PRODUCTION
             ? APP_URLS.PROD
             : APP_URLS.DEV;
 
@@ -192,8 +205,12 @@ async function triggerDeployment(environment, options = {}) {
             jobId: result.job?.id
         };
     } catch (error) {
+        if (error instanceof ConfigurationError || error instanceof ApiError) {
+            log.error(`❌ ${error.message}`);
+            throw error;
+        }
         log.error(`❌ Failed to trigger deployment: ${error.message}`);
-        throw new Error(`Failed to trigger deployment: ${error.message}`);
+        throw new ApiError(`Failed to trigger deployment: ${error.message}`, 'Vercel Deploy Hook', null, error);
     }
 }
 
@@ -259,10 +276,10 @@ function generateAuthSecret() {
  */
 function generateNextAuthUrl(environment) {
     const urls = {
-        dev: APP_URLS.DEV,
-        development: APP_URLS.DEV,
-        prod: APP_URLS.PROD,
-        production: APP_URLS.PROD
+        [ENVIRONMENTS.DEV]: APP_URLS.DEV,
+        [ENVIRONMENTS.DEVELOPMENT]: APP_URLS.DEV,
+        [ENVIRONMENTS.PROD]: APP_URLS.PROD,
+        [ENVIRONMENTS.PRODUCTION]: APP_URLS.PROD
     };
 
     return urls[environment.toLowerCase()] || APP_URLS.DEV;

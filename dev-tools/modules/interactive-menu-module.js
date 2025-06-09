@@ -1,5 +1,7 @@
 const readline = require('readline');
 const { log, colors, displayTitle } = require('../lib/logger');
+const { ENVIRONMENTS } = require('../lib/constants');
+const { BaseError, ConfigurationError, ApiError, CdkNotDeployedError, ResourceNotFoundError } = require('../lib/errors');
 
 /**
  * カーソル選択可能なインタラクティブメニューモジュール
@@ -259,8 +261,8 @@ async function displayMainMenuFallback(context) {
  */
 async function selectEnvironment(context) {
     const environments = [
-        { id: 'dev', label: 'Development (dev)', description: 'For testing and development' },
-        { id: 'prod', label: 'Production (prod)', description: 'Live production environment' }
+        { id: ENVIRONMENTS.DEV, label: `Development (${ENVIRONMENTS.DEV})`, description: 'For testing and development' },
+        { id: ENVIRONMENTS.PROD, label: `Production (${ENVIRONMENTS.PROD})`, description: 'Live production environment' }
     ];
 
     try {
@@ -293,8 +295,8 @@ async function selectEnvironmentFallback(context) {
 
     try {
         console.log(`${colors.cyan}Select target environment:${colors.reset}`);
-        console.log(`  ${colors.yellow}1.${colors.reset} Development (dev)`);
-        console.log(`  ${colors.yellow}2.${colors.reset} Production (prod)`);
+        console.log(`  ${colors.yellow}1.${colors.reset} Development (${ENVIRONMENTS.DEV})`);
+        console.log(`  ${colors.yellow}2.${colors.reset} Production (${ENVIRONMENTS.PROD})`);
         console.log('');
 
         const answer = await new Promise((resolve) => {
@@ -304,9 +306,9 @@ async function selectEnvironmentFallback(context) {
         const selection = parseInt(answer.trim());
 
         if (selection === 1) {
-            return 'dev';
+            return ENVIRONMENTS.DEV;
         } else if (selection === 2) {
-            return 'prod';
+            return ENVIRONMENTS.PROD;
         } else {
             log.error('Invalid selection. Please enter 1 or 2.');
             await new Promise(resolve => setTimeout(resolve, 1500));
@@ -374,13 +376,35 @@ async function confirmContinue() {
  * エラー表示と継続確認
  */
 async function handleMenuError(error, options = {}) {
-    log.error(`Operation failed: ${error.message}`);
-    
-    if (options.showStack) {
+    if (error instanceof CdkNotDeployedError) {
+        log.error(`❌ CDK Setup Incomplete: ${error.message}`);
+        log.warning(`Environment: ${error.environment || 'N/A'}`);
+        if (error.missingResources && error.missingResources.length > 0) {
+            log.warning(`Missing: ${error.missingResources.join(', ')}`);
+        }
+        log.info("Please ensure CDK resources are deployed before running this operation.");
+    } else if (error instanceof ConfigurationError) {
+        log.error(`❌ Configuration Error: ${error.message}`);
+        if (error.cause) log.warning(`Cause: ${error.cause.message || error.cause}`);
+        log.info("Please check your environment variables and configuration files.");
+    } else if (error instanceof ApiError) {
+        log.error(`❌ API Error (${error.serviceName || 'Unknown Service'}): ${error.message}`);
+        if (error.statusCode) log.warning(`Status Code: ${error.statusCode}`);
+        if (error.cause) log.warning(`Cause: ${error.cause.message || error.cause}`);
+    } else if (error instanceof ResourceNotFoundError) {
+        log.error(`❌ Resource Not Found: ${error.message}`);
+    } else if (error instanceof BaseError) { // Catch any other custom errors
+        log.error(`❌ An operation failed: ${error.message}`);
+        if (error.cause) log.warning(`Cause: ${error.cause.message || error.cause}`);
+    }
+     else {
+        log.error(`An unexpected error occurred: ${error.message}`);
+    }
+
+    if (options.showStack && error.stack) {
         console.error('\n🔍 Stack trace:');
         console.error(error.stack);
     }
-
     await confirmContinue();
 }
 

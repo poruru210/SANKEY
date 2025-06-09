@@ -5,6 +5,13 @@ const { createAwsClients, findSankeyStacks, getStackOutputs, findUserByEmail, li
 const { log, displayTitle, displayStackOptions, displayUserList, displayProgress } = require('./lib/logger');
 const { selectStackCombination, selectUser, validateOptions, Timer } = require('./lib/cli-helpers');
 const { DynamoDBClient, BatchWriteItemCommand, QueryCommand } = require('@aws-sdk/client-dynamodb');
+const {
+    GENERATE_TEST_DATA,
+    SAMPLE_DATA,
+    WEIGHTED_STATUSES,
+    APPROVAL_MODES,
+    CLOUDFORMATION_OUTPUT_KEYS
+} = require('./lib/constants');
 
 // コマンドライン引数の設定
 const program = new Command();
@@ -15,46 +22,16 @@ program
     .version('1.0.0')
     .requiredOption('-p, --profile <profile>', 'AWS SSO profile name')
     .option('-r, --region <region>', 'AWS region (defaults to profile default)')
-    .option('-e, --email <email>', 'User email address for Cognito lookup', 'poruru.inv@gmail.com')
+    .option('-e, --email <email>', 'User email address for Cognito lookup', GENERATE_TEST_DATA.DEFAULT_EMAIL)
     .option('-u, --user-id <id>', 'Direct user ID specification (skip email lookup)')
-    .option('-c, --count <number>', 'Number of records to generate', '5')
-    .option('--status <status>', 'Force specific status (Pending|Active|Expired|Rejected|Revoked|Random)', 'Pending')
+    .option('-c, --count <number>', 'Number of records to generate', GENERATE_TEST_DATA.DEFAULT_RECORD_COUNT.toString())
+    .option('--status <status>', 'Force specific status (Pending|Active|Expired|Rejected|Revoked|Random)', GENERATE_TEST_DATA.DEFAULT_STATUS)
     .option('--dummy-email <email>', 'Dummy email for test data (optional)')
     .option('--use-real-email', 'Use real email address in test data', true)
     .option('--delete', 'Delete all existing data for the user (no generation)')
     .option('--reset', 'Delete existing data and generate new data')
-    .option('--require-approval <type>', 'Require approval for user selections', 'always')
+    .option('--require-approval <type>', 'Require approval for user selections', APPROVAL_MODES.ALWAYS)
     .option('--debug', 'Enable debug output');
-
-// EA名とブローカーのサンプルデータ
-const EA_NAMES = [
-    'Scalping Master EA', 'Trend Follower Pro', 'Grid Trading Bot',
-    'News Trading EA', 'Arbitrage Hunter', 'Breakout Warrior',
-    'Swing Master EA', 'Martingale Pro', 'Hedge Fund EA', 'Fibonacci Trader'
-];
-
-const BROKERS = [
-    'XM Trading', 'FXGT', 'TitanFX', 'IC Markets', 'Exness',
-    'AXIORY', 'BigBoss', 'HotForex', 'FBS', 'InstaForex'
-];
-
-const TWITTER_HANDLES = [
-    '@TradingMaster_fx', '@FXExpert2025', '@EAProfessional',
-    '@ScalpingKing', '@TrendHunter_fx', '@GridTrader_pro',
-    '@NewsTrader_EA', '@ArbitrageBot', '@FXWizard2025', '@TradingGuru_jp'
-];
-
-const EMAIL_PREFIXES = ['test', 'demo', 'sample', 'user', 'trader', 'fx'];
-const EMAIL_DOMAINS = ['example.com', 'test.com', 'demo.org'];
-
-// ステータス定義（重み付き）
-const STATUSES = [
-    { status: 'Pending', weight: 3 },
-    { status: 'Active', weight: 2 },
-    { status: 'Expired', weight: 1 },
-    { status: 'Rejected', weight: 1 },
-    { status: 'Revoked', weight: 1 }
-];
 
 /**
  * ユーザーの全データを削除
@@ -100,7 +77,7 @@ async function deleteUserData(dynamoClient, tableName, userId, options) {
         }));
 
         // バッチ削除実行
-        const batchSize = 25; // DynamoDBの制限
+        const batchSize = GENERATE_TEST_DATA.DYNAMODB_BATCH_SIZE;
         const totalBatches = Math.ceil(deleteRequests.length / batchSize);
         let deletedCount = 0;
 
@@ -131,13 +108,13 @@ async function deleteUserData(dynamoClient, tableName, userId, options) {
 
                     // リトライ処理
                     let retryCount = 0;
-                    const maxRetries = 3;
+                    const maxRetries = GENERATE_TEST_DATA.MAX_RETRIES;
                     let unprocessed = result.UnprocessedItems;
 
                     while (Object.keys(unprocessed).length > 0 && retryCount < maxRetries) {
                         retryCount++;
                         log.progress(`  Retrying delete ${retryCount}/${maxRetries}...`);
-                        await new Promise(resolve => setTimeout(resolve, 2000 * retryCount));
+                        await new Promise(resolve => setTimeout(resolve, GENERATE_TEST_DATA.RETRY_DELAY_MS * retryCount));
 
                         const retryCommand = new BatchWriteItemCommand({ RequestItems: unprocessed });
                         const retryResult = await dynamoClient.send(retryCommand);
@@ -164,7 +141,7 @@ async function deleteUserData(dynamoClient, tableName, userId, options) {
             }
         }
 
-        timer.log(`Deleted ${deletedCount}/${itemCount} items`);
+        log.info(`Deleted ${deletedCount}/${itemCount} items in ${timer.elapsedFormatted()}`);
         return deletedCount;
 
     } catch (error) {
@@ -177,7 +154,7 @@ async function deleteUserData(dynamoClient, tableName, userId, options) {
  * @param {number} daysBack - 何日前まで遡るか
  * @returns {string} ISO文字列
  */
-function getRandomDateTime(daysBack = 365) {
+function getRandomDateTime(daysBack = GENERATE_TEST_DATA.DAYS_BACK_DEFAULT) {
     const now = new Date();
     const start = new Date(now.getTime() - (daysBack * 24 * 60 * 60 * 1000));
     const randomTime = start.getTime() + Math.random() * (now.getTime() - start.getTime());
@@ -189,17 +166,17 @@ function getRandomDateTime(daysBack = 365) {
  * @returns {string} ステータス
  */
 function getWeightedRandomStatus() {
-    const totalWeight = STATUSES.reduce((sum, item) => sum + item.weight, 0);
+    const totalWeight = WEIGHTED_STATUSES.reduce((sum, item) => sum + item.weight, 0);
     const random = Math.random() * totalWeight;
     let currentWeight = 0;
 
-    for (const statusItem of STATUSES) {
+    for (const statusItem of WEIGHTED_STATUSES) {
         currentWeight += statusItem.weight;
         if (random < currentWeight) {
             return statusItem.status;
         }
     }
-    return STATUSES[0].status;
+    return WEIGHTED_STATUSES[0].status;
 }
 
 /**
@@ -207,8 +184,8 @@ function getWeightedRandomStatus() {
  * @returns {string} メールアドレス
  */
 function generateDummyEmail() {
-    const prefix = EMAIL_PREFIXES[Math.floor(Math.random() * EMAIL_PREFIXES.length)];
-    const domain = EMAIL_DOMAINS[Math.floor(Math.random() * EMAIL_DOMAINS.length)];
+    const prefix = SAMPLE_DATA.EMAIL_PREFIXES[Math.floor(Math.random() * SAMPLE_DATA.EMAIL_PREFIXES.length)];
+    const domain = SAMPLE_DATA.EMAIL_DOMAINS[Math.floor(Math.random() * SAMPLE_DATA.EMAIL_DOMAINS.length)];
     const number = Math.floor(Math.random() * 999) + 1;
     return `${prefix}${number}@${domain}`;
 }
@@ -227,21 +204,21 @@ function generateDummyData(userId, options) {
     log.generate(`Generating ${count} dummy records...`);
 
     for (let i = 1; i <= count; i++) {
-        const appliedAt = getRandomDateTime(180);
+        const appliedAt = getRandomDateTime(GENERATE_TEST_DATA.DAYS_BACK_APPLIED_AT);
         const accountNumber = `100${Math.floor(Math.random() * 10000000).toString().padStart(7, '0')}`;
-        const eaName = EA_NAMES[Math.floor(Math.random() * EA_NAMES.length)];
-        const broker = BROKERS[Math.floor(Math.random() * BROKERS.length)];
-        const sk = `APPLICATION#${appliedAt}#${broker}#${accountNumber}#${eaName}`;
+        const eaName = SAMPLE_DATA.EA_NAMES[Math.floor(Math.random() * SAMPLE_DATA.EA_NAMES.length)];
+        const broker = SAMPLE_DATA.BROKERS[Math.floor(Math.random() * SAMPLE_DATA.BROKERS.length)];
+        const sk = `${GENERATE_TEST_DATA.DB_SK_PREFIXES.APPLICATION}${appliedAt}#${broker}#${accountNumber}#${eaName}`;
 
         // ステータスの決定
         let itemStatus;
-        if (options.status !== 'Random') {
+        if (options.status !== GENERATE_TEST_DATA.STATUS_RANDOM) {
             itemStatus = options.status;
         } else {
             itemStatus = getWeightedRandomStatus();
         }
 
-        const xAccount = TWITTER_HANDLES[Math.floor(Math.random() * TWITTER_HANDLES.length)];
+        const xAccount = SAMPLE_DATA.TWITTER_HANDLES[Math.floor(Math.random() * SAMPLE_DATA.TWITTER_HANDLES.length)];
 
         // ダミーメール生成
         let emailToUse = '';
@@ -283,8 +260,8 @@ function generateDummyData(userId, options) {
                 break;
 
             case 'Expired':
-                const expiredApprovedAt = getRandomDateTime(365);
-                const expiredExpiresAt = getRandomDateTime(30);
+                const expiredApprovedAt = getRandomDateTime(GENERATE_TEST_DATA.DAYS_BACK_EXPIRED_APPROVED_AT);
+                const expiredExpiresAt = getRandomDateTime(GENERATE_TEST_DATA.DAYS_BACK_EXPIRED_EXPIRES_AT);
                 const expiredLicenseKey = `SMP-2024-${Math.floor(Math.random() * 2147483647).toString(16).toUpperCase()}`;
 
                 item.PutRequest.Item.approvedAt = { S: expiredApprovedAt };
@@ -293,7 +270,7 @@ function generateDummyData(userId, options) {
                 break;
 
             case 'Revoked':
-                const revokedApprovedAt = getRandomDateTime(180);
+                const revokedApprovedAt = getRandomDateTime(GENERATE_TEST_DATA.DAYS_BACK_REVOKED_APPROVED_AT);
                 const revokedAt = new Date(new Date(revokedApprovedAt).getTime() + (Math.random() * 83 + 7) * 24 * 60 * 60 * 1000).toISOString();
                 const revokedLicenseKey = `SMP-2025-${Math.floor(Math.random() * 2147483647).toString(16).toUpperCase()}`;
 
@@ -313,7 +290,7 @@ function generateDummyData(userId, options) {
         log.debug(`Generated item ${i}: ${eaName} (${itemStatus}) - Account: ${accountNumber}`, options);
     }
 
-    timer.log(`Generated ${count} dummy records`);
+    log.info(`Generated ${count} dummy records in ${timer.elapsedFormatted()}`);
     return items;
 }
 
@@ -327,7 +304,7 @@ function generateDummyData(userId, options) {
  */
 async function batchWriteItems(dynamoClient, tableName, items, options) {
     const timer = new Timer();
-    const batchSize = 25; // DynamoDBの制限
+    const batchSize = GENERATE_TEST_DATA.DYNAMODB_BATCH_SIZE;
     const totalBatches = Math.ceil(items.length / batchSize);
     let successCount = 0;
 
@@ -359,13 +336,13 @@ async function batchWriteItems(dynamoClient, tableName, items, options) {
 
                 // リトライ処理
                 let retryCount = 0;
-                const maxRetries = 3;
+                const maxRetries = GENERATE_TEST_DATA.MAX_RETRIES;
                 let unprocessed = result.UnprocessedItems;
 
                 while (Object.keys(unprocessed).length > 0 && retryCount < maxRetries) {
                     retryCount++;
                     log.progress(`  Retrying ${retryCount}/${maxRetries}...`);
-                    await new Promise(resolve => setTimeout(resolve, 2000 * retryCount));
+                    await new Promise(resolve => setTimeout(resolve, GENERATE_TEST_DATA.RETRY_DELAY_MS * retryCount));
 
                     const retryCommand = new BatchWriteItemCommand({ RequestItems: unprocessed });
                     const retryResult = await dynamoClient.send(retryCommand);
@@ -392,7 +369,7 @@ async function batchWriteItems(dynamoClient, tableName, items, options) {
         }
     }
 
-    timer.log(`Batch write completed: ${successCount}/${items.length} items succeeded`);
+    log.info(`Batch write completed: ${successCount}/${items.length} items succeeded in ${timer.elapsedFormatted()}`);
     return successCount;
 }
 
@@ -498,15 +475,15 @@ async function main() {
         const dbOutputs = await getStackOutputs(
             clients.cloudFormation,
             selectedCombination.dbStack.StackName,
-            ['SankeyTableName'],
+            [CLOUDFORMATION_OUTPUT_KEYS.SANKEY_TABLE_NAME],
             options
         );
 
-        if (!dbOutputs.SankeyTableName) {
-            throw new Error('Required DB stack output not found (SankeyTableName)');
+        if (!dbOutputs[CLOUDFORMATION_OUTPUT_KEYS.SANKEY_TABLE_NAME]) {
+            throw new Error(`Required DB stack output not found (${CLOUDFORMATION_OUTPUT_KEYS.SANKEY_TABLE_NAME})`);
         }
 
-        const tableName = dbOutputs.SankeyTableName;
+        const tableName = dbOutputs[CLOUDFORMATION_OUTPUT_KEYS.SANKEY_TABLE_NAME];
         log.success(`Table Name: ${tableName}`);
 
         // Step 4: ユーザー検索/選択
@@ -520,15 +497,15 @@ async function main() {
             const authOutputs = await getStackOutputs(
                 clients.cloudFormation,
                 selectedCombination.authStack.StackName,
-                ['UserPoolId'],
+                [CLOUDFORMATION_OUTPUT_KEYS.USER_POOL_ID],
                 options
             );
 
-            if (!authOutputs.UserPoolId) {
-                throw new Error('Required Auth stack output not found (UserPoolId)');
+            if (!authOutputs[CLOUDFORMATION_OUTPUT_KEYS.USER_POOL_ID]) {
+                throw new Error(`Required Auth stack output not found (${CLOUDFORMATION_OUTPUT_KEYS.USER_POOL_ID})`);
             }
 
-            const userPoolId = authOutputs.UserPoolId;
+            const userPoolId = authOutputs[CLOUDFORMATION_OUTPUT_KEYS.USER_POOL_ID];
             log.success(`UserPool ID: ${userPoolId}`);
 
             // ユーザー検索
@@ -556,8 +533,7 @@ async function main() {
 
             // deleteオプションの場合はここで終了
             if (options.delete) {
-                log.complete(`🎉 Delete operation completed`);
-                timer.log(`🎉 Operation completed`);
+                log.complete(`🎉 Delete operation completed in ${timer.elapsedFormatted()}`);
                 return;
             }
         }
@@ -575,7 +551,7 @@ async function main() {
             log.warning(`⚠️ Insert result: ${successCount}/${dummyItems.length} items`);
         }
 
-        timer.log(`🎉 Operation completed`);
+        log.info(`🎉 Operation completed in ${timer.elapsedFormatted()}`);
 
     } catch (error) {
         log.error(`Error: ${error.message}`);
