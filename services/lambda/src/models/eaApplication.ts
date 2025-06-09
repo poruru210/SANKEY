@@ -1,8 +1,10 @@
+// services/lambda/src/models/eaApplication.ts
 // === ApplicationStatus の定義 ===
 export type ApplicationStatus =
     | 'Pending'
     | 'Approve'
     | 'AwaitingNotification'
+    | 'FailedNotification'  // 新規追加: メール送信失敗
     | 'Active'
     | 'Expired'
     | 'Revoked'
@@ -18,7 +20,9 @@ export type HistoryAction =
     | 'SystemUpdate'     // システムによる更新
     | 'LicenseGenerated' // ライセンス生成
     | 'EmailSent'        // メール送信完了
-    | 'AdminAction';     // 管理者による操作
+    | 'EmailFailed'      // メール送信失敗
+    | 'AdminAction'      // 管理者による操作
+    | 'RetryNotification'; // 通知再送
 
 // === EAApplicationHistory インターフェース ===
 export interface EAApplicationHistory {
@@ -30,6 +34,8 @@ export interface EAApplicationHistory {
     previousStatus?: ApplicationStatus;
     newStatus?: ApplicationStatus;
     reason?: string;
+    errorDetails?: string; // エラー詳細情報（新規追加）
+    retryCount?: number;   // リトライ回数（新規追加）
     ttl?: number; // Unix timestamp (TTL用)
 }
 
@@ -52,6 +58,11 @@ export interface EAApplication {
     // 通知スケジュール（復活）
     notificationScheduledAt?: string;
 
+    // 失敗時の追跡情報（新規追加）
+    lastFailureReason?: string;  // 最後の失敗理由
+    failureCount?: number;       // 失敗回数
+    lastFailedAt?: string;       // 最後の失敗時刻
+
     // ビジネスロジックで必要な情報のみ
     licenseKey?: string;
     expiryDate?: string;
@@ -64,12 +75,23 @@ export interface EAApplication {
 export interface NotificationMessage {
     applicationSK: string;  // SKフィールドと統一
     userId: string;
+    retryCount?: number;    // リトライ回数（新規追加）
+    originalFailureReason?: string; // 元の失敗理由（新規追加）
+}
+
+// === DLQ処理用のメッセージ ===
+export interface DLQNotificationMessage extends NotificationMessage {
+    originalEventSourceARN: string; // 元のSQSキューのARN
+    failureReason: string;          // 失敗理由
+    failedAt: string;               // 失敗時刻
+    receiptHandle?: string;         // SQSメッセージのレシートハンドル
 }
 
 export const ALLOWED_TRANSITIONS: Record<ApplicationStatus, ApplicationStatus[]> = {
     'Pending': ['Approve', 'AwaitingNotification', 'Rejected', 'Cancelled'],
     'Approve': ['AwaitingNotification'],
-    'AwaitingNotification': ['Active', 'Cancelled'],
+    'AwaitingNotification': ['Active', 'FailedNotification', 'Cancelled'],
+    'FailedNotification': ['AwaitingNotification', 'Active', 'Cancelled'], // 再送可能
     'Active': ['Expired', 'Revoked'],
     'Expired': [],
     'Revoked': [],
@@ -85,6 +107,11 @@ export const TERMINAL_STATUSES: ApplicationStatus[] = ['Expired', 'Revoked', 'Re
 // ステータスが終了ステータスかどうかを判定
 export function isTerminalStatus(status: ApplicationStatus): boolean {
     return TERMINAL_STATUSES.includes(status);
+}
+
+// 再送可能なステータスかどうかを判定（新規追加）
+export function isRetryableStatus(status: ApplicationStatus): boolean {
+    return status === 'FailedNotification';
 }
 
 // TTL期間をカスタマイズ可能な関数（デフォルト6ヶ月）
@@ -163,7 +190,7 @@ export function getHistoryQueryPrefix(applicationSK: string): string {
 // === 型ガード関数 ===
 export function isApplicationStatus(value: string): value is ApplicationStatus {
     const validStatuses: ApplicationStatus[] = [
-        'Pending', 'Approve', 'AwaitingNotification', 'Active', 'Expired', 'Revoked', 'Rejected', 'Cancelled'
+        'Pending', 'Approve', 'AwaitingNotification', 'FailedNotification', 'Active', 'Expired', 'Revoked', 'Rejected', 'Cancelled'
     ];
     return validStatuses.includes(value as ApplicationStatus);
 }
@@ -171,9 +198,13 @@ export function isApplicationStatus(value: string): value is ApplicationStatus {
 export function isHistoryAction(value: string): value is HistoryAction {
     const validActions: HistoryAction[] = [
         // ApplicationStatus
-        'Pending', 'Approve', 'AwaitingNotification', 'Active', 'Expired', 'Revoked', 'Rejected', 'Cancelled',
+        'Pending', 'Approve', 'AwaitingNotification', 'FailedNotification', 'Active', 'Expired', 'Revoked', 'Rejected', 'Cancelled',
         // Additional actions
-        'Created', 'Updated', 'SystemExpired', 'SystemUpdate', 'LicenseGenerated', 'EmailSent', 'AdminAction'
+        'Created', 'Updated', 'SystemExpired', 'SystemUpdate', 'LicenseGenerated', 'EmailSent', 'EmailFailed', 'AdminAction', 'RetryNotification'
     ];
     return validActions.includes(value as HistoryAction);
 }
+
+// === 失敗処理関連の定数 ===
+export const MAX_RETRY_COUNT = 3; // 最大リトライ回数
+export const RETRY_DELAY_SECONDS = 300; // リトライ間隔（秒）

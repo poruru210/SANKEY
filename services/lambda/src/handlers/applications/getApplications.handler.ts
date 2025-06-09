@@ -1,3 +1,4 @@
+// services/lambda/src/handlers/applications/getApplications.handler.ts
 import { Logger } from '@aws-lambda-powertools/logger';
 import { Tracer } from '@aws-lambda-powertools/tracer';
 import { injectLambdaContext } from '@aws-lambda-powertools/logger/middleware';
@@ -11,7 +12,7 @@ import httpCors from '@middy/http-cors';
 import { EAApplicationRepository } from '../../repositories/eaApplicationRepository';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
-import { EAApplication } from '../../models/eaApplication';
+import { EAApplication, MAX_RETRY_COUNT } from '../../models/eaApplication';
 import {
     createSuccessResponse,
     createUnauthorizedResponse,
@@ -31,11 +32,13 @@ const repository = new EAApplicationRepository(docClient);
 interface ApplicationListResponse {
     pending: ApplicationSummary[];
     awaitingNotification: ApplicationSummary[];
+    failedNotification: ApplicationSummary[]; // 新規追加
     active: ApplicationSummary[];
     history: ApplicationSummary[];
     count: {
         pending: number;
         awaitingNotification: number;
+        failedNotification: number; // 新規追加
         active: number;
         history: number;
         total: number;
@@ -55,11 +58,16 @@ interface ApplicationSummary {
     notificationScheduledAt?: string;
     expiryDate?: string;
     licenseKey?: string;
+    // 失敗関連情報（新規追加）
+    lastFailureReason?: string;
+    failureCount?: number;
+    lastFailedAt?: string;
+    isRetryable?: boolean;
 }
 
 // アプリケーションデータをサマリー形式に変換
 function toApplicationSummary(app: EAApplication): ApplicationSummary {
-    return {
+    const summary: ApplicationSummary = {
         id: app.sk,
         accountNumber: app.accountNumber,
         eaName: app.eaName,
@@ -73,6 +81,16 @@ function toApplicationSummary(app: EAApplication): ApplicationSummary {
         expiryDate: app.expiryDate,
         licenseKey: app.licenseKey,
     };
+
+    // 失敗関連情報を追加
+    if (app.status === 'FailedNotification') {
+        summary.lastFailureReason = app.lastFailureReason;
+        summary.failureCount = app.failureCount;
+        summary.lastFailedAt = app.lastFailedAt;
+        summary.isRetryable = (app.failureCount || 0) < MAX_RETRY_COUNT;
+    }
+
+    return summary;
 }
 
 // ベースハンドラ
@@ -108,6 +126,11 @@ const baseHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxy
             .filter(app => app.status === 'AwaitingNotification')
             .map(toApplicationSummary);
 
+        // 新規追加：失敗通知のグループ
+        const failedNotification = applications
+            .filter(app => app.status === 'FailedNotification')
+            .map(toApplicationSummary);
+
         const active = applications
             .filter(app => app.status === 'Active')
             .map(toApplicationSummary);
@@ -119,16 +142,29 @@ const baseHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxy
         const response: ApplicationListResponse = {
             pending,
             awaitingNotification,
+            failedNotification, // 新規追加
             active,
             history,
             count: {
                 pending: pending.length,
                 awaitingNotification: awaitingNotification.length,
+                failedNotification: failedNotification.length, // 新規追加
                 active: active.length,
                 history: history.length,
                 total: applications.length,
             },
         };
+
+        // 失敗通知の統計情報を追加（オプション）
+        if (failedNotification.length > 0) {
+            const retryableCount = failedNotification.filter(app => app.isRetryable).length;
+            logger.info('Failed notification statistics', {
+                userId,
+                totalFailed: failedNotification.length,
+                retryable: retryableCount,
+                nonRetryable: failedNotification.length - retryableCount
+            });
+        }
 
         logger.info('Response prepared', {
             userId,

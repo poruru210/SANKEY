@@ -1,4 +1,4 @@
-// src/repositories/eaApplicationRepository.ts
+// services/lambda/src/repositories/eaApplicationRepository.ts
 import {
     DynamoDBDocumentClient,
     PutCommand,
@@ -6,7 +6,12 @@ import {
     QueryCommand,
     UpdateCommand,
     DeleteCommand,
-    UpdateCommandInput
+    UpdateCommandInput,
+    QueryCommandOutput,
+    GetCommandOutput,
+    UpdateCommandOutput,
+    PutCommandOutput,
+    DeleteCommandOutput
 } from '@aws-sdk/lib-dynamodb';
 import { Logger } from '@aws-lambda-powertools/logger';
 import {
@@ -20,7 +25,8 @@ import {
     generateHistorySK,
     getHistoryQueryPrefix,
     isTerminalStatus,
-    calculateTTLWithConfig
+    calculateTTLWithConfig,
+    MAX_RETRY_COUNT
 } from '../models/eaApplication';
 
 const logger = new Logger();
@@ -85,8 +91,8 @@ export class EAApplicationRepository {
             Key: { userId, sk },
         });
 
-        const result = await this.docClient.send(command);
-        return result.Item as EAApplication || null;
+        const result: GetCommandOutput = await this.docClient.send(command);
+        return (result.Item as EAApplication) || null;
     }
 
     async getApplicationsByStatus(userId: string, status: EAApplication['status']): Promise<EAApplication[]> {
@@ -103,8 +109,8 @@ export class EAApplicationRepository {
             },
         });
 
-        const result = await this.docClient.send(command);
-        return result.Items as EAApplication[] || [];
+        const result: QueryCommandOutput = await this.docClient.send(command);
+        return (result.Items as EAApplication[]) || [];
     }
 
     async getAllApplications(userId: string): Promise<EAApplication[]> {
@@ -118,8 +124,8 @@ export class EAApplicationRepository {
             ScanIndexForward: false, // 新しい順
         });
 
-        const result = await this.docClient.send(command);
-        return result.Items as EAApplication[] || [];
+        const result: QueryCommandOutput = await this.docClient.send(command);
+        return (result.Items as EAApplication[]) || [];
     }
 
     async getActiveApplicationByBrokerAccount(
@@ -144,8 +150,8 @@ export class EAApplicationRepository {
             },
         });
 
-        const result = await this.docClient.send(command);
-        return result.Items?.[0] as EAApplication || null;
+        const result: QueryCommandOutput = await this.docClient.send(command);
+        return (result.Items?.[0] as EAApplication) || null;
     }
 
     async updateStatus(
@@ -222,9 +228,9 @@ export class EAApplicationRepository {
         }
 
         try {
-            const { Attributes } = await this.docClient.send(new UpdateCommand(updateParams));
+            const result: UpdateCommandOutput = await this.docClient.send(new UpdateCommand(updateParams));
             logger.info('Successfully updated application status', { userId, sk, newStatus });
-            return Attributes as EAApplication | null;
+            return (result.Attributes as EAApplication) || null;
         } catch (error) {
             logger.error('Failed to update application status', { userId, sk, newStatus, error });
             throw error;
@@ -239,8 +245,10 @@ export class EAApplicationRepository {
         previousStatus?: ApplicationStatus;
         newStatus?: ApplicationStatus;
         reason?: string;
+        errorDetails?: string;
+        retryCount?: number;
     }): Promise<void> {
-        const { userId, applicationSK, action, changedBy, previousStatus, newStatus, reason } = params;
+        const { userId, applicationSK, action, changedBy, previousStatus, newStatus, reason, errorDetails, retryCount } = params;
         const now = new Date().toISOString();
 
         // 修正: 新しいgenerateHistorySK関数を使用（applicationSK全体 + timestamp）
@@ -255,6 +263,8 @@ export class EAApplicationRepository {
             ...(previousStatus && { previousStatus }),
             ...(newStatus && { newStatus }),
             ...(reason && { reason }),
+            ...(errorDetails && { errorDetails }),
+            ...(retryCount && { retryCount }),
         };
 
         // 新しいステータスが終了ステータスの場合、履歴にもTTLを設定
@@ -270,7 +280,7 @@ export class EAApplicationRepository {
         }
 
         try {
-            await this.docClient.send(new PutCommand({
+            const result: PutCommandOutput = await this.docClient.send(new PutCommand({
                 TableName: this.tableName,
                 Item: historyItem,
             }));
@@ -306,7 +316,7 @@ export class EAApplicationRepository {
                 },
             };
 
-            return this.docClient.send(new UpdateCommand(updateParams));
+            return this.docClient.send(new UpdateCommand(updateParams)) as Promise<UpdateCommandOutput>;
         });
 
         try {
@@ -420,8 +430,8 @@ export class EAApplicationRepository {
         });
 
         try {
-            const result = await this.docClient.send(command);
-            const histories = result.Items as EAApplicationHistory[] || [];
+            const result: QueryCommandOutput = await this.docClient.send(command);
+            const histories = (result.Items as EAApplicationHistory[]) || [];
 
             logger.info('Successfully retrieved application histories', {
                 userId,
@@ -443,7 +453,7 @@ export class EAApplicationRepository {
             Key: { userId, sk },
         });
 
-        await this.docClient.send(command);
+        const result: DeleteCommandOutput = await this.docClient.send(command);
     }
 
     async updateApprovalInfo(
@@ -500,7 +510,7 @@ export class EAApplicationRepository {
 
         const adjustedTTL = Math.floor(adjustedDate.getTime() / 1000);
 
-        await this.docClient.send(new UpdateCommand({
+        const result: UpdateCommandOutput = await this.docClient.send(new UpdateCommand({
             TableName: this.tableName,
             Key: { userId, sk },
             UpdateExpression: 'SET #ttl = :ttl',
@@ -515,5 +525,224 @@ export class EAApplicationRepository {
             adjustedTTL,
             adjustedDate: new Date(adjustedTTL * 1000).toISOString()
         });
+    }
+
+    // =========== 失敗通知処理関連のメソッド（新規追加） ===========
+
+    /**
+     * 失敗した通知を再送用に AwaitingNotification ステータスに戻す
+     */
+    async retryFailedNotification(
+        userId: string,
+        sk: string,
+        retryReason: string = 'Manual retry requested'
+    ): Promise<EAApplication | null> {
+        logger.info('Retrying failed notification', { userId, sk, retryReason });
+
+        const currentApp = await this.getApplication(userId, sk);
+        if (!currentApp) {
+            throw new Error(`Application not found: userId=${userId}, sk=${sk}`);
+        }
+
+        // ステータス確認
+        if (currentApp.status !== 'FailedNotification') {
+            throw new Error(`Cannot retry notification for application in ${currentApp.status} status`);
+        }
+
+        // リトライ回数の確認
+        const currentFailureCount = currentApp.failureCount || 0;
+        if (currentFailureCount >= MAX_RETRY_COUNT) {
+            logger.warn('Retry attempted for application that exceeded max retry count', {
+                userId,
+                sk,
+                currentFailureCount,
+                maxRetryCount: MAX_RETRY_COUNT
+            });
+            // ただし、手動リトライの場合は許可する場合もある
+        }
+
+        const now = new Date().toISOString();
+
+        // 5分後の通知スケジュール時刻を設定
+        const delaySeconds = parseInt(process.env.SQS_DELAY_SECONDS || '300', 10);
+        const notificationScheduledAt = new Date(Date.now() + delaySeconds * 1000).toISOString();
+
+        // ステータスを AwaitingNotification に戻す
+        const updatedApp = await this.updateStatus(userId, sk, 'AwaitingNotification', {
+            notificationScheduledAt,
+            // 失敗情報は保持する（参考情報として）
+            // lastFailureReason と lastFailedAt は残す
+            // failureCount はリセットしない（累積として残す）
+        });
+
+        // 履歴記録
+        await this.recordHistory({
+            userId,
+            applicationSK: sk,
+            action: 'RetryNotification',
+            changedBy: userId, // または 'admin', 'system' など実際の操作者
+            previousStatus: 'FailedNotification',
+            newStatus: 'AwaitingNotification',
+            reason: retryReason,
+            retryCount: currentFailureCount + 1
+        });
+
+        logger.info('Failed notification retry prepared', {
+            userId,
+            sk,
+            notificationScheduledAt,
+            previousFailureCount: currentFailureCount
+        });
+
+        return updatedApp;
+    }
+
+    /**
+     * 失敗通知のステータスを持つアプリケーションを取得
+     */
+    async getFailedNotificationApplications(userId: string): Promise<EAApplication[]> {
+        const command = new QueryCommand({
+            TableName: this.tableName,
+            KeyConditionExpression: 'userId = :userId AND begins_with(sk, :prefix)',
+            FilterExpression: '#status = :failedStatus',
+            ExpressionAttributeNames: {
+                '#status': 'status',
+            },
+            ExpressionAttributeValues: {
+                ':userId': userId,
+                ':prefix': 'APPLICATION#',
+                ':failedStatus': 'FailedNotification',
+            },
+            ScanIndexForward: false, // 新しい順
+        });
+
+        const result: QueryCommandOutput = await this.docClient.send(command);
+        return (result.Items as EAApplication[]) || [];
+    }
+
+    /**
+     * リトライ可能な失敗通知を取得（最大リトライ回数未満）
+     */
+    async getRetryableFailedNotifications(userId: string): Promise<EAApplication[]> {
+        const failedApps = await this.getFailedNotificationApplications(userId);
+
+        return failedApps.filter(app =>
+            (app.failureCount || 0) < MAX_RETRY_COUNT
+        );
+    }
+
+    /**
+     * 全ユーザーの失敗通知を取得（管理者用）
+     */
+    async getAllFailedNotificationApplications(): Promise<EAApplication[]> {
+        // GSI を使用して status ベースでクエリ
+        // 注意: この実装には StatusIndex が必要
+        const command = new QueryCommand({
+            TableName: this.tableName,
+            IndexName: 'StatusIndex', // ステータス用のGSI
+            KeyConditionExpression: '#status = :failedStatus',
+            ExpressionAttributeNames: {
+                '#status': 'status',
+            },
+            ExpressionAttributeValues: {
+                ':failedStatus': 'FailedNotification',
+            },
+        });
+
+        const result = await this.docClient.send(command);
+        return result.Items as EAApplication[] || [];
+    }
+
+    /**
+     * アプリケーションの失敗統計を取得
+     */
+    async getFailureStatistics(userId: string): Promise<{
+        totalFailures: number;
+        retryableFailures: number;
+        maxRetryExceeded: number;
+        recentFailures: number; // 24時間以内
+    }> {
+        const failedApps = await this.getFailedNotificationApplications(userId);
+        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+        const stats = {
+            totalFailures: failedApps.length,
+            retryableFailures: 0,
+            maxRetryExceeded: 0,
+            recentFailures: 0
+        };
+
+        failedApps.forEach(app => {
+            const failureCount = app.failureCount || 0;
+
+            if (failureCount < MAX_RETRY_COUNT) {
+                stats.retryableFailures++;
+            } else {
+                stats.maxRetryExceeded++;
+            }
+
+            if (app.lastFailedAt) {
+                const lastFailedDate = new Date(app.lastFailedAt);
+                if (lastFailedDate > twentyFourHoursAgo) {
+                    stats.recentFailures++;
+                }
+            }
+        });
+
+        return stats;
+    }
+
+    /**
+     * 失敗したアプリケーションの詳細レポート生成
+     */
+    async generateFailureReport(userId?: string): Promise<{
+        summary: {
+            totalFailed: number;
+            retryable: number;
+            nonRetryable: number;
+            avgFailureCount: number;
+        };
+        applications: Array<{
+            userId: string;
+            applicationSK: string;
+            eaName: string;
+            email: string;
+            failureCount: number;
+            lastFailureReason?: string;
+            lastFailedAt?: string;
+            isRetryable: boolean;
+        }>;
+    }> {
+        let failedApps: EAApplication[];
+
+        if (userId) {
+            failedApps = await this.getFailedNotificationApplications(userId);
+        } else {
+            failedApps = await this.getAllFailedNotificationApplications();
+        }
+
+        const applications = failedApps.map(app => ({
+            userId: app.userId,
+            applicationSK: app.sk,
+            eaName: app.eaName,
+            email: app.email,
+            failureCount: app.failureCount || 0,
+            lastFailureReason: app.lastFailureReason,
+            lastFailedAt: app.lastFailedAt,
+            isRetryable: (app.failureCount || 0) < MAX_RETRY_COUNT
+        }));
+
+        const retryableCount = applications.filter(app => app.isRetryable).length;
+        const totalFailureCount = applications.reduce((sum, app) => sum + app.failureCount, 0);
+
+        return {
+            summary: {
+                totalFailed: applications.length,
+                retryable: retryableCount,
+                nonRetryable: applications.length - retryableCount,
+                avgFailureCount: applications.length > 0 ? totalFailureCount / applications.length : 0
+            },
+            applications
+        };
     }
 }
