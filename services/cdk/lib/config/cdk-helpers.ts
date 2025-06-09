@@ -419,6 +419,45 @@ export class CdkHelpers {
     }
 
     // ==========================================
+    // SSMパス管理
+    // ==========================================
+
+    /**
+     * SSMユーザープレフィックスを生成
+     */
+    static getSsmUserPrefix(environment: string): string {
+        return `/sankey-${environment}/users`;
+    }
+
+    /**
+     * SSMユーザーマスターキーパスを生成
+     */
+    static getSsmUserMasterKeyPath(environment: string, userId: string): string {
+        return `${this.getSsmUserPrefix(environment)}/${userId}/master-key`;
+    }
+
+    /**
+     * SSMユーザーマスターキーポリシー用パスを生成
+     */
+    static getSsmUserMasterKeyPolicy(environment: string): string {
+        return `${this.getSsmUserPrefix(environment)}/*/master-key`;
+    }
+
+    /**
+     * SSM環境プレフィックスを生成
+     */
+    static getSsmEnvironmentPrefix(environment: string): string {
+        return `/sankey-${environment}`;
+    }
+
+    /**
+     * SSM Resend APIキーパスを生成
+     */
+    static getSsmResendApiKeyPath(environment: string): string {
+        return `/sankey-${environment}/resend/api-key`;
+    }
+
+    // ==========================================
     // IAM・セキュリティ関連
     // ==========================================
 

@@ -4,8 +4,6 @@ import * as path from 'path';
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as apigw from 'aws-cdk-lib/aws-apigateway';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
-import * as iam from 'aws-cdk-lib/aws-iam';
-import * as ssm from 'aws-cdk-lib/aws-ssm';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
 import { EnvironmentConfig, CdkHelpers } from './config';
@@ -59,9 +57,8 @@ export class SankeyApplicationStack extends cdk.Stack {
         this.createHealthEndpoint();
         this.createApplicationsEndpoints(props);
         this.createLicensesEndpoints(props);
-        this.createPlansEndpoints(props);
         this.createGasTemplateEndpoints(props);
-        this.createUsagePlansAndOutputs();
+        this.createOutputs();
     }
 
     /**
@@ -173,7 +170,7 @@ export class SankeyApplicationStack extends cdk.Stack {
             '../../lambda/src/handlers/applications/webhook.handler.ts',
             {
                 TABLE_NAME: props.eaApplicationsTable.tableName,
-                SSM_PREFIX: '/license-service/users',
+                SSM_USER_PREFIX: CdkHelpers.getSsmUserPrefix(this.envName),
             }
         );
 
@@ -181,7 +178,7 @@ export class SankeyApplicationStack extends cdk.Stack {
             'approve-application',
             '../../lambda/src/handlers/applications/approveApplication.handler.ts',
             {
-                SSM_PREFIX: '/license-service/users',
+                SSM_USER_PREFIX: CdkHelpers.getSsmUserPrefix(this.envName),
                 TABLE_NAME: props.eaApplicationsTable.tableName,
                 NOTIFICATION_QUEUE_URL: props.licenseNotificationQueue.queueUrl,
             }
@@ -219,7 +216,7 @@ export class SankeyApplicationStack extends cdk.Stack {
         const ssmPolicy = CdkHelpers.createSsmPolicy(
             this.region,
             this.account,
-            '/license-service/users/*/master-key'
+            CdkHelpers.getSsmUserMasterKeyPolicy(this.envName)
         );
         approveApplicationFn.addToRolePolicy(ssmPolicy);
         webhookHandler.addToRolePolicy(ssmPolicy);
@@ -233,6 +230,7 @@ export class SankeyApplicationStack extends cdk.Stack {
             authorizationType: apigw.AuthorizationType.COGNITO,
             authorizer: this.authorizer,
             apiKeyRequired: false,
+            methodResponses: this.standardMethodResponses,
         });
 
         const webhookResource = applicationsResource.addResource('webhook', {
@@ -242,11 +240,7 @@ export class SankeyApplicationStack extends cdk.Stack {
         webhookResource.addMethod('POST', new apigw.LambdaIntegration(webhookHandler), {
             authorizationType: apigw.AuthorizationType.NONE,
             apiKeyRequired: false,
-            methodResponses: [
-                { statusCode: '200' },
-                { statusCode: '400' },
-                { statusCode: '500' },
-            ],
+            methodResponses: this.standardMethodResponses,
         });
 
         const applicationIdResource = applicationsResource.addResource('{id}', {
@@ -313,7 +307,7 @@ export class SankeyApplicationStack extends cdk.Stack {
             '../../lambda/src/handlers/licenses/decryptLicense.handler.ts',
             {
                 TABLE_NAME: props.eaApplicationsTable.tableName,
-                SSM_PREFIX: '/license-service/users',
+                SSM_USER_PREFIX: CdkHelpers.getSsmUserPrefix(this.envName),
             }
         );
 
@@ -322,14 +316,14 @@ export class SankeyApplicationStack extends cdk.Stack {
             '../../lambda/src/handlers/licenses/decryptLicense.handler.ts',
             {
                 TABLE_NAME: props.eaApplicationsTable.tableName,
-                SSM_PREFIX: '/license-service/users',
+                SSM_USER_PREFIX: CdkHelpers.getSsmUserPrefix(this.envName),
             }
         );
 
         const encryptLicenseHandler = this.createLambdaFunction(
             'encrypt-license',
             '../../lambda/src/handlers/licenses/encryptLicense.handler.ts',
-            { SSM_PREFIX: '/license-service/users' }
+            { SSM_USER_PREFIX: CdkHelpers.getSsmUserPrefix(this.envName) }
         );
 
         // 権限設定
@@ -340,7 +334,7 @@ export class SankeyApplicationStack extends cdk.Stack {
         const ssmPolicy = CdkHelpers.createSsmPolicy(
             this.region,
             this.account,
-            '/license-service/users/*/master-key'
+            CdkHelpers.getSsmUserMasterKeyPolicy(this.envName)
         );
         decryptLicenseHandler.addToRolePolicy(ssmPolicy);
         directDecryptLicenseHandler.addToRolePolicy(ssmPolicy);
@@ -358,12 +352,7 @@ export class SankeyApplicationStack extends cdk.Stack {
             authorizationType: apigw.AuthorizationType.COGNITO,
             authorizer: this.authorizer,
             apiKeyRequired: false,
-            methodResponses: [
-                { statusCode: '200' },
-                { statusCode: '400' },
-                { statusCode: '401' },
-                { statusCode: '500' },
-            ],
+            methodResponses: this.standardMethodResponses,
         });
 
         const encryptResource = licensesResource.addResource('encrypt', {
@@ -374,12 +363,7 @@ export class SankeyApplicationStack extends cdk.Stack {
             authorizationType: apigw.AuthorizationType.COGNITO,
             authorizer: this.authorizer,
             apiKeyRequired: false,
-            methodResponses: [
-                { statusCode: '200' },
-                { statusCode: '400' },
-                { statusCode: '401' },
-                { statusCode: '500' },
-            ],
+            methodResponses: this.standardMethodResponses,
         });
 
         const licenseIdResource = licensesResource.addResource('{id}', {
@@ -410,85 +394,6 @@ export class SankeyApplicationStack extends cdk.Stack {
     }
 
     /**
-     * Plans エンドポイント作成
-     */
-    private createPlansEndpoints(props: SankeyApplicationStackProps): void {
-        const getPlanHandler = this.createLambdaFunction(
-            'get-plan',
-            '../../lambda/src/handlers/plans/getPlan.handler.ts',
-            {},
-            cdk.Duration.seconds(10)
-        );
-
-        const changePlanHandler = this.createLambdaFunction(
-            'change-plan',
-            '../../lambda/src/handlers/plans/changePlan.handler.ts'
-        );
-
-        // SSMポリシーを追加
-        const usagePlansSsmPolicy = CdkHelpers.createSsmPolicy(
-            this.region,
-            this.account,
-            '/license-service/usage-plans/*'
-        );
-        getPlanHandler.addToRolePolicy(usagePlansSsmPolicy);
-        changePlanHandler.addToRolePolicy(usagePlansSsmPolicy);
-
-        getPlanHandler.addToRolePolicy(new iam.PolicyStatement({
-            effect: iam.Effect.ALLOW,
-            actions: [
-                'apigateway:GET',
-                'apigateway:GetApiKey',
-                'apigateway:GetUsagePlan',
-                'apigateway:GetUsagePlans',
-                'apigateway:GetUsagePlanKeys',
-            ],
-            resources: ['*'],
-        }));
-
-        changePlanHandler.addToRolePolicy(new iam.PolicyStatement({
-            actions: [
-                'apigateway:CreateUsagePlanKey',
-                'apigateway:DeleteUsagePlanKey',
-                'apigateway:GetUsagePlanKeys',
-            ],
-            resources: ['*'],
-        }));
-
-        const plansResource = this.api.root.addResource('plans', {
-            defaultCorsPreflightOptions: this.corsOptions,
-        });
-
-        plansResource.addMethod('GET', new apigw.LambdaIntegration(getPlanHandler), {
-            authorizationType: apigw.AuthorizationType.COGNITO,
-            authorizer: this.authorizer,
-            apiKeyRequired: false,
-            methodResponses: [
-                { statusCode: '200' },
-                { statusCode: '400' },
-                { statusCode: '401' },
-                { statusCode: '500' },
-            ],
-        });
-
-        const changePlanResource = plansResource.addResource('change', {
-            defaultCorsPreflightOptions: this.corsOptions,
-        });
-
-        changePlanResource.addMethod('POST', new apigw.LambdaIntegration(changePlanHandler), {
-            authorizationType: apigw.AuthorizationType.COGNITO,
-            authorizer: this.authorizer,
-            apiKeyRequired: false,
-            methodResponses: [
-                { statusCode: '200' },
-                { statusCode: '400' },
-                { statusCode: '401' },
-                { statusCode: '500' },
-            ],
-        });
-    }
-
-    /**
      * GAS Template エンドポイント作成
      */
     private createGasTemplateEndpoints(props: SankeyApplicationStackProps): void {
@@ -514,7 +419,7 @@ export class SankeyApplicationStack extends cdk.Stack {
         const ssmPolicy = CdkHelpers.createSsmPolicy(
             this.region,
             this.account,
-            '/license-service/users/*/master-key'
+            CdkHelpers.getSsmUserMasterKeyPolicy(this.envName)
         );
         renderGasTemplateHandler.addToRolePolicy(ssmPolicy);
 
@@ -541,107 +446,15 @@ export class SankeyApplicationStack extends cdk.Stack {
             authorizationType: apigw.AuthorizationType.COGNITO,
             authorizer: this.authorizer,
             apiKeyRequired: false,
-            methodResponses: [
-                { statusCode: '200' },
-                { statusCode: '401' },
-                { statusCode: '403' },
-                { statusCode: '404' },
-                { statusCode: '500' }
-            ],
+            methodResponses: this.standardMethodResponses,
         });
     }
 
     /**
-     * Usage Plans の作成と Outputs
+     * 出力の作成
      */
-    private createUsagePlansAndOutputs(): void {
-        const freePlan = new apigw.UsagePlan(this, 'FreePlan', {
-            name: CdkHelpers.generateResourceName('free-plan', this.envName),
-            description: 'Free tier for license generation',
-            throttle: {
-                rateLimit: 50,
-                burstLimit: 100,
-            },
-            quota: {
-                limit: 10000,
-                period: apigw.Period.MONTH,
-            },
-            apiStages: [{
-                api: this.api,
-                stage: this.api.deploymentStage,
-            }],
-        });
-
-        const basicPlan = new apigw.UsagePlan(this, 'BasicPlan', {
-            name: CdkHelpers.generateResourceName('basic-plan', this.envName),
-            description: 'Basic tier for license generation',
-            throttle: {
-                rateLimit: 10,
-                burstLimit: 20,
-            },
-            quota: {
-                limit: 10000,
-                period: apigw.Period.MONTH,
-            },
-            apiStages: [{
-                api: this.api,
-                stage: this.api.deploymentStage,
-            }],
-        });
-
-        const proPlan = new apigw.UsagePlan(this, 'ProPlan', {
-            name: CdkHelpers.generateResourceName('pro-plan', this.envName),
-            description: 'Pro tier for license generation',
-            throttle: {
-                rateLimit: 50,
-                burstLimit: 100,
-            },
-            quota: {
-                limit: 10000,
-                period: apigw.Period.MONTH,
-            },
-            apiStages: [{
-                api: this.api,
-                stage: this.api.deploymentStage,
-            }],
-        });
-
-        // SSMパラメータの作成
-        new ssm.StringParameter(this, 'FreePlanIdParameter', {
-            parameterName: '/license-service/usage-plans/free',
-            stringValue: freePlan.usagePlanId,
-            description: 'Free Usage Plan ID',
-        });
-
-        new ssm.StringParameter(this, 'BasicPlanIdParameter', {
-            parameterName: '/license-service/usage-plans/basic',
-            stringValue: basicPlan.usagePlanId,
-            description: 'Basic Usage Plan ID',
-        });
-
-        new ssm.StringParameter(this, 'ProPlanIdParameter', {
-            parameterName: '/license-service/usage-plans/pro',
-            stringValue: proPlan.usagePlanId,
-            description: 'Pro Usage Plan ID',
-        });
-
-        // 出力の作成
+    private createOutputs(): void {
         CdkHelpers.createOutputs(this, this.stackName, [
-            {
-                id: 'FreePlanId',
-                value: freePlan.usagePlanId,
-                description: 'Free Usage Plan ID',
-            },
-            {
-                id: 'BasicPlanId',
-                value: basicPlan.usagePlanId,
-                description: 'Basic Usage Plan ID',
-            },
-            {
-                id: 'ProPlanId',
-                value: proPlan.usagePlanId,
-                description: 'Pro Usage Plan ID',
-            },
             {
                 id: 'ApiEndpoint',
                 value: this.api.url,

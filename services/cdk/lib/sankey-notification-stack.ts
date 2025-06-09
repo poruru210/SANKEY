@@ -4,7 +4,6 @@ import * as path from 'path';
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as lambdaEventSources from 'aws-cdk-lib/aws-lambda-event-sources';
-import * as iam from 'aws-cdk-lib/aws-iam';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import { EnvironmentConfig, CdkHelpers } from './config';
 
@@ -42,9 +41,10 @@ export class SankeyNotificationStack extends cdk.Stack {
         return CdkHelpers.createSqsQueue(
             this,
             'LicenseNotificationQueue',
-            'license-notification-queue',
+            'notification-queue', // license-notification-queue から変更
             this.envName,
             {
+                receiveMessageWaitTime: cdk.Duration.seconds(20),
                 visibilityTimeout: cdk.Duration.minutes(15),
                 retentionPeriod: cdk.Duration.days(14),
                 deadLetterQueue: {
@@ -69,9 +69,9 @@ export class SankeyNotificationStack extends cdk.Stack {
                 timeout: cdk.Duration.minutes(5),
                 environment: {
                     TABLE_NAME: props.eaApplicationsTable.tableName,
-                    RESEND_API_KEY_PARAM: '/license-service/resend/api-key',
+                    RESEND_API_KEY_PARAM: CdkHelpers.getSsmResendApiKeyPath(this.envName),
                     EMAIL_FROM_ADDRESS: this.config.notification.emailFromAddress,
-                    SSM_PREFIX: '/license-service/users',
+                    SSM_USER_PREFIX: CdkHelpers.getSsmUserPrefix(this.envName),
                     POWERTOOLS_SERVICE_NAME: 'email-notification',
                 },
             }
@@ -93,7 +93,7 @@ export class SankeyNotificationStack extends cdk.Stack {
         const ssmPolicy = CdkHelpers.createSsmPolicy(
             this.region,
             this.account,
-            '/license-service/*'
+            `${CdkHelpers.getSsmEnvironmentPrefix(this.envName)}/*`
         );
         emailFunction.addToRolePolicy(ssmPolicy);
     }

@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const { log } = require('./logger');
+const { CUSTOM_DOMAINS, APP_URLS, ENVIRONMENTS, VERCEL_ENVIRONMENTS } = require('./constants');
 
 /**
  * Vercel API ヘルパー関数群
@@ -177,8 +178,8 @@ async function triggerDeployment(environment, options = {}) {
         }
 
         const baseUrl = env === 'production'
-            ? 'https://www.sankey.trade'
-            : 'https://dev.sankey.trade';
+            ? APP_URLS.PROD
+            : APP_URLS.DEV;
 
         log.info(`🔗 Site URL: ${baseUrl}`);
         log.info('⏳ Deployment is in progress. Check Vercel dashboard for status.');
@@ -196,19 +197,18 @@ async function triggerDeployment(environment, options = {}) {
     }
 }
 
-
 /**
  * 環境名をVercel環境にマッピング
  */
 function mapEnvironmentToVercel(environment) {
     const mapping = {
-        'dev': 'preview',
-        'development': 'preview',
-        'prod': 'production',
-        'production': 'production'
+        [ENVIRONMENTS.DEV]: VERCEL_ENVIRONMENTS.PREVIEW,
+        [ENVIRONMENTS.DEVELOPMENT]: VERCEL_ENVIRONMENTS.PREVIEW,
+        [ENVIRONMENTS.PROD]: VERCEL_ENVIRONMENTS.PRODUCTION,
+        [ENVIRONMENTS.PRODUCTION]: VERCEL_ENVIRONMENTS.PRODUCTION
     };
 
-    return mapping[environment.toLowerCase()] || 'preview';
+    return mapping[environment.toLowerCase()] || VERCEL_ENVIRONMENTS.PREVIEW;
 }
 
 /**
@@ -218,9 +218,7 @@ function generateVercelEnvironmentVariables(awsConfig, environment, options = {}
     const { authSecret } = options;
     
     // カスタムドメインのAPI_ENDPOINTを生成
-    const apiEndpoint = environment === 'prod' ? 
-        'https://api.sankey.trade' : 
-        `https://api-${environment}.sankey.trade`;
+    const apiEndpoint = `https://${CUSTOM_DOMAINS.getApiDomain(environment)}`;
     
     // 基本的な環境変数
     const vercelVars = {
@@ -261,13 +259,13 @@ function generateAuthSecret() {
  */
 function generateNextAuthUrl(environment) {
     const urls = {
-        dev: 'https://dev.sankey.trade',
-        development: 'https://dev.sankey.trade',
-        prod: 'https://www.sankey.trade',
-        production: 'https://www.sankey.trade'
+        dev: APP_URLS.DEV,
+        development: APP_URLS.DEV,
+        prod: APP_URLS.PROD,
+        production: APP_URLS.PROD
     };
 
-    return urls[environment.toLowerCase()] || 'https://dev.sankey.trade';
+    return urls[environment.toLowerCase()] || APP_URLS.DEV;
 }
 
 module.exports = {

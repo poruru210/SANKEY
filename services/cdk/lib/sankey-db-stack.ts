@@ -37,30 +37,17 @@ export class SankeyDbStack extends cdk.Stack {
 
         this.ttlMonths = ttlMonthsParam.valueAsNumber;
 
-        // DynamoDBテーブルの作成
+        // DynamoDBテーブルの作成（GSIなし）
         this.table = CdkHelpers.createDynamoTable(
             this,
             'EAApplicationsTable',
-            'applications', // baseName (最終的に sankey-applications-{env} になる)
+            'applications',
             this.envName,
             {
                 partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
                 sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING },
                 timeToLiveAttribute: 'ttl',
-                globalSecondaryIndexes: [
-                    {
-                        indexName: 'StatusIndex',
-                        partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
-                        sortKey: { name: 'status', type: dynamodb.AttributeType.STRING },
-                        projectionType: dynamodb.ProjectionType.ALL,
-                    },
-                    {
-                        indexName: 'BrokerAccountIndex',
-                        partitionKey: { name: 'broker', type: dynamodb.AttributeType.STRING },
-                        sortKey: { name: 'accountNumber', type: dynamodb.AttributeType.STRING },
-                        projectionType: dynamodb.ProjectionType.ALL,
-                    },
-                ],
+                // globalSecondaryIndexes を削除
             }
         );
 
@@ -98,16 +85,6 @@ export class SankeyDbStack extends cdk.Stack {
                 id: 'SankeyTableArn',
                 value: this.table.tableArn,
                 description: 'DynamoDB Table ARN'
-            },
-            {
-                id: 'StatusIndexName',
-                value: 'StatusIndex',
-                description: 'Status GSI Name'
-            },
-            {
-                id: 'BrokerAccountIndexName',
-                value: 'BrokerAccountIndex',
-                description: 'Broker Account GSI Name'
             },
             {
                 id: 'TTLAttributeName',

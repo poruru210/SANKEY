@@ -1,6 +1,7 @@
 const fs = require('fs').promises;
 const crypto = require('crypto');
 const { log } = require('../lib/logger');
+const { CUSTOM_DOMAINS, APP_URLS } = require('../lib/constants');
 
 /**
  * .env.local生成モジュール (dev環境専用)
@@ -82,13 +83,13 @@ async function updateLocalEnv(config) {
 
         // ✅ NEXTAUTH_URL を常に上書き
         cleanedContent = cleanedContent.filter(line => !line.startsWith('NEXTAUTH_URL='));
-        cleanedContent.push(`NEXTAUTH_URL=http://localhost:3000`);
+        cleanedContent.push(`NEXTAUTH_URL=${APP_URLS.LOCAL}`);
 
         // 新しい設定を追加
         const newSettings = [
             '',
             '# API Endpoint設定',
-            `NEXT_PUBLIC_API_ENDPOINT=https://api-dev.sankey.trade`,
+            `NEXT_PUBLIC_API_ENDPOINT=https://${CUSTOM_DOMAINS.getApiDomain('dev')}`,
             '',
             '# Cognito設定',
             `COGNITO_CLIENT_ID=${awsConfig.COGNITO_CLIENT_ID}`,
@@ -103,7 +104,7 @@ async function updateLocalEnv(config) {
                 '# Cognito Logout設定',
                 `NEXT_PUBLIC_COGNITO_DOMAIN=${awsConfig.NEXT_PUBLIC_COGNITO_DOMAIN}`,
                 `NEXT_PUBLIC_COGNITO_CLIENT_ID=${awsConfig.COGNITO_CLIENT_ID}`,
-                `NEXT_PUBLIC_APP_URL=http://localhost:3000`
+                `NEXT_PUBLIC_APP_URL=${APP_URLS.LOCAL}`
             );
         }
 
@@ -207,14 +208,14 @@ async function createEnvBackup(envFilePath) {
 function displayConfigSummary(awsConfig) {
     log.info('📋 Configuration to be written:');
     
-    console.log(`   API Endpoint: https://api-dev.sankey.trade`);
+    console.log(`   API Endpoint: https://${CUSTOM_DOMAINS.getApiDomain('dev')}`);
     console.log(`   Cognito Client ID: ${awsConfig.COGNITO_CLIENT_ID}`);
     console.log(`   Cognito Client Secret: ${awsConfig.COGNITO_CLIENT_SECRET.substring(0, 8)}...`);
     console.log(`   Cognito Issuer: ${awsConfig.COGNITO_ISSUER}`);
     
     if (awsConfig.NEXT_PUBLIC_COGNITO_DOMAIN) {
         console.log(`   Cognito Domain: ${awsConfig.NEXT_PUBLIC_COGNITO_DOMAIN}`);
-        console.log(`   App URL: http://localhost:3000`);
+        console.log(`   App URL: ${APP_URLS.LOCAL}`);
     }
 }
 
