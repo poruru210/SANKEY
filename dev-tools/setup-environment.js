@@ -13,7 +13,8 @@ const {
     ERROR_TYPES,
     APPROVAL_MODES,
     ENVIRONMENTS,
-    VERCEL_ENVIRONMENTS
+    VERCEL_ENVIRONMENTS,
+    CUSTOM_DOMAINS
 } = require('./lib/constants');
 const { BaseError, ConfigurationError, ApiError, CdkNotDeployedError, ResourceNotFoundError } = require('./lib/errors');
 
@@ -34,6 +35,7 @@ const { updateLocalEnv, readAuthSecretFromEnvLocal } = require('./modules/env-lo
 const { updateVercelEnvironmentVariables, getExistingAuthSecret } = require('./modules/vercel-env-module');
 const { triggerDeployment, generateAuthSecret } = require('./lib/vercel-helpers');
 const { setupDnsForCustomDomain } = require('./modules/custom-domain-module');
+const { executeTestDataWorkflow } = require('./modules/test-data-module');
 
 // コマンドライン引数の設定
 const program = new Command();
@@ -51,6 +53,7 @@ program
     .option('--generate-env-local', 'Generate .env.local only')
     .option('--setup-vercel', 'Setup Vercel environment variables only')
     .option('--trigger-deploy', 'Trigger Vercel deployment only')
+    .option('--generate-test-data', 'Generate test data only')
     .option('--run-all', 'Run all steps')
     .option('-e, --environment <env>', 'Environment for direct execution (dev/prod)')
     .option('--force-update', 'Force update existing configurations')
@@ -155,47 +158,6 @@ async function executeCertificatePreparation(context) {
 }
 
 /**
- * AWS API GatewayのRegional Domain Nameを取得
- */
-async function getApiGatewayRegionalDomain(config) {
-    const { profile, region, environment, debug } = config;
-    
-    try {
-        // AWS SDKの設定
-        const AWS = require('aws-sdk');
-        
-        // プロファイルベースの認証設定
-        const credentials = new AWS.SharedIniFileCredentials({ profile });
-        const apigateway = new AWS.APIGateway({ 
-            region,
-            credentials
-        });
-
-        // カスタムドメイン名を生成（既存のCUSTOM_DOMAINSから）
-        const customDomainName = CUSTOM_DOMAINS.getApiDomain(environment);
-        log.debug(`Looking for custom domain: ${customDomainName}`, { debug });
-
-        // API Gatewayからカスタムドメイン情報を取得
-        const domainInfo = await apigateway.getDomainName({
-            domainName: customDomainName
-        }).promise();
-
-        if (domainInfo && domainInfo.regionalDomainName) {
-            log.debug(`Found regional domain: ${domainInfo.regionalDomainName}`, { debug });
-            return domainInfo.regionalDomainName;
-        }
-
-        throw new Error(`Regional domain name not found for ${customDomainName}`);
-
-    } catch (error) {
-        if (error.code === 'NotFoundException') {
-            throw new Error(`Custom domain '${CUSTOM_DOMAINS.getApiDomain(environment)}' not found in API Gateway. Please ensure CDK deployment is complete.`);
-        }
-        throw new Error(`Failed to get API Gateway regional domain: ${error.message}`);
-    }
-}
-
-/**
  * カスタムドメイン DNS設定処理
  */
 async function executeCustomDomainSetup(context) {
@@ -204,19 +166,31 @@ async function executeCustomDomainSetup(context) {
         const environment = context.environment || await selectEnvironment(context);
         showProgress(`Setting up custom domain DNS for ${environment} environment`);
 
-        // 1. AWS API GatewayのRegional Domain Nameを取得
-        log.info('🔍 Retrieving API Gateway regional domain...');
-        const targetDomain = await getApiGatewayRegionalDomain({
+        // 1. AWS設定取得（CDK Outputsからカスタムドメイン情報を含む）
+        log.info('🔍 Retrieving custom domain configuration from CDK...');
+        const awsConfig = await getAwsConfiguration({
             profile: context.profile,
-            region: context.region,
             environment,
-            debug: context.debug
+            region: context.region,
+            debug: context.debug,
+            requireApproval: APPROVAL_MODES.NEVER
         });
 
-        const customDomainName = CUSTOM_DOMAINS.getApiDomain(environment);
+        // 2. カスタムドメイン情報の検証
+        if (!awsConfig.customDomainName || !awsConfig.customDomainTarget) {
+            throw new CdkNotDeployedError(
+                ['CustomDomainName', 'CustomDomainNameTarget'],
+                environment,
+                new Error(`Custom domain configuration not found in CDK outputs. Ensure API Gateway custom domain is deployed.`)
+            );
+        }
+
+        const customDomainName = awsConfig.customDomainName;
+        const targetDomain = awsConfig.customDomainTarget;
+        
         log.info(`📡 Target mapping: ${customDomainName} -> ${targetDomain}`);
 
-        // 2. 実行確認
+        // 3. 実行確認
         const confirmed = await confirmExecution('Custom Domain DNS Setup', {
             Environment: environment,
             'Custom Domain': customDomainName,
@@ -229,9 +203,10 @@ async function executeCustomDomainSetup(context) {
             return { success: false, cancelled: true };
         }
 
-        // 3. DNS設定の実行
+        // 4. DNS設定の実行
         const result = await setupDnsForCustomDomain({
             environment,
+            customDomainName,
             targetDomain,
             profile: context.profile,
             region: context.region,
@@ -277,7 +252,6 @@ async function executeCustomDomainSetup(context) {
     }
 }
 
-
 /**
  * DNS設定の確認
  */
@@ -293,7 +267,6 @@ async function verifyDnsConfiguration(hostname) {
         });
     });
 }
-
 
 /**
  * .env.local生成処理
@@ -493,6 +466,51 @@ async function executeVercelDeploy(context) {
 }
 
 /**
+ * テストデータ生成処理
+ */
+async function executeTestDataGeneration(context) {
+    try {
+        // 環境選択
+        const environment = context.environment || await selectEnvironment(context);
+        showProgress(`Setting up test data generation for ${environment} environment`);
+
+        // テストデータワークフローを実行
+        const result = await executeTestDataWorkflow({
+            profile: context.profile,
+            region: context.region,
+            environment,
+            debug: context.debug
+        });
+
+        if (result.success) {
+            console.log('\n📊 Test Data Operation Summary:');
+            
+            switch (result.operation) {
+                case 'generate':
+                    console.log(`   ✅ Generated: ${result.generated}/${result.total} records`);
+                    break;
+                case 'delete':
+                    console.log(`   🗑️ Deleted: ${result.deleted} records`);
+                    break;
+                case 'reset':
+                    console.log(`   🗑️ Deleted: ${result.deleted} existing records`);
+                    console.log(`   ✅ Generated: ${result.generated}/${result.total} new records`);
+                    break;
+            }
+
+            log.success('✅ Test data operation completed successfully');
+        }
+
+        await confirmContinue();
+        return { success: true, result };
+
+    } catch (error) {
+        await handleMenuError(error, { showStack: context.debug });
+        return { success: false, error };
+    }
+}
+
+/**
  * 全ステップ実行処理
  */
 async function executeAllSteps(context) {
@@ -580,6 +598,10 @@ async function runInteractiveMode(context) {
                 await executeVercelDeploy(context);
                 break;
 
+            case 'generate-test-data':
+                await executeTestDataGeneration(context);
+                break;
+
             case 'run-all':
                 await executeAllSteps(context);
                 break;
@@ -615,6 +637,8 @@ async function runDirectMode(options) {
         await executeVercelSetup(context);
     } else if (options.triggerDeploy) {
         await executeVercelDeploy(context);
+    } else if (options.generateTestData) {
+        await executeTestDataGeneration(context);
     } else if (options.runAll) {
         await executeAllSteps(context);
     } else {
@@ -651,9 +675,11 @@ async function main() {
 
         // 直接実行モードの判定
         const isDirectMode = options.prepareCertificate || 
+                           options.setupCustomDomain ||
                            options.generateEnvLocal || 
                            options.setupVercel || 
                            options.triggerDeploy || 
+                           options.generateTestData ||
                            options.runAll;
 
         if (isDirectMode) {

@@ -94,7 +94,9 @@ async function retrieveStackConfigurations(clients, stackCombination, options) {
         // APIStackからの設定取得
         const apiOutputKeys = [
             CLOUDFORMATION_OUTPUT_KEYS.API_ENDPOINT,
-            CLOUDFORMATION_OUTPUT_KEYS.API_ID
+            CLOUDFORMATION_OUTPUT_KEYS.API_ID,
+            CLOUDFORMATION_OUTPUT_KEYS.CUSTOM_DOMAIN_NAME,
+            CLOUDFORMATION_OUTPUT_KEYS.CUSTOM_DOMAIN_TARGET
         ];
         const apiOutputs = await getStackOutputs(
             clients.cloudFormation,
@@ -135,8 +137,17 @@ async function retrieveStackConfigurations(clients, stackCombination, options) {
         const cognitoIssuerBase = COGNITO.ISSUER_BASE_URL_TEMPLATE.replace('{region}', region);
         const cognitoIssuer = `${cognitoIssuerBase}${authOutputs[CLOUDFORMATION_OUTPUT_KEYS.USER_POOL_ID]}`;
         
-        // API エンドポイントの正規化（末尾スラッシュ削除）
-        const apiEndpoint = apiOutputs[CLOUDFORMATION_OUTPUT_KEYS.API_ENDPOINT].replace(/\/$/, '');
+        // API エンドポイントの決定（Vercel用）
+        // カスタムドメインが設定されている場合はそれを優先、未設定の場合はCDK ApiEndpointを使用
+        let apiEndpoint;
+        if (apiOutputs[CLOUDFORMATION_OUTPUT_KEYS.CUSTOM_DOMAIN_NAME]) {
+            apiEndpoint = `https://${apiOutputs[CLOUDFORMATION_OUTPUT_KEYS.CUSTOM_DOMAIN_NAME]}`;
+            log.debug(`Using custom domain for API endpoint: ${apiEndpoint}`, options);
+        } else {
+            // CDK ApiEndpointから末尾スラッシュを削除
+            apiEndpoint = apiOutputs[CLOUDFORMATION_OUTPUT_KEYS.API_ENDPOINT].replace(/\/$/, '');
+            log.debug(`Using CDK API endpoint: ${apiEndpoint}`, options);
+        }
 
         const configValues = {
             // API Gateway設定
@@ -150,7 +161,11 @@ async function retrieveStackConfigurations(clients, stackCombination, options) {
             
             // Cognito詳細情報
             userPoolId: authOutputs[CLOUDFORMATION_OUTPUT_KEYS.USER_POOL_ID],
-            region: region
+            region: region,
+
+            // カスタムドメイン設定（新規追加）
+            customDomainName: apiOutputs[CLOUDFORMATION_OUTPUT_KEYS.CUSTOM_DOMAIN_NAME],
+            customDomainTarget: apiOutputs[CLOUDFORMATION_OUTPUT_KEYS.CUSTOM_DOMAIN_TARGET]
         };
 
         // Cognito Domain設定（オプション）

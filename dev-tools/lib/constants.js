@@ -138,7 +138,9 @@ module.exports = {
         COGNITO_CLIENT_ID: 'UserPoolClientId', // UserPoolClientId は Cognito Client ID を指すことが多いため、より明確な名前に。実際のOutputKeyと合わせる。
         COGNITO_DOMAIN_URL: 'UserPoolDomainUrl', // UserPoolDomainUrl など実際のOutputKeyに合わせる
         API_ENDPOINT: 'ApiEndpoint',
-        API_ID: 'ApiId'
+        API_ID: 'ApiId',
+        CUSTOM_DOMAIN_NAME: 'CustomDomainName',  // 新規追加: api-dev.sankey.trade
+        CUSTOM_DOMAIN_TARGET: 'CustomDomainNameTarget'  // 新規追加: d-aji5kampef.execute-api.ap-northeast-1.amazonaws.com
         // 他にもあれば追加: e.g., API_GATEWAY_URL: 'ApiGatewayUrl', ...
     },
 

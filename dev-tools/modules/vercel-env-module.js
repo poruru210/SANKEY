@@ -68,11 +68,11 @@ async function updateVercelEnvironmentVariables(config) {
         const updateResults = await vercelClient.updateEnvironmentVariables(
             vercelVars,
             targetVercelEnv,
-            { forceUpdate }
+            { forceUpdate: true }
         );
 
         // 結果サマリーの表示
-        displayUpdateResults(updateResults, targetVercelEnv);
+        displayUpdateResults(updateResults, targetVercelEnv, vercelVars);
 
         return {
             success: true,
@@ -108,20 +108,29 @@ function displayVercelConfigSummary(vercelVars, environment) {
  * 更新結果の表示
  * @param {Object} results - Update results
  * @param {string} environment - Target environment
+ * @param {Object} vercelVars - Vercel environment variables (for displaying values)
  */
-function displayUpdateResults(results, environment) {
+function displayUpdateResults(results, environment, vercelVars = {}) {
     const { created, updated, unchanged, errors } = results;
 
     log.info(`📊 Update Results for ${environment}:`);
     
     if (created.length > 0) {
         console.log(`   ✅ Created: ${created.length} variables`);
-        created.forEach(item => console.log(`      - ${item.key}`));
+        created.forEach(item => {
+            const value = vercelVars[item.key];
+            const displayValue = formatValueForDisplay(item.key, value);
+            console.log(`      - ${item.key}: ${displayValue}`);
+        });
     }
 
     if (updated.length > 0) {
         console.log(`   🔄 Updated: ${updated.length} variables`);
-        updated.forEach(item => console.log(`      - ${item.key}`));
+        updated.forEach(item => {
+            const value = vercelVars[item.key];
+            const displayValue = formatValueForDisplay(item.key, value);
+            console.log(`      - ${item.key}: ${displayValue}`);
+        });
     }
 
     if (unchanged.length > 0) {
@@ -135,6 +144,23 @@ function displayUpdateResults(results, environment) {
     }
 
     console.log('');
+}
+
+/**
+ * 表示用に値をフォーマット（センシティブ情報をマスク）
+ * @param {string} key - Environment variable key
+ * @param {string} value - Environment variable value
+ * @returns {string} Formatted value for display
+ */
+function formatValueForDisplay(key, value) {
+    if (!value) return '(not set)';
+    
+    // センシティブ情報はマスク表示
+    if (key.includes('SECRET') || key.includes('COGNITO_CLIENT_SECRET')) {
+        return `${value.substring(0, 8)}...`;
+    }
+    
+    return value;
 }
 
 /**

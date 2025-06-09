@@ -173,7 +173,8 @@ async function setupDnsForCustomDomain(config) {
     try {
         const { 
             environment, 
-            targetDomain,  // API Gatewayカスタムドメインのリージョナルドメイン名
+            customDomainName,  // CDK Outputから取得したカスタムドメイン名
+            targetDomain,      // CDK Outputから取得したターゲットドメイン名
             profile,
             dryRun = false, 
             debug = false 
@@ -196,13 +197,10 @@ async function setupDnsForCustomDomain(config) {
         // Initialize Cloudflare client
         const cloudflareClient = new CloudflareDnsClient(CLOUDFLARE_API_TOKEN, CLOUDFLARE_ZONE_ID);
 
-        // Generate DNS record name
-        const hostname = CUSTOM_DOMAINS.getApiDomain(environment);
-        
-        log.info(`Setting up DNS: ${hostname} -> ${targetDomain}`);
+        log.info(`Setting up DNS: ${customDomainName} -> ${targetDomain}`);
 
         // Update DNS record
-        const result = await cloudflareClient.updateDnsRecord(hostname, targetDomain, {
+        const result = await cloudflareClient.updateDnsRecord(customDomainName, targetDomain, {
             proxied: true,
             ttl: DEFAULT_DNS_TTL,
             dryRun,
@@ -214,14 +212,14 @@ async function setupDnsForCustomDomain(config) {
         
         if (result.action === 'created' || result.action === 'updated') {
             log.complete(`✅ DNS setup completed in ${duration}s`);
-            log.info(`API will be accessible at: https://${hostname}`);
+            log.info(`API will be accessible at: https://${customDomainName}`);
         } else if (result.action === 'no-change') {
             log.info(`DNS already configured correctly (${duration}s)`);
         }
 
         return {
             success: true,
-            hostname,
+            hostname: customDomainName,
             targetDomain,
             action: result.action,
             duration

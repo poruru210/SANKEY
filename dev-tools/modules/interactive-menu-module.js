@@ -34,12 +34,17 @@ const MENU_ITEMS = [
     {
         id: 'run-all',
         label: '🎯 Run All Steps (Complete Setup)',
-        description: 'Execute steps 1-3 in sequence'
+        description: 'Execute steps 1-4 in sequence (excluding test data)'
     },
     {
         id: 'generate-env-local',
         label: '📝 Generate .env.local (Local Development)',
         description: 'Create local environment file for development'
+    },
+    {
+        id: 'generate-test-data',
+        label: '🎲 Generate Test Data (DynamoDB)',
+        description: 'Create, delete, or reset test data in DynamoDB tables'
     },
     {
         id: 'exit',
