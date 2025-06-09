@@ -1,7 +1,6 @@
 const fs = require('fs').promises;
-const crypto = require('crypto');
 const { log } = require('../lib/logger');
-const { CUSTOM_DOMAINS, APP_URLS } = require('../lib/constants');
+const { CUSTOM_DOMAINS, APP_URLS, ENVIRONMENTS } = require('../lib/constants');
 
 /**
  * .env.local生成モジュール (dev環境専用)
@@ -89,7 +88,7 @@ async function updateLocalEnv(config) {
         const newSettings = [
             '',
             '# API Endpoint設定',
-            `NEXT_PUBLIC_API_ENDPOINT=https://${CUSTOM_DOMAINS.getApiDomain('dev')}`,
+            `NEXT_PUBLIC_API_ENDPOINT=https://${CUSTOM_DOMAINS.getApiDomain(ENVIRONMENTS.DEV)}`,
             '',
             '# Cognito設定',
             `COGNITO_CLIENT_ID=${awsConfig.COGNITO_CLIENT_ID}`,
@@ -208,7 +207,7 @@ async function createEnvBackup(envFilePath) {
 function displayConfigSummary(awsConfig) {
     log.info('📋 Configuration to be written:');
     
-    console.log(`   API Endpoint: https://${CUSTOM_DOMAINS.getApiDomain('dev')}`);
+    console.log(`   API Endpoint: https://${CUSTOM_DOMAINS.getApiDomain(ENVIRONMENTS.DEV)}`);
     console.log(`   Cognito Client ID: ${awsConfig.COGNITO_CLIENT_ID}`);
     console.log(`   Cognito Client Secret: ${awsConfig.COGNITO_CLIENT_SECRET.substring(0, 8)}...`);
     console.log(`   Cognito Issuer: ${awsConfig.COGNITO_ISSUER}`);
@@ -224,5 +223,31 @@ module.exports = {
     validateEnvContent,
     checkEnvFileExists,
     createEnvBackup,
-    displayConfigSummary
+    displayConfigSummary,
+    readAuthSecretFromEnvLocal
 };
+
+/**
+ * Reads AUTH_SECRET from .env.local file.
+ * @param {string} envFilePath - Path to the .env.local file.
+ * @returns {Promise<string|null>} AUTH_SECRET value or null if not found.
+ */
+async function readAuthSecretFromEnvLocal(envFilePath) {
+    try {
+        const envContent = await fs.readFile(envFilePath, 'utf8');
+        const authSecretMatch = envContent.match(/^AUTH_SECRET=(.+)$/m);
+        if (authSecretMatch) {
+            log.debug('Found AUTH_SECRET in .env.local', { debug: true });
+            // Remove potential quotes around the secret
+            return authSecretMatch[1].replace(/['"]/g, '');
+        }
+        return null;
+    } catch (error) {
+        if (error.code === 'ENOENT') {
+            log.debug(`File not found: ${envFilePath}`, { debug: true });
+        } else {
+            log.error(`Error reading ${envFilePath}: ${error.message}`);
+        }
+        return null;
+    }
+}

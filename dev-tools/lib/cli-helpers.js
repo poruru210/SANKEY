@@ -1,5 +1,6 @@
 const readline = require('readline');
 const { log, colors } = require('./logger');
+const { APPROVAL_MODES } = require('./constants');
 
 /**
  * ユーザー選択関数（スタック組み合わせ用）
@@ -9,7 +10,7 @@ const { log, colors } = require('./logger');
  */
 async function selectStackCombination(stackCombinations, options) {
     // 自動承認の場合
-    if (options.requireApproval === 'never' && stackCombinations.length === 1) {
+    if (options.requireApproval === APPROVAL_MODES.NEVER && stackCombinations.length === 1) {
         log.info(`🚀 Auto-selecting: ${stackCombinations[0].environment.toUpperCase()} Environment`);
         return stackCombinations[0];
     }
@@ -51,7 +52,7 @@ async function selectStackCombination(stackCombinations, options) {
  */
 async function selectUser(users, options) {
     // 自動承認またはユーザーが1人の場合
-    if ((options.requireApproval === 'never' && users.length === 1) || users.length === 1) {
+    if ((options.requireApproval === APPROVAL_MODES.NEVER && users.length === 1) || users.length === 1) {
         log.info(`🚀 Auto-selecting user: ${users[0].email}`);
         return users[0];
     }
@@ -286,13 +287,6 @@ class Timer {
         }
     }
 
-    /**
-     * 経過時間をログ出力
-     * @param {string} message - メッセージ
-     */
-    log(message = 'Operation completed') {
-        log.info(`${message} in ${this.elapsedFormatted()}`);
-    }
 }
 
 module.exports = {

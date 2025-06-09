@@ -3,7 +3,8 @@ const forge = require('node-forge');
 const { ACMClient, ImportCertificateCommand, ListCertificatesCommand, DescribeCertificateCommand } = require('@aws-sdk/client-acm');
 const { log, displaySection } = require('../lib/logger');
 const { saveCertificateArn } = require('./ssm-module');
-const { SSM_PARAMETERS, CERTIFICATE, CUSTOM_DOMAINS, AWS_REGIONS } = require('../lib/constants');
+const { SSM_PARAMETERS, CERTIFICATE, CUSTOM_DOMAINS, AWS_REGIONS, CLOUDFLARE_API } = require('../lib/constants');
+const { ConfigurationError, ApiError } = require('../lib/errors');
 
 /**
  * ワイルドカード証明書管理モジュール
@@ -17,7 +18,7 @@ class CloudflareClient {
     constructor(authConfig, zoneId) {
         this.authConfig = authConfig;
         this.zoneId = zoneId;
-        this.baseUrl = 'https://api.cloudflare.com/client/v4';
+        this.baseUrl = CLOUDFLARE_API.BASE_URL;
     }
 
     /**
@@ -29,17 +30,17 @@ class CloudflareClient {
         return new Promise((resolve, reject) => {
             const headers = {
                 'Content-Type': 'application/json',
-                'User-Agent': 'Sankey-Setup-Script/1.0'
+                'User-Agent': CLOUDFLARE_API.USER_AGENT
             };
 
             // Origin CA API 認証
             if (this.authConfig.originCaKey) {
                 headers['X-Auth-User-Service-Key'] = this.authConfig.originCaKey;
-            } else if (this.authConfig.apiToken && endpoint.includes('/certificates')) {
+            } else if (this.authConfig.apiToken && endpoint.includes(CLOUDFLARE_API.ENDPOINTS.CERTIFICATES)) {
                 // API Token でも証明書操作可能な場合
                 headers['Authorization'] = `Bearer ${this.authConfig.apiToken}`;
             } else {
-                reject(new Error('No valid authentication for certificate operations'));
+                reject(new ConfigurationError('No valid Cloudflare authentication provided for certificate operations. Set CLOUDFLARE_ORIGIN_CA_KEY or CLOUDFLARE_API_TOKEN.'));
                 return;
             }
 
@@ -65,17 +66,17 @@ class CloudflareClient {
                         if (parsed.success) {
                             resolve(parsed.result);
                         } else {
-                            const errors = parsed.errors?.map(e => `${e.code}: ${e.message}`).join(', ') || 'Unknown error';
-                            reject(new Error(`Cloudflare API error: ${errors}`));
+                            const errors = parsed.errors?.map(e => `${e.code}: ${e.message}`).join(', ') || `Status ${res.statusCode} - Unknown Cloudflare error`;
+                            reject(new ApiError(errors, 'Cloudflare Certificates', res.statusCode));
                         }
-                    } catch (error) {
-                        reject(new Error(`Failed to parse response: ${error.message}`));
+                    } catch (parseError) {
+                        reject(new ApiError(`Failed to parse Cloudflare API response: ${parseError.message}`, 'Cloudflare Certificates', res.statusCode, parseError));
                     }
                 });
             });
 
-            req.on('error', (error) => {
-                reject(new Error(`Request failed: ${error.message}`));
+            req.on('error', (networkError) => {
+                reject(new ApiError(`Cloudflare API request failed: ${networkError.message}`, 'Cloudflare Certificates', null, networkError));
             });
 
             if (data) {
@@ -90,7 +91,7 @@ class CloudflareClient {
      * List all Origin CA certificates
      */
     async listOriginCertificates() {
-        return await this.makeRequest('GET', `/certificates?zone_id=${this.zoneId}`);
+        return await this.makeRequest('GET', `${CLOUDFLARE_API.ENDPOINTS.CERTIFICATES}?zone_id=${this.zoneId}`);
     }
 
     /**
@@ -106,7 +107,7 @@ class CloudflareClient {
             request_type: 'origin-rsa'
         };
 
-        const result = await this.makeRequest('POST', '/certificates', data);
+        const result = await this.makeRequest('POST', CLOUDFLARE_API.ENDPOINTS.CERTIFICATES, data);
         
         return {
             ...result,
@@ -118,14 +119,14 @@ class CloudflareClient {
      * Get details of a specific Origin CA certificate
      */
     async getOriginCertificate(certificateId) {
-        return await this.makeRequest('GET', `/certificates/${certificateId}`);
+        return await this.makeRequest('GET', `${CLOUDFLARE_API.ENDPOINTS.CERTIFICATES}/${certificateId}`);
     }
 
     /**
      * Revoke an Origin CA certificate
      */
     async revokeOriginCertificate(certificateId) {
-        return await this.makeRequest('DELETE', `/certificates/${certificateId}`);
+        return await this.makeRequest('DELETE', `${CLOUDFLARE_API.ENDPOINTS.CERTIFICATES}/${certificateId}`);
     }
 }
 
@@ -221,7 +222,7 @@ async function findWildcardCertificate(cloudflareClient, options = {}) {
         
         // *.sankey.trade を含む証明書を検索
         const wildcardCert = certificates.find(cert => {
-            return cert.hostnames && cert.hostnames.some(h => h === '*.sankey.trade');
+            return cert.hostnames && cert.hostnames.some(h => h === CERTIFICATE.HOSTNAMES[0]); // Assuming '*.sankey.trade' is the first
         });
 
         if (wildcardCert) {
@@ -333,12 +334,12 @@ async function prepareWildcardCertificate(config) {
             authConfig.apiToken = process.env.CLOUDFLARE_API_TOKEN;
             log.debug('Using API Token authentication', { debug });
         } else {
-            throw new Error('Missing Cloudflare authentication. Set CLOUDFLARE_ORIGIN_CA_KEY or CLOUDFLARE_API_TOKEN');
+            throw new ConfigurationError('Missing Cloudflare authentication environment variables. Set CLOUDFLARE_ORIGIN_CA_KEY or CLOUDFLARE_API_TOKEN.');
         }
 
         const CLOUDFLARE_ZONE_ID = process.env.CLOUDFLARE_ZONE_ID;
         if (!CLOUDFLARE_ZONE_ID) {
-            throw new Error('CLOUDFLARE_ZONE_ID environment variable is required');
+            throw new ConfigurationError('CLOUDFLARE_ZONE_ID environment variable is required.');
         }
 
         // Initialize clients
@@ -436,13 +437,13 @@ async function prepareWildcardCertificate(config) {
                 acmClient,
                 certificate,
                 privateKey,
-                '*.sankey.trade',
+                CERTIFICATE.HOSTNAMES[0], // Assuming '*.sankey.trade'
                 { dryRun, debug }
             );
         } else {
             // 既存証明書の場合、ACMに存在するか確認
             displaySection('AWS Certificate Manager Check');
-            const existingAcmCert = await findExistingAcmCertificate(acmClient, '*.sankey.trade', { debug });
+            const existingAcmCert = await findExistingAcmCertificate(acmClient, CERTIFICATE.HOSTNAMES[0], { debug }); // Assuming '*.sankey.trade'
             
             if (existingAcmCert) {
                 certificateArn = existingAcmCert.CertificateArn;

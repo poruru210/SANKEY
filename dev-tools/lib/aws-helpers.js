@@ -1,6 +1,7 @@
 const { CloudFormationClient, DescribeStacksCommand } = require('@aws-sdk/client-cloudformation');
 const { CognitoIdentityProviderClient, DescribeUserPoolClientCommand, ListUsersCommand } = require('@aws-sdk/client-cognito-identity-provider');
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
+const { ConfigurationError, ApiError, ResourceNotFoundError } = require('./errors');
 
 /**
  * AWS クライアントの初期化
@@ -29,7 +30,7 @@ function createAwsClients(profile, region) {
             dynamo: dynamoClient
         };
     } catch (error) {
-        throw new Error(`Failed to initialize AWS clients: ${error.message}`);
+        throw new ConfigurationError(`Failed to initialize AWS clients for profile '${profile}'${region ? ` in region '${region}'` : ''}: ${error.message}`, error);
     }
 }
 
@@ -39,6 +40,8 @@ function createAwsClients(profile, region) {
  * @param {Object} options - Debug options
  * @returns {Array} Stack combinations
  */
+// Note: This function relies on specific stack naming conventions for the 'Sankey' project.
+// It expects stack names like 'SankeyDevAuthStack', 'SankeyProdApiStack', etc.
 async function findSankeyStacks(cloudFormationClient, options) {
     try {
         const command = new DescribeStacksCommand({});
@@ -100,7 +103,7 @@ async function findSankeyStacks(cloudFormationClient, options) {
         return combinations;
 
     } catch (error) {
-        throw new Error(`Failed to fetch CloudFormation stacks: ${error.message}`);
+        throw new ApiError(`Failed to fetch CloudFormation stacks: ${error.message}`, 'AWS CloudFormation', error.name, error);
     }
 }
 
@@ -118,7 +121,7 @@ async function getStackOutputs(cloudFormationClient, stackName, outputKeys, opti
         const response = await cloudFormationClient.send(command);
 
         if (!response.Stacks || response.Stacks.length === 0) {
-            throw new Error(`Stack not found: ${stackName}`);
+            throw new ResourceNotFoundError('CloudFormation Stack', stackName);
         }
 
         const stack = response.Stacks[0];
@@ -138,7 +141,8 @@ async function getStackOutputs(cloudFormationClient, stackName, outputKeys, opti
         return outputs;
 
     } catch (error) {
-        throw new Error(`Failed to get outputs from ${stackName}: ${error.message}`);
+        if (error instanceof ResourceNotFoundError) throw error;
+        throw new ApiError(`Failed to get outputs from CloudFormation stack '${stackName}': ${error.message}`, 'AWS CloudFormation', error.name, error);
     }
 }
 
@@ -160,7 +164,7 @@ async function getCognitoDetails(cognitoClient, userPoolId, userPoolClientId, op
         const response = await cognitoClient.send(command);
 
         if (!response.UserPoolClient) {
-            throw new Error('UserPoolClient not found');
+            throw new ResourceNotFoundError('Cognito UserPoolClient', userPoolClientId);
         }
 
         const client = response.UserPoolClient;
@@ -173,7 +177,8 @@ async function getCognitoDetails(cognitoClient, userPoolId, userPoolClientId, op
         };
 
     } catch (error) {
-        throw new Error(`Failed to get Cognito details: ${error.message}`);
+        if (error instanceof ResourceNotFoundError) throw error;
+        throw new ApiError(`Failed to get Cognito UserPoolClient details for '${userPoolClientId}': ${error.message}`, 'AWS Cognito', error.name, error);
     }
 }
 
@@ -207,7 +212,7 @@ async function findUserByEmail(cognitoClient, userPoolId, email) {
         return null;
 
     } catch (error) {
-        throw new Error(`Failed to find user by email: ${error.message}`);
+        throw new ApiError(`Failed to find user by email '${email}' in UserPool '${userPoolId}': ${error.message}`, 'AWS Cognito', error.name, error);
     }
 }
 
@@ -236,7 +241,7 @@ async function listAllUsers(cognitoClient, userPoolId) {
         });
 
     } catch (error) {
-        throw new Error(`Failed to list users: ${error.message}`);
+        throw new ApiError(`Failed to list users in UserPool '${userPoolId}': ${error.message}`, 'AWS Cognito', error.name, error);
     }
 }
 

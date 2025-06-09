@@ -1,5 +1,6 @@
 const { VercelClient, mapEnvironmentToVercel, generateVercelEnvironmentVariables } = require('../lib/vercel-helpers');
 const { log } = require('../lib/logger');
+const { VERCEL_ENVIRONMENTS, VERCEL_ENV_VAR_KEYS } = require('../lib/constants');
 
 /**
  * Vercel環境変数設定モジュール
@@ -192,8 +193,8 @@ async function getExistingAuthSecret(apiToken, projectId) {
         const vercelClient = new VercelClient(apiToken, projectId);
         
         // production環境からAUTH_SECRETを取得（共通値として使用）
-        const existingVars = await vercelClient.getEnvironmentVariables('production');
-        const authSecretVar = existingVars.find(v => v.key === 'AUTH_SECRET');
+        const existingVars = await vercelClient.getEnvironmentVariables(VERCEL_ENVIRONMENTS.PRODUCTION);
+        const authSecretVar = existingVars.find(v => v.key === VERCEL_ENV_VAR_KEYS.AUTH_SECRET);
         
         if (authSecretVar) {
             log.debug('Found existing AUTH_SECRET in production environment');
@@ -201,8 +202,8 @@ async function getExistingAuthSecret(apiToken, projectId) {
         }
 
         // preview環境も確認
-        const previewVars = await vercelClient.getEnvironmentVariables('preview');
-        const previewAuthSecret = previewVars.find(v => v.key === 'AUTH_SECRET');
+        const previewVars = await vercelClient.getEnvironmentVariables(VERCEL_ENVIRONMENTS.PREVIEW);
+        const previewAuthSecret = previewVars.find(v => v.key === VERCEL_ENV_VAR_KEYS.AUTH_SECRET);
         
         if (previewAuthSecret) {
             log.debug('Found existing AUTH_SECRET in preview environment');

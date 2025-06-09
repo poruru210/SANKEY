@@ -3,12 +3,19 @@
 require('dotenv').config();
 const { Command } = require('commander');
 const path = require('path');
-const crypto = require('crypto');
 
 // 共通ライブラリ
-const { log, displayTitle } = require('./lib/logger');
+const { log, displayTitle, colors } = require('./lib/logger'); // Added colors
 const { validateOptions, Timer } = require('./lib/cli-helpers');
-const { SSM_PARAMETERS } = require('./lib/constants');
+const {
+    SSM_PARAMETERS,
+    LOCAL_ENV_FILENAME,
+    ERROR_TYPES,
+    APPROVAL_MODES,
+    ENVIRONMENTS,
+    VERCEL_ENVIRONMENTS
+} = require('./lib/constants');
+const { BaseError, ConfigurationError, ApiError, CdkNotDeployedError, ResourceNotFoundError } = require('./lib/errors');
 
 // メニューシステム
 const { 
@@ -24,9 +31,9 @@ const {
 // 機能別モジュール
 const { getAwsConfiguration } = require('./modules/aws-config-module');
 const { setupCustomDomain } = require('./modules/custom-domain-module');
-const { updateLocalEnv } = require('./modules/env-local-module');
+const { updateLocalEnv, readAuthSecretFromEnvLocal } = require('./modules/env-local-module');
 const { updateVercelEnvironmentVariables, getExistingAuthSecret } = require('./modules/vercel-env-module');
-const { triggerDeployment } = require('./lib/vercel-helpers');
+const { triggerDeployment, generateAuthSecret } = require('./lib/vercel-helpers');
 
 // コマンドライン引数の設定
 const program = new Command();
@@ -52,31 +59,27 @@ program
  * AUTH_SECRETを取得または新規作成
  */
 async function getOrCreateAuthSecret(environment, envFilePath, vercelConfig) {
-    // 1. .env.localから取得を試行（dev環境のみ）
-    if (environment === 'dev') {
-        try {
-            const fs = require('fs').promises;
-            const envContent = await fs.readFile(envFilePath, 'utf8');
-            const authSecretMatch = envContent.match(/^AUTH_SECRET=(.+)$/m);
-            if (authSecretMatch) {
-                log.debug('Found existing AUTH_SECRET in .env.local', { debug: true });
-                return authSecretMatch[1].replace(/['"]/g, '');
-            }
-        } catch (error) {
-            log.debug('No existing .env.local file found', { debug: true });
+    let authSecret = null;
+
+    // 1. .env.localから取得を試行 (environment が 'dev' の場合のみ考慮)
+    if (environment === ENVIRONMENTS.DEV) {
+        authSecret = await readAuthSecretFromEnvLocal(envFilePath);
+        if (authSecret) {
+            log.debug('AUTH_SECRET found in .env.local', { debug: true });
+            return authSecret;
         }
     }
 
     // 2. Vercelから取得を試行
-    if (vercelConfig.apiToken && vercelConfig.projectId) {
+    if (vercelConfig && vercelConfig.apiToken && vercelConfig.projectId) {
         try {
-            const existingSecret = await getExistingAuthSecret(
-                vercelConfig.apiToken, 
+            authSecret = await getExistingAuthSecret(
+                vercelConfig.apiToken,
                 vercelConfig.projectId
             );
-            if (existingSecret) {
-                log.debug('Found existing AUTH_SECRET in Vercel', { debug: true });
-                return existingSecret;
+            if (authSecret) {
+                log.debug('AUTH_SECRET found in Vercel environment variables', { debug: true });
+                return authSecret;
             }
         } catch (error) {
             log.debug(`Failed to get AUTH_SECRET from Vercel: ${error.message}`, { debug: true });
@@ -84,7 +87,7 @@ async function getOrCreateAuthSecret(environment, envFilePath, vercelConfig) {
     }
 
     // 3. 新規生成
-    const newSecret = crypto.randomBytes(32).toString('base64');
+    const newSecret = generateAuthSecret();
     log.info('Generated new AUTH_SECRET');
     return newSecret;
 }
@@ -133,11 +136,6 @@ async function executeCertificatePreparation(context) {
     try {
         showProgress('Preparing wildcard certificate for *.sankey.trade');
 
-        // 環境変数チェック
-        if (!process.env.CLOUDFLARE_API_TOKEN || !process.env.CLOUDFLARE_ZONE_ID) {
-            throw new Error('Certificate preparation requires CLOUDFLARE_API_TOKEN and CLOUDFLARE_ZONE_ID');
-        }
-
         // 証明書モジュールが実装されたら以下を有効化
         const { prepareWildcardCertificate } = require('./modules/certificate-module');
         const result = await prepareWildcardCertificate(context);
@@ -167,29 +165,30 @@ async function executeEnvLocalGeneration(context) {
         try {
             awsConfig = await getAwsConfiguration({
                 profile: context.profile,
-                environment: 'dev',
+                environment: ENVIRONMENTS.DEV,
                 region: context.region,
                 debug: context.debug,
-                requireApproval: 'never'
+                requireApproval: APPROVAL_MODES.NEVER
             });
         } catch (error) {
             // CDK未デプロイの場合
-            console.log('');
-            log.error('❌ CDK has not been deployed yet!');
-            log.warning('AWS CloudFormation stacks not found or incomplete.');
-            console.log('');
-            console.log('📋 Required steps:');
-            console.log('   1. Deploy CDK stacks first:');
-            console.log(`      ${colors.cyan}npm run cdk:deploy:dev${colors.reset}`);
-            console.log('   2. After successful CDK deployment, run this setup again');
-            console.log('');
-            console.log('ℹ️  .env.local generation requires:');
-            console.log('   - Cognito Client ID and Secret from CDK');
-            console.log('   - API Gateway endpoint from CDK');
-            console.log('');
-            
-            await confirmContinue();
-            return { success: false, error: 'cdk-not-deployed' };
+            // TODO: aws-config-moduleが具体的なエラータイプ (例: CdkNotDeployedError) を返すように将来的に改善し、
+            //       ここでエラータイプを判別して、より適切なメッセージを表示することを検討。
+            //       現状は、getAwsConfigurationがエラーをスローするかnullを返した場合のメッセージに依存。
+            if (error instanceof CdkNotDeployedError) {
+                log.error(`❌ CDK not deployed for '${error.environment || ENVIRONMENTS.DEV}' environment.`);
+                if (error.missingResources && error.missingResources.length > 0) {
+                    log.warning(`Missing CDK resources: ${error.missingResources.join(', ')}`);
+                }
+                log.info('📋 Required steps:');
+                log.info(`   1. Deploy CDK stacks first: npm run cdk:deploy:${error.environment || ENVIRONMENTS.DEV}`);
+                log.info('   2. After successful CDK deployment, run this setup again.');
+                log.info('ℹ️  .env.local generation requires Cognito Client ID/Secret and API Gateway endpoint from CDK.');
+                await confirmContinue();
+                return { success: false, error: error };
+            }
+            // For other errors, let handleMenuError deal with them
+            throw error;
         }
 
         if (!awsConfig) {
@@ -197,9 +196,9 @@ async function executeEnvLocalGeneration(context) {
         }
 
         // AUTH_SECRET取得
-        const envFilePath = path.resolve(process.cwd(), '.env.local');
+        const envFilePath = path.resolve(process.cwd(), LOCAL_ENV_FILENAME);
         const authSecret = await getOrCreateAuthSecret(
-            'dev',
+            ENVIRONMENTS.DEV,
             envFilePath,
             { 
                 apiToken: process.env.VERCEL_TOKEN, 
@@ -238,12 +237,9 @@ async function executeVercelSetup(context) {
         const environment = context.environment || await selectEnvironment(context);
         showProgress(`Setting up Vercel environment variables for ${environment}`);
 
-        // 環境変数チェック
-        if (!process.env.VERCEL_TOKEN || !process.env.VERCEL_PROJECT_ID) {
-            throw new Error('Vercel setup requires VERCEL_TOKEN and VERCEL_PROJECT_ID');
-        }
-
         // AWS設定取得を試みる（CDKデプロイ確認）
+        // VERCEL_TOKEN と VERCEL_PROJECT_ID のチェックは、VercelClientの初期化や
+        // updateVercelEnvironmentVariables 関数内で行われることを期待。
         let awsConfig = null;
         try {
             awsConfig = await getAwsConfiguration({
@@ -251,34 +247,33 @@ async function executeVercelSetup(context) {
                 environment,
                 region: context.region,
                 debug: context.debug,
-                requireApproval: 'never'
+                requireApproval: APPROVAL_MODES.NEVER
             });
         } catch (error) {
             // CDK未デプロイの場合
-            console.log('');
-            log.error('❌ CDK has not been deployed yet!');
-            log.warning('AWS CloudFormation stacks not found or incomplete.');
-            console.log('');
-            console.log('📋 Required steps:');
-            console.log('   1. Deploy CDK stacks first:');
-            console.log(`      ${colors.cyan}npm run cdk:deploy:${environment}${colors.reset}`);
-            console.log('   2. After successful CDK deployment, run this setup again');
-            console.log('');
-            console.log('ℹ️  CDK deployment creates:');
-            console.log('   - Cognito User Pool and Client');
-            console.log('   - API Gateway');
-            console.log('   - DynamoDB tables');
-            console.log('   - Lambda functions');
-            console.log('');
-            
-            await confirmContinue();
-            return { success: false, error: 'cdk-not-deployed' };
+            // TODO: aws-config-moduleが具体的なエラータイプ (例: CdkNotDeployedError) を返すように将来的に改善し、
+            //       ここでエラータイプを判別して、より適切なメッセージを表示することを検討。
+            //       現状は、getAwsConfigurationがエラーをスローするかnullを返した場合のメッセージに依存。
+            if (error instanceof CdkNotDeployedError) {
+                log.error(`❌ CDK not deployed for '${error.environment || environment}' environment.`);
+                 if (error.missingResources && error.missingResources.length > 0) {
+                    log.warning(`Missing CDK resources: ${error.missingResources.join(', ')}`);
+                }
+                log.info('📋 Required steps:');
+                log.info(`   1. Deploy CDK stacks first: npm run cdk:deploy:${error.environment || environment}`);
+                log.info('   2. After successful CDK deployment, run this setup again.');
+                log.info('ℹ️  CDK deployment creates Cognito User Pool/Client, API Gateway, DynamoDB tables, and Lambda functions.');
+                await confirmContinue();
+                return { success: false, error: error };
+            }
+            // For other errors, let handleMenuError deal with them
+            throw error;
         }
 
         // AUTH_SECRET取得
         const authSecret = await getOrCreateAuthSecret(
             environment,
-            path.resolve(process.cwd(), '.env.local'),
+            path.resolve(process.cwd(), LOCAL_ENV_FILENAME),
             { 
                 apiToken: process.env.VERCEL_TOKEN, 
                 projectId: process.env.VERCEL_PROJECT_ID 
@@ -286,7 +281,7 @@ async function executeVercelSetup(context) {
         );
 
         // Vercel環境の決定
-        const vercelEnv = environment === 'prod' ? 'production' : 'preview';
+        const vercelEnv = environment === ENVIRONMENTS.PROD ? VERCEL_ENVIRONMENTS.PRODUCTION : VERCEL_ENVIRONMENTS.PREVIEW;
 
         // 環境変数更新
         const results = await updateVercelEnvironmentVariables({
@@ -326,16 +321,10 @@ async function executeVercelDeploy(context) {
         const environment = context.environment || await selectEnvironment(context);
         showProgress(`Triggering Vercel deployment for ${environment}`);
 
-        // 環境変数チェック
-        const deployHookVar = environment === 'prod' ? 'VERCEL_DEPLOY_HOOK_PROD' : 'VERCEL_DEPLOY_HOOK_DEV';
-        if (!process.env[deployHookVar]) {
-            throw new Error(`Deployment requires ${deployHookVar}`);
-        }
-
         // 確認
+        // デプロイフックURLのチェックは vercel-helpers.js の triggerDeployment 関数内で行われます。
         const confirmed = await confirmExecution('Vercel Deployment', {
-            Environment: environment,
-            'Deploy Hook': deployHookVar
+            Environment: environment
         });
 
         if (!confirmed) {
@@ -344,7 +333,7 @@ async function executeVercelDeploy(context) {
         }
 
         // デプロイ実行
-        const vercelEnv = environment === 'prod' ? 'production' : 'preview';
+        const vercelEnv = environment === ENVIRONMENTS.PROD ? VERCEL_ENVIRONMENTS.PRODUCTION : VERCEL_ENVIRONMENTS.PREVIEW;
         const deployResult = await triggerDeployment(vercelEnv, { debug: context.debug });
 
         log.success('✅ Vercel deployment triggered successfully');
@@ -386,7 +375,7 @@ async function executeAllSteps(context) {
                     }
                     results.vercel = await executeVercelSetup(context);
                     // CDK未デプロイエラーの場合は中断
-                    if (results.vercel && !results.vercel.success && results.vercel.error === 'cdk-not-deployed') {
+                    if (results.vercel && !results.vercel.success && results.vercel.error === ERROR_TYPES.CDK_NOT_DEPLOYED) {
                         log.error('Cannot continue without CDK deployment');
                         break;
                     }
@@ -526,30 +515,63 @@ async function main() {
             // 対話モード
             await runInteractiveMode(context);
         }
-
+        log.info(`🎉 Operation completed in ${timer.elapsedFormatted()}`);
     } catch (error) {
-        log.error(`Setup failed: ${error.message}`);
-
-        if (program.opts().debug) {
-            console.error('\n🔍 Debug Information:');
-            console.error(error.stack);
+        if (error instanceof CdkNotDeployedError) {
+            log.error(`❌ CDK Setup Incomplete: ${error.message}`);
+            log.warning(`Environment: ${error.environment || 'N/A'}`);
+            if (error.missingResources && error.missingResources.length > 0) {
+                log.warning(`Missing: ${error.missingResources.join(', ')}`);
+            }
+            log.info("Please ensure CDK resources are deployed before running this tool.");
+        } else if (error instanceof ConfigurationError) {
+            log.error(`❌ Configuration Error: ${error.message}`);
+            if (error.cause) log.warning(`Cause: ${error.cause}`);
+            log.info("Please check your environment variables and configuration files.");
+        } else if (error instanceof ApiError) {
+            log.error(`❌ API Error (${error.serviceName || 'Unknown Service'}): ${error.message}`);
+            if (error.statusCode) log.warning(`Status Code: ${error.statusCode}`);
+            if (error.cause) log.warning(`Cause: ${error.cause}`);
+        } else if (error instanceof ResourceNotFoundError) {
+            log.error(`❌ Resource Not Found: ${error.message}`);
+        } else if (error instanceof BaseError) { // Catch any other custom errors
+            log.error(`❌ An operation failed: ${error.message}`);
+            if (error.cause) log.warning(`Cause: ${error.cause}`);
+        }
+        else {
+            log.error(`An unexpected error occurred during setup: ${error.message}`);
         }
 
+        if (program.opts().debug && error.stack) {
+            console.error('\n🔍 Debug Information (Stack Trace):');
+            console.error(error.stack);
+        }
         process.exit(1);
     }
 }
 
-// エラーハンドリング
+// グローバルエラーハンドリング (主に予期せぬエラーや非同期処理の漏れをキャッチ)
 process.on('uncaughtException', (error) => {
-    log.error(`Uncaught exception: ${error.message}`);
-    if (program.opts()?.debug) {
+    log.error(`💥 Uncaught Exception: ${error.message}`);
+    if (program.opts()?.debug && error.stack) {
         console.error(error.stack);
     }
     process.exit(1);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-    log.error(`Unhandled rejection: ${reason}`);
+    log.error(`💥 Unhandled Rejection:`);
+    if (reason instanceof Error) {
+        log.error(`  Message: ${reason.message}`);
+        if (program.opts()?.debug && reason.stack) {
+            console.error(reason.stack);
+        }
+    } else {
+        log.error(reason);
+    }
+    promise.catch(err => { // Attach a catch handler to the promise to avoid further unhandled rejections
+        log.error(`  (Promise rejection caught)`);
+    });
     process.exit(1);
 });
 
