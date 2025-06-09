@@ -37,7 +37,7 @@ const repository = new EAApplicationRepository(docClient);
 
 // Master Key の取得関数
 async function getUserMasterKey(userId: string): Promise<CryptoKey> {
-    const paramName = `${process.env.SSM_PREFIX}/${userId}/master-key`;
+    const paramName = `${process.env.SSM_USER_PREFIX}/${userId}/master-key`;
 
     try {
         const { Parameter } = await ssmClient.send(

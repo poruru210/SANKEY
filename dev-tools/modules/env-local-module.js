@@ -1,6 +1,6 @@
 const fs = require('fs').promises;
-const crypto = require('crypto');
 const { log } = require('../lib/logger');
+const { CUSTOM_DOMAINS, APP_URLS, ENVIRONMENTS } = require('../lib/constants');
 
 /**
  * .env.local生成モジュール (dev環境専用)
@@ -56,7 +56,7 @@ async function updateLocalEnv(config) {
         });
 
         // 連続する空行を1つにまとめる
-        const cleanedContent = [];
+        let cleanedContent = [];
         let lastWasEmpty = false;
 
         for (const line of filteredContent) {
@@ -79,16 +79,16 @@ async function updateLocalEnv(config) {
             }
             cleanedContent.push(`AUTH_SECRET="${awsConfig.authSecret}"`);
         }
-
+       
         // ✅ NEXTAUTH_URL を常に上書き
         cleanedContent = cleanedContent.filter(line => !line.startsWith('NEXTAUTH_URL='));
-        cleanedContent.push(`NEXTAUTH_URL=http://localhost:3000`);
-
+        cleanedContent.push(`NEXTAUTH_URL=${APP_URLS.LOCAL}`);
+    
         // 新しい設定を追加
         const newSettings = [
             '',
             '# API Endpoint設定',
-            `NEXT_PUBLIC_API_ENDPOINT=https://api-dev.sankey.trade`,
+            `NEXT_PUBLIC_API_ENDPOINT=https://${CUSTOM_DOMAINS.getApiDomain(ENVIRONMENTS.DEV)}`,
             '',
             '# Cognito設定',
             `COGNITO_CLIENT_ID=${awsConfig.COGNITO_CLIENT_ID}`,
@@ -103,7 +103,7 @@ async function updateLocalEnv(config) {
                 '# Cognito Logout設定',
                 `NEXT_PUBLIC_COGNITO_DOMAIN=${awsConfig.NEXT_PUBLIC_COGNITO_DOMAIN}`,
                 `NEXT_PUBLIC_COGNITO_CLIENT_ID=${awsConfig.COGNITO_CLIENT_ID}`,
-                `NEXT_PUBLIC_APP_URL=http://localhost:3000`
+                `NEXT_PUBLIC_APP_URL=${APP_URLS.LOCAL}`
             );
         }
 
@@ -207,14 +207,14 @@ async function createEnvBackup(envFilePath) {
 function displayConfigSummary(awsConfig) {
     log.info('📋 Configuration to be written:');
     
-    console.log(`   API Endpoint: https://api-dev.sankey.trade`);
+    console.log(`   API Endpoint: https://${CUSTOM_DOMAINS.getApiDomain(ENVIRONMENTS.DEV)}`);
     console.log(`   Cognito Client ID: ${awsConfig.COGNITO_CLIENT_ID}`);
     console.log(`   Cognito Client Secret: ${awsConfig.COGNITO_CLIENT_SECRET.substring(0, 8)}...`);
     console.log(`   Cognito Issuer: ${awsConfig.COGNITO_ISSUER}`);
     
     if (awsConfig.NEXT_PUBLIC_COGNITO_DOMAIN) {
         console.log(`   Cognito Domain: ${awsConfig.NEXT_PUBLIC_COGNITO_DOMAIN}`);
-        console.log(`   App URL: http://localhost:3000`);
+        console.log(`   App URL: ${APP_URLS.LOCAL}`);
     }
 }
 
@@ -223,5 +223,31 @@ module.exports = {
     validateEnvContent,
     checkEnvFileExists,
     createEnvBackup,
-    displayConfigSummary
+    displayConfigSummary,
+    readAuthSecretFromEnvLocal
 };
+
+/**
+ * Reads AUTH_SECRET from .env.local file.
+ * @param {string} envFilePath - Path to the .env.local file.
+ * @returns {Promise<string|null>} AUTH_SECRET value or null if not found.
+ */
+async function readAuthSecretFromEnvLocal(envFilePath) {
+    try {
+        const envContent = await fs.readFile(envFilePath, 'utf8');
+        const authSecretMatch = envContent.match(/^AUTH_SECRET=(.+)$/m);
+        if (authSecretMatch) {
+            log.debug('Found AUTH_SECRET in .env.local', { debug: true });
+            // Remove potential quotes around the secret
+            return authSecretMatch[1].replace(/['"]/g, '');
+        }
+        return null;
+    } catch (error) {
+        if (error.code === 'ENOENT') {
+            log.debug(`File not found: ${envFilePath}`, { debug: true });
+        } else {
+            log.error(`Error reading ${envFilePath}: ${error.message}`);
+        }
+        return null;
+    }
+}

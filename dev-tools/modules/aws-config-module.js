@@ -1,6 +1,8 @@
 const { createAwsClients, findSankeyStacks, getStackOutputs, getCognitoDetails } = require('../lib/aws-helpers');
 const { log } = require('../lib/logger');
 const { selectStackCombination } = require('../lib/cli-helpers');
+const { CLOUDFORMATION_OUTPUT_KEYS, AWS_REGIONS, COGNITO, ENVIRONMENTS } = require('../lib/constants');
+const { ConfigurationError, CdkNotDeployedError, ResourceNotFoundError } = require('../lib/errors');
 
 /**
  * AWS設定取得モジュール
@@ -25,7 +27,7 @@ async function getAwsConfiguration(options) {
         let stackCombinations = await findSankeyStacks(clients.cloudFormation, options);
 
         if (stackCombinations.length === 0) {
-            throw new Error('No Sankey stacks found. Please check stack naming convention and AWS region/profile settings');
+            throw new CdkNotDeployedError(['Sankey Stacks'], options.environment, new Error('findSankeyStacks returned no combinations.'));
         }
 
         log.debug(`Found ${stackCombinations.length} stack combination(s)`, options);
@@ -37,7 +39,7 @@ async function getAwsConfiguration(options) {
             );
             
             if (stackCombinations.length === 0) {
-                throw new Error(`No stacks found for environment: ${options.environment}`);
+                throw new CdkNotDeployedError([`Sankey Stacks for ${options.environment}`], options.environment, new Error(`No stack combinations found matching environment: ${options.environment}`));
             }
         }
 
@@ -58,7 +60,10 @@ async function getAwsConfiguration(options) {
         return config;
 
     } catch (error) {
-        throw new Error(`Failed to get AWS configuration: ${error.message}`);
+        if (error instanceof CdkNotDeployedError || error instanceof ConfigurationError) {
+            throw error;
+        }
+        throw new ConfigurationError(`Failed to get AWS configuration: ${error.message}`, error);
     }
 }
 
@@ -74,76 +79,109 @@ async function retrieveStackConfigurations(clients, stackCombination, options) {
         log.debug('Retrieving configuration from stacks...', options);
 
         // AuthStackからの設定取得
+        const authOutputKeys = [
+            CLOUDFORMATION_OUTPUT_KEYS.USER_POOL_ID,
+            CLOUDFORMATION_OUTPUT_KEYS.COGNITO_CLIENT_ID,
+            CLOUDFORMATION_OUTPUT_KEYS.COGNITO_DOMAIN_URL
+        ];
         const authOutputs = await getStackOutputs(
             clients.cloudFormation,
             stackCombination.authStack.StackName,
-            ['UserPoolId', 'UserPoolClientId', 'UserPoolDomainUrl'],
+            authOutputKeys,
             options
         );
 
         // APIStackからの設定取得
+        const apiOutputKeys = [
+            CLOUDFORMATION_OUTPUT_KEYS.API_ENDPOINT,
+            CLOUDFORMATION_OUTPUT_KEYS.API_ID,
+            CLOUDFORMATION_OUTPUT_KEYS.CUSTOM_DOMAIN_NAME,
+            CLOUDFORMATION_OUTPUT_KEYS.CUSTOM_DOMAIN_TARGET
+        ];
         const apiOutputs = await getStackOutputs(
             clients.cloudFormation,
             stackCombination.apiStack.StackName,
-            ['ApiEndpoint', 'ApiId'],
+            apiOutputKeys,
             options
         );
 
         // 必須の設定値チェック
-        if (!authOutputs.UserPoolId || !authOutputs.UserPoolClientId) {
-            throw new Error('Required Auth stack outputs not found (UserPoolId, UserPoolClientId)');
+        const requiredAuthKeys = [CLOUDFORMATION_OUTPUT_KEYS.USER_POOL_ID, CLOUDFORMATION_OUTPUT_KEYS.COGNITO_CLIENT_ID];
+        const missingAuthKeys = requiredAuthKeys.filter(key => !authOutputs[key]);
+        if (missingAuthKeys.length > 0) {
+            throw new CdkNotDeployedError(missingAuthKeys.map(k => `AuthStack Output: ${k}`), stackCombination.environment, new Error(`Missing required outputs from ${stackCombination.authStack.StackName}`));
         }
 
-        if (!apiOutputs.ApiEndpoint) {
-            throw new Error('Required API stack output not found (ApiEndpoint)');
+        if (!apiOutputs[CLOUDFORMATION_OUTPUT_KEYS.API_ENDPOINT]) {
+            throw new CdkNotDeployedError([`APIStack Output: ${CLOUDFORMATION_OUTPUT_KEYS.API_ENDPOINT}`], stackCombination.environment, new Error(`Missing required output ${CLOUDFORMATION_OUTPUT_KEYS.API_ENDPOINT} from ${stackCombination.apiStack.StackName}`));
         }
 
         // Cognito詳細取得
         log.debug('Retrieving Cognito client details...', options);
         const cognitoDetails = await getCognitoDetails(
             clients.cognito,
-            authOutputs.UserPoolId,
-            authOutputs.UserPoolClientId,
+            authOutputs[CLOUDFORMATION_OUTPUT_KEYS.USER_POOL_ID],
+            authOutputs[CLOUDFORMATION_OUTPUT_KEYS.COGNITO_CLIENT_ID],
             options
         );
 
         if (!cognitoDetails.clientSecret) {
-            throw new Error('Cognito Client Secret not found. Make sure the User Pool Client has a secret generated.');
+            throw new ConfigurationError(
+                'Cognito Client Secret not found. Make sure the User Pool Client has a secret generated.',
+                new Error(`Client ID: ${authOutputs[CLOUDFORMATION_OUTPUT_KEYS.COGNITO_CLIENT_ID]}`)
+            );
         }
 
         // 設定値の組み立て
-        const region = options.region || process.env.AWS_DEFAULT_REGION || 'ap-northeast-1';
-        const cognitoIssuer = `https://cognito-idp.${region}.amazonaws.com/${authOutputs.UserPoolId}`;
+        const region = options.region || process.env.AWS_DEFAULT_REGION || AWS_REGIONS.DEFAULT;
+        const cognitoIssuerBase = COGNITO.ISSUER_BASE_URL_TEMPLATE.replace('{region}', region);
+        const cognitoIssuer = `${cognitoIssuerBase}${authOutputs[CLOUDFORMATION_OUTPUT_KEYS.USER_POOL_ID]}`;
         
-        // API エンドポイントの正規化（末尾スラッシュ削除）
-        const apiEndpoint = apiOutputs.ApiEndpoint.replace(/\/$/, '');
+        // API エンドポイントの決定（Vercel用）
+        // カスタムドメインが設定されている場合はそれを優先、未設定の場合はCDK ApiEndpointを使用
+        let apiEndpoint;
+        if (apiOutputs[CLOUDFORMATION_OUTPUT_KEYS.CUSTOM_DOMAIN_NAME]) {
+            apiEndpoint = `https://${apiOutputs[CLOUDFORMATION_OUTPUT_KEYS.CUSTOM_DOMAIN_NAME]}`;
+            log.debug(`Using custom domain for API endpoint: ${apiEndpoint}`, options);
+        } else {
+            // CDK ApiEndpointから末尾スラッシュを削除
+            apiEndpoint = apiOutputs[CLOUDFORMATION_OUTPUT_KEYS.API_ENDPOINT].replace(/\/$/, '');
+            log.debug(`Using CDK API endpoint: ${apiEndpoint}`, options);
+        }
 
         const configValues = {
             // API Gateway設定
             NEXT_PUBLIC_API_ENDPOINT: apiEndpoint,
-            ApiId: apiOutputs.ApiId,
+            ApiId: apiOutputs[CLOUDFORMATION_OUTPUT_KEYS.API_ID],
 
             // Cognito設定
-            COGNITO_CLIENT_ID: authOutputs.UserPoolClientId,
+            COGNITO_CLIENT_ID: authOutputs[CLOUDFORMATION_OUTPUT_KEYS.COGNITO_CLIENT_ID],
             COGNITO_CLIENT_SECRET: cognitoDetails.clientSecret,
             COGNITO_ISSUER: cognitoIssuer,
             
             // Cognito詳細情報
-            userPoolId: authOutputs.UserPoolId,
-            region: region
+            userPoolId: authOutputs[CLOUDFORMATION_OUTPUT_KEYS.USER_POOL_ID],
+            region: region,
+
+            // カスタムドメイン設定（新規追加）
+            customDomainName: apiOutputs[CLOUDFORMATION_OUTPUT_KEYS.CUSTOM_DOMAIN_NAME],
+            customDomainTarget: apiOutputs[CLOUDFORMATION_OUTPUT_KEYS.CUSTOM_DOMAIN_TARGET]
         };
 
         // Cognito Domain設定（オプション）
-        if (authOutputs.UserPoolDomainUrl) {
-            configValues.NEXT_PUBLIC_COGNITO_DOMAIN = authOutputs.UserPoolDomainUrl;
-            configValues.NEXT_PUBLIC_COGNITO_CLIENT_ID = authOutputs.UserPoolClientId;
+        if (authOutputs[CLOUDFORMATION_OUTPUT_KEYS.COGNITO_DOMAIN_URL]) {
+            configValues.NEXT_PUBLIC_COGNITO_DOMAIN = authOutputs[CLOUDFORMATION_OUTPUT_KEYS.COGNITO_DOMAIN_URL];
+            configValues.NEXT_PUBLIC_COGNITO_CLIENT_ID = authOutputs[CLOUDFORMATION_OUTPUT_KEYS.COGNITO_CLIENT_ID];
         }
 
         log.debug('Configuration values retrieved successfully', options);
         return configValues;
 
     } catch (error) {
-        throw new Error(`Failed to retrieve stack configurations: ${error.message}`);
+        if (error instanceof CdkNotDeployedError || error instanceof ConfigurationError) {
+            throw error;
+        }
+        throw new ConfigurationError(`Failed to retrieve stack configurations for ${stackCombination.environment}: ${error.message}`, error);
     }
 }
 
@@ -164,7 +202,7 @@ function validateAwsConfiguration(config) {
     const missing = requiredFields.filter(field => !config[field]);
     
     if (missing.length > 0) {
-        throw new Error(`Missing required configuration fields: ${missing.join(', ')}`);
+        throw new ConfigurationError(`Missing required AWS configuration fields: ${missing.join(', ')}`);
     }
 
     return true;

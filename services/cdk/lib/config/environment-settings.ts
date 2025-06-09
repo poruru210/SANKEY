@@ -25,12 +25,12 @@ export class EnvironmentConfig {
             auth: {
                 authDomainPrefix: 'sankey-auth-dev',
                 callbackUrls: [
-                    'http://localhost:3000/api/auth/callback/cognito',
                     'https://dev.sankey.trade/api/auth/callback/cognito',
+                    'http://localhost:3000/api/auth/callback/cognito',
                 ],
                 logoutUrls: [
-                    'http://localhost:3000/login',
                     'https://dev.sankey.trade/login',
+                    'http://localhost:3000/login',
                 ],
             },
 
@@ -59,6 +59,7 @@ export class EnvironmentConfig {
             notification: {
                 emailFromAddress: 'noreply@sankey.trade',
                 defaultTtlMonths: 3,
+                sqsDelaySeconds: 30,
             },
         },
         prod: {
@@ -70,14 +71,14 @@ export class EnvironmentConfig {
             // セキュリティ設定
             security: {
                 enableDeletionProtection: true,
-                corsOrigins: ['https://sankey.trade'],
+                corsOrigins: ['https://www.sankey.trade'],
             },
 
             // 認証設定
             auth: {
                 authDomainPrefix: 'sankey-auth',
-                callbackUrls: ['https://sankey.trade/api/auth/callback/cognito'],
-                logoutUrls: ['https://sankey.trade/login'],
+                callbackUrls: ['https://www.sankey.trade/api/auth/callback/cognito'],
+                logoutUrls: ['https://www.sankey.trade/login'],
             },
 
             // Lambda設定
@@ -105,6 +106,7 @@ export class EnvironmentConfig {
             notification: {
                 emailFromAddress: 'noreply@sankey.trade',
                 defaultTtlMonths: 12,
+                sqsDelaySeconds: 300,  // 本番環境は5分（300秒）
             },
         },
     };
@@ -137,19 +139,5 @@ export class EnvironmentConfig {
      */
     static isProduction(environment: string): boolean {
         return environment === 'prod';
-    }
-
-    /**
-     * 環境が開発環境かどうかを判定
-     */
-    static isDevelopment(environment: string): boolean {
-        return environment === 'dev';
-    }
-
-    /**
-     * 環境がステージング環境かどうかを判定
-     */
-    static isStaging(environment: string): boolean {
-        return environment === 'staging';
     }
 }

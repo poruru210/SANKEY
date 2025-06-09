@@ -3,18 +3,39 @@
 require('dotenv').config();
 const { Command } = require('commander');
 const path = require('path');
-const crypto = require('crypto');
 
 // 共通ライブラリ
-const { log, displayTitle } = require('./lib/logger');
+const { log, displayTitle, colors } = require('./lib/logger'); // Added colors
 const { validateOptions, Timer } = require('./lib/cli-helpers');
+const {
+    SSM_PARAMETERS,
+    LOCAL_ENV_FILENAME,
+    ERROR_TYPES,
+    APPROVAL_MODES,
+    ENVIRONMENTS,
+    VERCEL_ENVIRONMENTS,
+    CUSTOM_DOMAINS
+} = require('./lib/constants');
+const { BaseError, ConfigurationError, ApiError, CdkNotDeployedError, ResourceNotFoundError } = require('./lib/errors');
+
+// メニューシステム
+const { 
+    displayMainMenu, 
+    selectEnvironment, 
+    confirmExecution, 
+    confirmContinue,
+    handleMenuError,
+    showProgress,
+    getBatchMenuItems
+} = require('./modules/interactive-menu-module');
 
 // 機能別モジュール
 const { getAwsConfiguration } = require('./modules/aws-config-module');
-const { setupCustomDomain } = require('./modules/custom-domain-module');
-const { updateLocalEnv } = require('./modules/env-local-module');
+const { updateLocalEnv, readAuthSecretFromEnvLocal } = require('./modules/env-local-module');
 const { updateVercelEnvironmentVariables, getExistingAuthSecret } = require('./modules/vercel-env-module');
-const { triggerDeployment } = require('./lib/vercel-helpers');
+const { triggerDeployment, generateAuthSecret } = require('./lib/vercel-helpers');
+const { setupDnsForCustomDomain } = require('./modules/custom-domain-module');
+const { executeTestDataWorkflow } = require('./modules/test-data-module');
 
 // コマンドライン引数の設定
 const program = new Command();
@@ -22,55 +43,47 @@ const program = new Command();
 program
     .name('setup-environment')
     .description('Complete environment setup: AWS + Custom Domain + .env.local + Vercel')
-    .version('1.0.0')
+    .version('1.1.0')
     .requiredOption('-p, --profile <profile>', 'AWS SSO profile name')
-    .option('-e, --environment <env>', 'Environment to setup (dev/prod)')
     .option('-r, --region <region>', 'AWS region (defaults to profile default)')
-    .option('--vercel-env <env>', 'Vercel environment (preview/production)', 'auto')
-    .option('--env-file <file>', 'Environment file path', '.env.local')
-    .option('--skip-custom-domain', 'Skip custom domain setup')
-    .option('--skip-env-local', 'Skip .env.local generation')
-    .option('--skip-vercel', 'Skip Vercel environment variables')
-    .option('--skip-deploy', 'Skip Vercel deployment (even with --force-update)')
+    .option('--debug', 'Enable debug output')
+    // 直接実行モード用（後方互換性）
+    .option('--prepare-certificate', 'Prepare wildcard certificate only')
+    .option('--setup-custom-domain', 'Setup custom domain DNS only')
+    .option('--generate-env-local', 'Generate .env.local only')
+    .option('--setup-vercel', 'Setup Vercel environment variables only')
+    .option('--trigger-deploy', 'Trigger Vercel deployment only')
+    .option('--generate-test-data', 'Generate test data only')
+    .option('--run-all', 'Run all steps')
+    .option('-e, --environment <env>', 'Environment for direct execution (dev/prod)')
     .option('--force-update', 'Force update existing configurations')
-    .option('--dry-run', 'Show what would be done without making changes')
-    .option('--require-approval <type>', 'Require approval for changes', 'always')
-    .option('--debug', 'Enable debug output');
+    .option('--dry-run', 'Show what would be done without making changes');
 
 /**
  * AUTH_SECRETを取得または新規作成
- * @param {string} environment - 環境 (dev/prod)
- * @param {string} envFilePath - .env.localファイルパス
- * @param {Object} vercelConfig - Vercel設定 {apiToken, projectId}
- * @returns {string} AUTH_SECRET
  */
 async function getOrCreateAuthSecret(environment, envFilePath, vercelConfig) {
-    
-    // 1. .env.localから取得を試行（dev環境のみ）
-    if (environment === 'dev') {
-        try {
-            const fs = require('fs').promises;
-            const envContent = await fs.readFile(envFilePath, 'utf8');
-            const authSecretMatch = envContent.match(/^AUTH_SECRET=(.+)$/m);
-            if (authSecretMatch) {
-                log.debug('Found existing AUTH_SECRET in .env.local', { debug: true });
-                return authSecretMatch[1].replace(/['"]/g, ''); // クォート除去
-            }
-        } catch (error) {
-            log.debug('No existing .env.local file found', { debug: true });
+    let authSecret = null;
+
+    // 1. .env.localから取得を試行 (environment が 'dev' の場合のみ考慮)
+    if (environment === ENVIRONMENTS.DEV) {
+        authSecret = await readAuthSecretFromEnvLocal(envFilePath);
+        if (authSecret) {
+            log.debug('AUTH_SECRET found in .env.local', { debug: true });
+            return authSecret;
         }
     }
 
     // 2. Vercelから取得を試行
-    if (vercelConfig.apiToken && vercelConfig.projectId) {
+    if (vercelConfig && vercelConfig.apiToken && vercelConfig.projectId) {
         try {
-            const existingSecret = await getExistingAuthSecret(
-                vercelConfig.apiToken, 
+            authSecret = await getExistingAuthSecret(
+                vercelConfig.apiToken,
                 vercelConfig.projectId
             );
-            if (existingSecret) {
-                log.debug('Found existing AUTH_SECRET in Vercel', { debug: true });
-                return existingSecret;
+            if (authSecret) {
+                log.debug('AUTH_SECRET found in Vercel environment variables', { debug: true });
+                return authSecret;
             }
         } catch (error) {
             log.debug(`Failed to get AUTH_SECRET from Vercel: ${error.message}`, { debug: true });
@@ -78,7 +91,7 @@ async function getOrCreateAuthSecret(environment, envFilePath, vercelConfig) {
     }
 
     // 3. 新規生成
-    const newSecret = crypto.randomBytes(32).toString('base64');
+    const newSecret = generateAuthSecret();
     log.info('Generated new AUTH_SECRET');
     return newSecret;
 }
@@ -86,76 +99,551 @@ async function getOrCreateAuthSecret(environment, envFilePath, vercelConfig) {
 /**
  * 環境変数の検証
  */
-function validateEnvironmentVariables(options) {
-    const required = [];
+function validateEnvironmentVariables() {
+    const warnings = [];
 
-    // Vercelが有効でDeploy Hookが有効な場合
-    if (!options.skipVercel) {
-        const deployHookProd = process.env.VERCEL_DEPLOY_HOOK_PROD;
-        const deployHookDev = process.env.VERCEL_DEPLOY_HOOK_DEV;
+    // 証明書準備に必要な環境変数
+    if (!process.env.CLOUDFLARE_API_TOKEN) {
+        warnings.push('CLOUDFLARE_API_TOKEN - Required for certificate preparation');
+    }
+    if (!process.env.CLOUDFLARE_ZONE_ID) {
+        warnings.push('CLOUDFLARE_ZONE_ID - Required for certificate preparation');
+    }
+
+    // Vercel関連
+    if (!process.env.VERCEL_TOKEN) {
+        warnings.push('VERCEL_TOKEN - Required for Vercel operations');
+    }
+    if (!process.env.VERCEL_PROJECT_ID) {
+        warnings.push('VERCEL_PROJECT_ID - Required for Vercel operations');
+    }
+    if (!process.env.VERCEL_DEPLOY_HOOK_DEV) {
+        warnings.push('VERCEL_DEPLOY_HOOK_DEV - Required for dev deployment');
+    }
+    if (!process.env.VERCEL_DEPLOY_HOOK_PROD) {
+        warnings.push('VERCEL_DEPLOY_HOOK_PROD - Required for prod deployment');
+    }
+
+    if (warnings.length > 0) {
+        log.warning('Missing environment variables:');
+        warnings.forEach(warning => console.log(`   ⚠️  ${warning}`));
+        console.log('\n   Please set these in your .env file to enable all features.\n');
+    }
+
+    return warnings;
+}
+
+/**
+ * 証明書準備処理
+ */
+async function executeCertificatePreparation(context) {
+    try {
+        showProgress('Preparing wildcard certificate for *.sankey.trade');
+
+        // 証明書モジュールが実装されたら以下を有効化
+        const { prepareWildcardCertificate } = require('./modules/certificate-module');
+        const result = await prepareWildcardCertificate(context);
         
-        if (!deployHookDev) {
-            required.push('VERCEL_DEPLOY_HOOK_DEV');
+        if (result.success && !result.renewed) {
+            log.info(`Certificate is valid for ${result.daysUntilExpiration} more days - no action needed`);
         }
-        if (!deployHookProd) {
-            required.push('VERCEL_DEPLOY_HOOK_PROD');
-        }
-    }
+        
+        await confirmContinue();
+        return { success: true };
 
-    // Custom Domainが有効な場合の必須環境変数
-    if (!options.skipCustomDomain) {
-        if (!process.env.CLOUDFLARE_API_TOKEN) {
-            required.push('CLOUDFLARE_API_TOKEN');
-        }
-        if (!process.env.CLOUDFLARE_ZONE_ID) {
-            required.push('CLOUDFLARE_ZONE_ID');
-        }
-    }
-
-    if (required.length > 0) {
-        log.error(`Missing required environment variables: ${required.join(', ')}`);
-        log.warning('Please set these variables in your .env file or environment');
-        process.exit(1);
+    } catch (error) {
+        await handleMenuError(error, { showStack: context.debug });
+        return { success: false, error };
     }
 }
 
 /**
- * Vercel環境の自動決定
+ * カスタムドメイン DNS設定処理
  */
-function determineVercelEnvironment(environment, vercelEnvOption) {
-    if (vercelEnvOption !== 'auto') {
-        return vercelEnvOption;
-    }
+async function executeCustomDomainSetup(context) {
+    try {
+        // 環境選択
+        const environment = context.environment || await selectEnvironment(context);
+        showProgress(`Setting up custom domain DNS for ${environment} environment`);
 
-    const mapping = {
-        'dev': 'preview',
-        'prod': 'production'
+        // 1. AWS設定取得（CDK Outputsからカスタムドメイン情報を含む）
+        log.info('🔍 Retrieving custom domain configuration from CDK...');
+        const awsConfig = await getAwsConfiguration({
+            profile: context.profile,
+            environment,
+            region: context.region,
+            debug: context.debug,
+            requireApproval: APPROVAL_MODES.NEVER
+        });
+
+        // 2. カスタムドメイン情報の検証
+        if (!awsConfig.customDomainName || !awsConfig.customDomainTarget) {
+            throw new CdkNotDeployedError(
+                ['CustomDomainName', 'CustomDomainNameTarget'],
+                environment,
+                new Error(`Custom domain configuration not found in CDK outputs. Ensure API Gateway custom domain is deployed.`)
+            );
+        }
+
+        const customDomainName = awsConfig.customDomainName;
+        const targetDomain = awsConfig.customDomainTarget;
+        
+        log.info(`📡 Target mapping: ${customDomainName} -> ${targetDomain}`);
+
+        // 3. 実行確認
+        const confirmed = await confirmExecution('Custom Domain DNS Setup', {
+            Environment: environment,
+            'Custom Domain': customDomainName,
+            'Target (Regional Domain)': targetDomain,
+            'DNS Provider': 'Cloudflare'
+        });
+
+        if (!confirmed) {
+            log.info('DNS setup cancelled');
+            return { success: false, cancelled: true };
+        }
+
+        // 4. DNS設定の実行
+        const result = await setupDnsForCustomDomain({
+            environment,
+            customDomainName,
+            targetDomain,
+            profile: context.profile,
+            region: context.region,
+            dryRun: context.dryRun,
+            debug: context.debug
+        });
+
+        if (result.success) {
+            log.success('✅ Custom domain DNS setup completed successfully');
+            log.info(`🔗 API will be accessible at: https://${result.hostname}`);
+            
+            // DNS伝播の確認
+            if (!context.dryRun) {
+                log.info('⏳ Verifying DNS configuration...');
+                await new Promise(resolve => setTimeout(resolve, 3000));
+                
+                try {
+                    const dnsCheck = await verifyDnsConfiguration(result.hostname);
+                    if (dnsCheck.success) {
+                        log.success(`✅ DNS configuration verified: ${result.hostname} -> ${dnsCheck.addresses[0]}`);
+                    } else {
+                        log.warning(`⚠️  DNS propagation may take a few minutes to complete`);
+                        log.info('💡 You can test the API endpoint in a few minutes');
+                    }
+                } catch (dnsError) {
+                    log.debug(`DNS verification failed: ${dnsError.message}`, { debug: context.debug });
+                    log.warning('⚠️  DNS verification failed, but configuration was applied');
+                }
+            }
+
+            console.log('\n🚀 Next steps:');
+            console.log('   1. Wait 1-2 minutes for DNS propagation');
+            console.log(`   2. Test your API: curl https://${result.hostname}/health`);
+            console.log('   3. Check SSL certificate is working properly');
+        }
+
+        await confirmContinue();
+        return { success: true, result };
+
+    } catch (error) {
+        await handleMenuError(error, { showStack: context.debug });
+        return { success: false, error };
+    }
+}
+
+/**
+ * DNS設定の確認
+ */
+async function verifyDnsConfiguration(hostname) {
+    return new Promise((resolve) => {
+        const dns = require('dns');
+        dns.resolve(hostname, 'CNAME', (err, addresses) => {
+            if (err) {
+                resolve({ success: false, error: err.message });
+            } else {
+                resolve({ success: true, addresses });
+            }
+        });
+    });
+}
+
+/**
+ * .env.local生成処理
+ */
+async function executeEnvLocalGeneration(context) {
+    try {
+        showProgress('Generating .env.local for development environment');
+
+        // AWS設定取得（CDKデプロイ確認）
+        let awsConfig = null;
+        try {
+            awsConfig = await getAwsConfiguration({
+                profile: context.profile,
+                environment: ENVIRONMENTS.DEV,
+                region: context.region,
+                debug: context.debug,
+                requireApproval: APPROVAL_MODES.NEVER
+            });
+        } catch (error) {
+            // CDK未デプロイの場合
+            // TODO: aws-config-moduleが具体的なエラータイプ (例: CdkNotDeployedError) を返すように将来的に改善し、
+            //       ここでエラータイプを判別して、より適切なメッセージを表示することを検討。
+            //       現状は、getAwsConfigurationがエラーをスローするかnullを返した場合のメッセージに依存。
+            if (error instanceof CdkNotDeployedError) {
+                log.error(`❌ CDK not deployed for '${error.environment || ENVIRONMENTS.DEV}' environment.`);
+                if (error.missingResources && error.missingResources.length > 0) {
+                    log.warning(`Missing CDK resources: ${error.missingResources.join(', ')}`);
+                }
+                log.info('📋 Required steps:');
+                log.info(`   1. Deploy CDK stacks first: npm run cdk:deploy:${error.environment || ENVIRONMENTS.DEV}`);
+                log.info('   2. After successful CDK deployment, run this setup again.');
+                log.info('ℹ️  .env.local generation requires Cognito Client ID/Secret and API Gateway endpoint from CDK.');
+                await confirmContinue();
+                return { success: false, error: error };
+            }
+            // For other errors, let handleMenuError deal with them
+            throw error;
+        }
+
+        if (!awsConfig) {
+            throw new Error('Failed to retrieve AWS configuration');
+        }
+
+        // AUTH_SECRET取得
+        const envFilePath = path.resolve(process.cwd(), LOCAL_ENV_FILENAME);
+        const authSecret = await getOrCreateAuthSecret(
+            ENVIRONMENTS.DEV,
+            envFilePath,
+            { 
+                apiToken: process.env.VERCEL_TOKEN, 
+                projectId: process.env.VERCEL_PROJECT_ID 
+            }
+        );
+
+        // .env.local生成
+        await updateLocalEnv({
+            awsConfig,
+            authSecret,
+            envFilePath,
+            debug: context.debug
+        });
+
+        log.success('✅ .env.local file generated successfully');
+        console.log('\n🚀 Next steps:');
+        console.log('   1. Restart your Next.js application: npm run dev');
+        console.log('   2. Test your API endpoints');
+
+        await confirmContinue();
+        return { success: true };
+
+    } catch (error) {
+        await handleMenuError(error, { showStack: context.debug });
+        return { success: false, error };
+    }
+}
+
+/**
+ * Vercel環境変数設定処理
+ */
+async function executeVercelSetup(context) {
+    try {
+        // 環境選択
+        const environment = context.environment || await selectEnvironment(context);
+        showProgress(`Setting up Vercel environment variables for ${environment}`);
+
+        // AWS設定取得を試みる（CDKデプロイ確認）
+        // VERCEL_TOKEN と VERCEL_PROJECT_ID のチェックは、VercelClientの初期化や
+        // updateVercelEnvironmentVariables 関数内で行われることを期待。
+        let awsConfig = null;
+        try {
+            awsConfig = await getAwsConfiguration({
+                profile: context.profile,
+                environment,
+                region: context.region,
+                debug: context.debug,
+                requireApproval: APPROVAL_MODES.NEVER
+            });
+        } catch (error) {
+            // CDK未デプロイの場合
+            // TODO: aws-config-moduleが具体的なエラータイプ (例: CdkNotDeployedError) を返すように将来的に改善し、
+            //       ここでエラータイプを判別して、より適切なメッセージを表示することを検討。
+            //       現状は、getAwsConfigurationがエラーをスローするかnullを返した場合のメッセージに依存。
+            if (error instanceof CdkNotDeployedError) {
+                log.error(`❌ CDK not deployed for '${error.environment || environment}' environment.`);
+                 if (error.missingResources && error.missingResources.length > 0) {
+                    log.warning(`Missing CDK resources: ${error.missingResources.join(', ')}`);
+                }
+                log.info('📋 Required steps:');
+                log.info(`   1. Deploy CDK stacks first: npm run cdk:deploy:${error.environment || environment}`);
+                log.info('   2. After successful CDK deployment, run this setup again.');
+                log.info('ℹ️  CDK deployment creates Cognito User Pool/Client, API Gateway, DynamoDB tables, and Lambda functions.');
+                await confirmContinue();
+                return { success: false, error: error };
+            }
+            // For other errors, let handleMenuError deal with them
+            throw error;
+        }
+
+        // AUTH_SECRET取得
+        const authSecret = await getOrCreateAuthSecret(
+            environment,
+            path.resolve(process.cwd(), LOCAL_ENV_FILENAME),
+            { 
+                apiToken: process.env.VERCEL_TOKEN, 
+                projectId: process.env.VERCEL_PROJECT_ID 
+            }
+        );
+
+        // Vercel環境の決定
+        const vercelEnv = environment === ENVIRONMENTS.PROD ? VERCEL_ENVIRONMENTS.PRODUCTION : VERCEL_ENVIRONMENTS.PREVIEW;
+
+        // 環境変数更新
+        const results = await updateVercelEnvironmentVariables({
+            awsConfig,
+            environment,
+            vercelEnvironment: vercelEnv,
+            apiToken: process.env.VERCEL_TOKEN,
+            projectId: process.env.VERCEL_PROJECT_ID,
+            authSecret,
+            forceUpdate: context.forceUpdate,
+            dryRun: context.dryRun,
+            debug: context.debug
+        });
+
+        if (results.results) {
+            const { created, updated } = results.results;
+            if (created.length > 0 || updated.length > 0) {
+                log.warning('💡 Environment variables were updated. Consider deploying to apply changes.');
+            }
+        }
+
+        await confirmContinue();
+        return { success: true, results };
+
+    } catch (error) {
+        await handleMenuError(error, { showStack: context.debug });
+        return { success: false, error };
+    }
+}
+
+/**
+ * Vercelデプロイ実行処理
+ */
+async function executeVercelDeploy(context) {
+    try {
+        // 環境選択
+        const environment = context.environment || await selectEnvironment(context);
+        showProgress(`Triggering Vercel deployment for ${environment}`);
+
+        // 確認
+        // デプロイフックURLのチェックは vercel-helpers.js の triggerDeployment 関数内で行われます。
+        const confirmed = await confirmExecution('Vercel Deployment', {
+            Environment: environment
+        });
+
+        if (!confirmed) {
+            log.info('Deployment cancelled');
+            return { success: false, cancelled: true };
+        }
+
+        // デプロイ実行
+        const vercelEnv = environment === ENVIRONMENTS.PROD ? VERCEL_ENVIRONMENTS.PRODUCTION : VERCEL_ENVIRONMENTS.PREVIEW;
+        const deployResult = await triggerDeployment(vercelEnv, { debug: context.debug });
+
+        log.success('✅ Vercel deployment triggered successfully');
+        if (deployResult.url) {
+            log.info(`🔗 Deployment URL: ${deployResult.url}`);
+        }
+
+        await confirmContinue();
+        return { success: true, deployResult };
+
+    } catch (error) {
+        await handleMenuError(error, { showStack: context.debug });
+        return { success: false, error };
+    }
+}
+
+/**
+ * テストデータ生成処理
+ */
+async function executeTestDataGeneration(context) {
+    try {
+        // 環境選択
+        const environment = context.environment || await selectEnvironment(context);
+        showProgress(`Setting up test data generation for ${environment} environment`);
+
+        // テストデータワークフローを実行
+        const result = await executeTestDataWorkflow({
+            profile: context.profile,
+            region: context.region,
+            environment,
+            debug: context.debug
+        });
+
+        if (result.success) {
+            console.log('\n📊 Test Data Operation Summary:');
+            
+            switch (result.operation) {
+                case 'generate':
+                    console.log(`   ✅ Generated: ${result.generated}/${result.total} records`);
+                    break;
+                case 'delete':
+                    console.log(`   🗑️ Deleted: ${result.deleted} records`);
+                    break;
+                case 'reset':
+                    console.log(`   🗑️ Deleted: ${result.deleted} existing records`);
+                    console.log(`   ✅ Generated: ${result.generated}/${result.total} new records`);
+                    break;
+            }
+
+            log.success('✅ Test data operation completed successfully');
+        }
+
+        await confirmContinue();
+        return { success: true, result };
+
+    } catch (error) {
+        await handleMenuError(error, { showStack: context.debug });
+        return { success: false, error };
+    }
+}
+
+/**
+ * 全ステップ実行処理
+ */
+async function executeAllSteps(context) {
+    try {
+        showProgress('Running all setup steps');
+
+        const steps = getBatchMenuItems();
+        const results = {};
+
+        for (const step of steps) {
+            console.log('\n' + '─'.repeat(40));
+            
+            switch (step) {
+                case 'prepare-certificate':
+                    results.certificate = await executeCertificatePreparation(context);
+                    break;
+                    
+                case 'setup-vercel':
+                    // 環境を一度だけ選択
+                    if (!context.environment) {
+                        context.environment = await selectEnvironment(context);
+                    }
+                    results.vercel = await executeVercelSetup(context);
+                    // CDK未デプロイエラーの場合は中断
+                    if (results.vercel && !results.vercel.success && results.vercel.error === ERROR_TYPES.CDK_NOT_DEPLOYED) {
+                        log.error('Cannot continue without CDK deployment');
+                        break;
+                    }
+                    break;
+                    
+                case 'trigger-deploy':
+                    // Vercel設定が成功した場合のみ実行
+                    if (results.vercel && results.vercel.success) {
+                        results.deploy = await executeVercelDeploy(context);
+                    } else {
+                        log.info('⏭️ Skipping deployment (Vercel setup not completed)');
+                    }
+                    break;
+            }
+
+            // エラーがあれば中断
+            if (results[step] && !results[step].success && !results[step].cancelled) {
+                log.error('Setup failed. Stopping execution.');
+                break;
+            }
+        }
+
+        console.log('\n' + '═'.repeat(40));
+        log.complete('🎉 Setup process completed!');
+        
+        await confirmContinue();
+        return results;
+
+    } catch (error) {
+        await handleMenuError(error, { showStack: context.debug });
+        return { success: false, error };
+    }
+}
+
+/**
+ * メインメニューループ
+ */
+async function runInteractiveMode(context) {
+    while (true) {
+        const selection = await displayMainMenu(context);
+
+        switch (selection) {
+            case 'prepare-certificate':
+                await executeCertificatePreparation(context);
+                break;
+            
+            case 'setup-custom-domain':
+                await executeCustomDomainSetup(context);
+                break;
+
+            case 'generate-env-local':
+                await executeEnvLocalGeneration(context);
+                break;
+
+            case 'setup-vercel':
+                await executeVercelSetup(context);
+                break;
+
+            case 'trigger-deploy':
+                await executeVercelDeploy(context);
+                break;
+
+            case 'generate-test-data':
+                await executeTestDataGeneration(context);
+                break;
+
+            case 'run-all':
+                await executeAllSteps(context);
+                break;
+
+            case 'exit':
+                log.info('👋 Goodbye!');
+                process.exit(0);
+                break;
+        }
+    }
+}
+
+/**
+ * 直接実行モード（後方互換性）
+ */
+async function runDirectMode(options) {
+    const context = {
+        profile: options.profile,
+        region: options.region,
+        environment: options.environment,
+        debug: options.debug,
+        forceUpdate: options.forceUpdate,
+        dryRun: options.dryRun
     };
 
-    return mapping[environment] || 'preview';
-}
-
-/**
- * 設定サマリーの表示
- */
-function displayConfigurationSummary(options, vercelEnv) {
-    log.info('📋 Configuration Summary:');
-    console.log(`   AWS Profile: ${options.profile}`);
-    console.log(`   AWS Region: ${options.region || 'profile default'}`);
-    console.log(`   Environment: ${options.environment}`);
-    console.log(`   Vercel Environment: ${vercelEnv}`);
-    console.log(`   Environment File: ${options.envFile}`);
-    console.log('');
-    console.log('📝 Operations to perform:');
-    console.log(`   ✅ AWS Configuration Retrieval`);
-    console.log(`   ${options.skipCustomDomain ? '⏭️' : '✅'} Custom Domain Setup`);
-    console.log(`   ${options.environment !== 'dev' ? '⏭️' : options.skipEnvLocal ? '⏭️' : '✅'} .env.local Generation`);
-    console.log(`   ${options.skipVercel ? '⏭️' : '✅'} Vercel Environment Variables`);
-    console.log(`   ${options.skipDeploy || !options.forceUpdate ? '⏭️' : '✅'} Vercel Deployment`);
-    
-    if (options.dryRun) {
-        console.log('');
-        log.warning('🧪 DRY-RUN MODE: No changes will be made');
+    if (options.prepareCertificate) {
+        await executeCertificatePreparation(context);
+    } else if (options.setupCustomDomain) {
+        await executeCustomDomainSetup(context);
+    } else if (options.generateEnvLocal) {
+        await executeEnvLocalGeneration(context);
+    } else if (options.setupVercel) {
+        await executeVercelSetup(context);
+    } else if (options.triggerDeploy) {
+        await executeVercelDeploy(context);
+    } else if (options.generateTestData) {
+        await executeTestDataGeneration(context);
+    } else if (options.runAll) {
+        await executeAllSteps(context);
+    } else {
+        // デフォルトは対話モード
+        await runInteractiveMode(context);
     }
 }
 
@@ -173,195 +661,91 @@ async function main() {
         // 引数検証
         validateOptions(options, ['profile']);
 
-        // 環境変数検証
-        validateEnvironmentVariables(options);
+        // 環境変数の検証（警告のみ）
+        validateEnvironmentVariables();
 
-        // Vercel環境の決定
-        const vercelEnv = determineVercelEnvironment(options.environment, options.vercelEnv);
-
-        // タイトル表示
-        displayTitle('Sankey Environment Setup - Complete Automation');
-
-        // 設定サマリー表示
-        displayConfigurationSummary(options, vercelEnv);
-
-        // Step 1: AWS設定取得
-        log.info('🔍 Step 1: Retrieving AWS Configuration...');
-        const awsConfig = await getAwsConfiguration({
+        // 実行コンテキストの準備
+        const context = {
             profile: options.profile,
-            environment: options.environment,
             region: options.region,
             debug: options.debug,
-            requireApproval: options.requireApproval
-        });
+            forceUpdate: options.forceUpdate,
+            dryRun: options.dryRun
+        };
 
-        if (!awsConfig) {
-            throw new Error('Failed to retrieve AWS configuration');
-        }
+        // 直接実行モードの判定
+        const isDirectMode = options.prepareCertificate || 
+                           options.setupCustomDomain ||
+                           options.generateEnvLocal || 
+                           options.setupVercel || 
+                           options.triggerDeploy || 
+                           options.generateTestData ||
+                           options.runAll;
 
-        log.success('✅ AWS configuration retrieved successfully');
-        log.debug(`AWS Config: ${JSON.stringify(awsConfig, null, 2)}`, options);
-
-        // AUTH_SECRET取得
-        const envFilePath = path.resolve(process.cwd(), options.envFile);
-        const authSecret = await getOrCreateAuthSecret(
-            options.environment,
-            envFilePath,
-            { 
-                apiToken: process.env.VERCEL_TOKEN, 
-                projectId: process.env.VERCEL_PROJECT_ID 
-            }
-        );
-
-        // Step 2: Custom Domain設定
-        if (!options.skipCustomDomain) {
-            log.info('🚪 Step 2: Setting up Custom Domain...');
-            await setupCustomDomain({
-                awsConfig,
-                environment: options.environment,
-                profile: options.profile,
-                region: options.region,
-                dryRun: options.dryRun,
-                forceRenew: options.forceUpdate,
-                debug: options.debug
-            });
-            log.success('✅ Custom domain setup completed');
+        if (isDirectMode) {
+            // 直接実行モード
+            await runDirectMode(options);
         } else {
-            log.info('⏭️ Step 2: Skipping Custom Domain setup');
+            // 対話モード
+            await runInteractiveMode(context);
         }
-
-        // Step 3: .env.local生成（dev環境のみ）
-        if (options.environment === 'dev' && !options.skipEnvLocal) {
-            log.info('📝 Step 3: Generating .env.local file...');
-            await updateLocalEnv({
-                awsConfig,
-                authSecret,
-                envFilePath,
-                debug: options.debug
-            });
-            log.success('✅ .env.local file updated');
-        } else {
-            log.info('⏭️ Step 3: Skipping .env.local (not dev environment)');
-        }
-
-        // Step 4: Vercel環境変数設定
-        let vercelUpdated = false;
-        if (!options.skipVercel) {
-            log.info('🔧 Step 4: Setting up Vercel Environment Variables...');
-            const vercelResults = await updateVercelEnvironmentVariables({
-                awsConfig,
-                environment: options.environment,
-                vercelEnvironment: vercelEnv,
-                apiToken: process.env.VERCEL_TOKEN,
-                projectId: process.env.VERCEL_PROJECT_ID,
-                authSecret,
-                forceUpdate: options.forceUpdate,
-                dryRun: options.dryRun,
-                debug: options.debug
-            });
-            
-            // 環境変数が更新された場合はデプロイが必要
-            vercelUpdated = vercelResults.results && 
-                (vercelResults.results.created.length > 0 || vercelResults.results.updated.length > 0);
-            
-            log.success('✅ Vercel environment variables updated');
-        } else {
-            log.info('⏭️ Step 4: Skipping Vercel environment variables');
-        }
-
-        // Step 5: Vercel デプロイ（--force-update時のみ）
-        if (!options.skipVercel && !options.skipDeploy && options.forceUpdate && vercelUpdated && !options.dryRun) {
-            log.info('🚀 Step 5: Triggering Vercel Deployment...');
-            try {
-                const deployResult = await triggerDeployment(
-                    vercelEnv,
-                    {
-                        debug: options.debug
-                    }
-                );
-                log.success('✅ Vercel deployment triggered successfully');
-                if (deployResult.url) {
-                    log.info(`🔗 Deployment URL: ${deployResult.url}`);
-                }
-            } catch (error) {
-                log.warning(`⚠️ Deployment failed: ${error.message}`);
-                log.info('You may need to deploy manually from Vercel dashboard or check Vercel CLI installation');
-            }
-        } else if (options.forceUpdate && vercelUpdated) {
-            if (options.skipDeploy) {
-                log.info('⏭️ Step 5: Skipping Vercel deployment (--skip-deploy)');
-            } else if (options.dryRun) {
-                log.info('⏭️ Step 5: Skipping Vercel deployment (dry-run mode)');
-            } else {
-                log.info('⏭️ Step 5: Skipping Vercel deployment (no --force-update)');
-            }
-            log.warning('💡 Environment variables were updated. Consider deploying manually.');
-        } else {
-            log.info('⏭️ Step 5: No deployment needed (no environment variable changes)');
-        }
-
-        // 完了報告
-        console.log('');
-        log.complete('🎉 Environment setup completed successfully!');
-        
-        console.log('\n📋 Summary:');
-        console.log(`   Environment: ${options.environment.toUpperCase()}`);
-        console.log(`   AWS Profile: ${options.profile}`);
-        console.log(`   Vercel Environment: ${vercelEnv}`);
-        
-        if (options.environment === 'dev' && !options.skipEnvLocal) {
-            console.log(`   Environment File: ${options.envFile}`);
-        }
-
-        console.log('\n🚀 Next Steps:');
-        if (options.environment === 'dev' && !options.skipEnvLocal) {
-            console.log('   1. Restart your Next.js application: npm run dev');
-        }
-        console.log('   2. Test your API endpoints');
-        console.log('   3. Verify authentication flow');
-        if (!vercelUpdated || options.skipDeploy) {
-            console.log('   4. Deploy your frontend: git push');
-        }
-
-        timer.log('🎯 Total setup time');
-
+        log.info(`🎉 Operation completed in ${timer.elapsedFormatted()}`);
     } catch (error) {
-        log.error(`Setup failed: ${error.message}`);
+        if (error instanceof CdkNotDeployedError) {
+            log.error(`❌ CDK Setup Incomplete: ${error.message}`);
+            log.warning(`Environment: ${error.environment || 'N/A'}`);
+            if (error.missingResources && error.missingResources.length > 0) {
+                log.warning(`Missing: ${error.missingResources.join(', ')}`);
+            }
+            log.info("Please ensure CDK resources are deployed before running this tool.");
+        } else if (error instanceof ConfigurationError) {
+            log.error(`❌ Configuration Error: ${error.message}`);
+            if (error.cause) log.warning(`Cause: ${error.cause}`);
+            log.info("Please check your environment variables and configuration files.");
+        } else if (error instanceof ApiError) {
+            log.error(`❌ API Error (${error.serviceName || 'Unknown Service'}): ${error.message}`);
+            if (error.statusCode) log.warning(`Status Code: ${error.statusCode}`);
+            if (error.cause) log.warning(`Cause: ${error.cause}`);
+        } else if (error instanceof ResourceNotFoundError) {
+            log.error(`❌ Resource Not Found: ${error.message}`);
+        } else if (error instanceof BaseError) { // Catch any other custom errors
+            log.error(`❌ An operation failed: ${error.message}`);
+            if (error.cause) log.warning(`Cause: ${error.cause}`);
+        }
+        else {
+            log.error(`An unexpected error occurred during setup: ${error.message}`);
+        }
 
-        // 詳細なエラー情報（デバッグモード時）
-        if (program.opts().debug) {
-            console.error('\n🔍 Debug Information:');
+        if (program.opts().debug && error.stack) {
+            console.error('\n🔍 Debug Information (Stack Trace):');
             console.error(error.stack);
         }
-
-        // エラー別のヘルプメッセージ
-        if (error.message.includes('profile')) {
-            log.warning('💡 Make sure you have run: aws sso login --profile ' + (program.opts().profile || '<profile>'));
-        }
-
-        if (error.message.includes('VERCEL_TOKEN')) {
-            log.warning('💡 Get your Vercel token from: https://vercel.com/account/tokens');
-        }
-
-        if (error.message.includes('CLOUDFLARE_API_TOKEN')) {
-            log.warning('💡 Get your Cloudflare token from: https://dash.cloudflare.com/profile/api-tokens');
-        }
-
         process.exit(1);
     }
 }
 
-// エラーハンドリング
+// グローバルエラーハンドリング (主に予期せぬエラーや非同期処理の漏れをキャッチ)
 process.on('uncaughtException', (error) => {
-    log.error(`Uncaught exception: ${error.message}`);
-    if (program.opts()?.debug) {
+    log.error(`💥 Uncaught Exception: ${error.message}`);
+    if (program.opts()?.debug && error.stack) {
         console.error(error.stack);
     }
     process.exit(1);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-    log.error(`Unhandled rejection: ${reason}`);
+    log.error(`💥 Unhandled Rejection:`);
+    if (reason instanceof Error) {
+        log.error(`  Message: ${reason.message}`);
+        if (program.opts()?.debug && reason.stack) {
+            console.error(reason.stack);
+        }
+    } else {
+        log.error(reason);
+    }
+    promise.catch(err => { // Attach a catch handler to the promise to avoid further unhandled rejections
+        log.error(`  (Promise rejection caught)`);
+    });
     process.exit(1);
 });
 

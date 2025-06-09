@@ -75,7 +75,7 @@ export class SankeyAuthStack extends cdk.Stack {
             {
                 entry: path.join(__dirname, '../../lambda/src/handlers/postConfirmation.handler.ts'),
                 environment: {
-                    SSM_PREFIX: '/license-service/users',
+                    SSM_USER_PREFIX: CdkHelpers.getSsmUserPrefix(this.envName),
                     POWERTOOLS_SERVICE_NAME: 'post-confirmation',
                 },
             }
@@ -86,27 +86,11 @@ export class SankeyAuthStack extends cdk.Stack {
      * Post Confirmation Lambda の権限設定
      */
     private setupPostConfirmationPermissions() {
-        // SSM権限
+        // SSM権限のみ（API Gateway権限を削除）
         this.postConfirmationFn.addToRolePolicy(new iam.PolicyStatement({
             effect: iam.Effect.ALLOW,
             actions: ['ssm:GetParameter', 'ssm:GetParameters', 'ssm:PutParameter', 'ssm:AddTagsToResource'],
-            resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/license-service/*`],
-        }));
-
-        // API Gateway権限
-        this.postConfirmationFn.addToRolePolicy(new iam.PolicyStatement({
-            actions: [
-                'apigateway:CreateApiKey', 'apigateway:CreateUsagePlan', 'apigateway:CreateUsagePlanKey',
-                'apigateway:GetApiKey', 'apigateway:GetUsagePlan', 'apigateway:GetUsagePlanKey',
-                'apigateway:PUT', 'apigateway:POST', 'apigateway:PATCH', 'apigateway:TagResource',
-            ],
-            resources: ['*'],
-        }));
-
-        // Cognito権限
-        this.postConfirmationFn.addToRolePolicy(new iam.PolicyStatement({
-            actions: ['cognito-idp:AdminUpdateUserAttributes'],
-            resources: [`arn:aws:cognito-idp:${this.region}:${this.account}:userpool/*`],
+            resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter${CdkHelpers.getSsmEnvironmentPrefix(this.envName)}/*`],
         }));
     }
 

@@ -26,7 +26,10 @@ const baseHandler: PostConfirmationTriggerHandler = async (event) => {
     // 1. マスターキーを生成してSSMへ保存
     const masterKey = webcrypto.getRandomValues(new Uint8Array(32));
     const masterKeyBase64 = Buffer.from(masterKey).toString('base64');
-    const ssmParameterName = `/license-service/users/${userId}/master-key`;
+
+    // 環境変数からSSMパスプレフィックスを取得
+    const userPrefix = process.env.SSM_USER_PREFIX!; // /sankey-dev/users
+    const ssmParameterName = `${userPrefix}/${userId}/master-key`;
 
     try {
       await ssmClient.send(new GetParameterCommand({ Name: ssmParameterName }));
