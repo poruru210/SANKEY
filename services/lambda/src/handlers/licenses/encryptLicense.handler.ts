@@ -3,13 +3,12 @@ import { Logger } from '@aws-lambda-powertools/logger';
 import { Tracer } from '@aws-lambda-powertools/tracer';
 import { injectLambdaContext } from '@aws-lambda-powertools/logger/middleware';
 import { captureLambdaHandler } from '@aws-lambda-powertools/tracer/middleware';
-import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
-import { webcrypto } from 'crypto';
 import middy from '@middy/core';
 import httpCors from '@middy/http-cors';
 
 import { encryptLicense } from '../../services/encryption';
 import { createLicensePayloadV1, LicensePayloadV1, PAYLOAD_VERSIONS } from '../../models/licensePayload';
+import { MasterKeyService } from '../../services/masterKeyService';
 import {
     createSuccessResponse,
     createValidationErrorResponse,
@@ -24,7 +23,9 @@ const logger = new Logger({
 });
 
 const tracer = new Tracer({ serviceName: 'encrypt-license' });
-const ssmClient = new SSMClient({});
+
+// Master Key Service の初期化
+const masterKeyService = new MasterKeyService({ logger });
 
 // リクエストボディの型定義
 interface EncryptLicenseRequest {
@@ -34,31 +35,6 @@ interface EncryptLicenseRequest {
     expiry: string; // ISO date string
     issuedAt?: string; // ISO date string (optional, defaults to now)
     version?: string; // payload version (optional, defaults to 1.0)
-}
-
-// Master Key の取得関数
-async function getUserMasterKey(userId: string): Promise<CryptoKey> {
-    const paramName = `${process.env.SSM_USER_PREFIX}/${userId}/master-key`;
-
-    try {
-        const { Parameter } = await ssmClient.send(
-            new GetParameterCommand({
-                Name: paramName,
-                WithDecryption: true,
-            })
-        );
-
-        if (!Parameter?.Value) {
-            logger.error('Master key parameter not found', { userId, paramName });
-            throw new Error('Master key not found');
-        }
-
-        const keyBuffer = Buffer.from(Parameter.Value, 'base64');
-        return await webcrypto.subtle.importKey('raw', keyBuffer, 'AES-CBC', true, ['encrypt']);
-    } catch (error) {
-        logger.error('Failed to retrieve master key', { userId, error });
-        throw new Error('Failed to retrieve encryption key');
-    }
 }
 
 // リクエストボディのバリデーション後の型定義
@@ -136,7 +112,7 @@ const baseHandler = async (
     logger.info('License encrypt request received');
 
     try {
-        // 認証情報からuserIdを取得（decryptLicense.handlerと同様）
+        // 認証情報からuserIdを取得
         const userId = event.requestContext.authorizer?.claims?.sub;
         if (!userId) {
             return createUnauthorizedResponse('User authentication required');
@@ -173,8 +149,8 @@ const baseHandler = async (
             version: validatedRequest.version
         });
 
-        // マスターキーを取得
-        const masterKey = await getUserMasterKey(authenticatedUserId);
+        // 共通サービスを使用してマスターキーを取得
+        const masterKey = await masterKeyService.getUserMasterKeyForEncryption(authenticatedUserId);
 
         // ペイロードを作成
         const payload: LicensePayloadV1 = createLicensePayloadV1({

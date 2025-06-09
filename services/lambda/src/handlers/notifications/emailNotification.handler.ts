@@ -6,7 +6,6 @@ import { captureLambdaHandler } from '@aws-lambda-powertools/tracer/middleware';
 import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
-import { webcrypto } from 'crypto';
 
 import { Resend } from 'resend';
 import middy from '@middy/core';
@@ -14,6 +13,7 @@ import middy from '@middy/core';
 import { encryptLicense } from '../../services/encryption';
 import { createLicensePayloadV1, LicensePayloadV1 } from '../../models/licensePayload';
 import { EAApplicationRepository } from '../../repositories/eaApplicationRepository';
+import { MasterKeyService } from '../../services/masterKeyService';
 import { NotificationMessage } from '../../models/eaApplication';
 
 // Logger設定
@@ -31,6 +31,12 @@ const repository = new EAApplicationRepository(docClient);
 
 // SSM Client
 const ssmClient = new SSMClient({ region: process.env.AWS_REGION || 'ap-northeast-1' });
+
+// Master Key Service の初期化
+const masterKeyService = new MasterKeyService({
+    ssmClient: tracer.captureAWSv3Client(ssmClient),
+    logger
+});
 
 // Resend API Key取得関数
 async function getResendApiKey(): Promise<string> {
@@ -58,31 +64,6 @@ async function getResendApiKey(): Promise<string> {
             parameterName: process.env.RESEND_API_KEY_PARAM
         });
         throw error;
-    }
-}
-
-// Master Key の取得関数
-async function getUserMasterKey(userId: string): Promise<CryptoKey> {
-    const paramName = `${process.env.SSM_USER_PREFIX}/${userId}/master-key`;
-
-    try {
-        const { Parameter } = await ssmClient.send(
-            new GetParameterCommand({
-                Name: paramName,
-                WithDecryption: true,
-            })
-        );
-
-        if (!Parameter?.Value) {
-            logger.error('Master key parameter not found', { userId, paramName });
-            throw new Error('Master key not found');
-        }
-
-        const keyBuffer = Buffer.from(Parameter.Value, 'base64');
-        return await webcrypto.subtle.importKey('raw', keyBuffer, 'AES-CBC', true, ['encrypt']);
-    } catch (error) {
-        logger.error('Failed to retrieve master key', { userId, error });
-        throw new Error('Failed to retrieve encryption key');
     }
 }
 
@@ -208,8 +189,8 @@ async function processNotificationMessage(record: SQSRecord): Promise<void> {
             throw new Error('Missing required application data');
         }
 
-        // 2. ライセンス生成
-        const masterKey = await getUserMasterKey(message.userId);
+        // 2. 共通サービスを使用してマスターキーを取得
+        const masterKey = await masterKeyService.getUserMasterKeyForEncryption(message.userId);
 
         const payload: LicensePayloadV1 = createLicensePayloadV1({
             eaName: application.eaName,
