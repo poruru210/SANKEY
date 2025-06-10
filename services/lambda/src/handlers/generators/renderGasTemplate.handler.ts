@@ -54,16 +54,26 @@ const baseHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxy
         }
         logger.info('Resolved User ID:', { userId });
 
-        // Construct webhookUrl dynamically
-        if (!event.requestContext || !event.requestContext.domainName || !event.requestContext.stage) {
-            logger.error('API Gateway context (domainName or stage) not found in event.requestContext');
-            return {
-                statusCode: 500,
-                body: JSON.stringify({ message: 'Internal Server Error: API Gateway context not available.' }),
-            };
+        // Construct webhookUrl using environment variable or fallback to dynamic construction
+        let webhookUrl: string;
+        const apiEndpoint = process.env.API_ENDPOINT;
+
+        if (apiEndpoint) {
+            // Use the configured API endpoint (custom domain)
+            webhookUrl = `${apiEndpoint}/applications/webhook`;
+            logger.info('Using configured API endpoint for Webhook URL:', { webhookUrl, apiEndpoint });
+        } else {
+            // Fallback to dynamic construction using API Gateway context
+            if (!event.requestContext || !event.requestContext.domainName || !event.requestContext.stage) {
+                logger.error('API Gateway context (domainName or stage) not found in event.requestContext');
+                return {
+                    statusCode: 500,
+                    body: JSON.stringify({ message: 'Internal Server Error: API Gateway context not available.' }),
+                };
+            }
+            webhookUrl = `https://${event.requestContext.domainName}/${event.requestContext.stage}/applications/webhook`;
+            logger.info('Using dynamic API Gateway endpoint for Webhook URL:', { webhookUrl });
         }
-        const webhookUrl = `https://${event.requestContext.domainName}/${event.requestContext.stage}/applications/webhook`;
-        logger.info('Dynamically constructed Webhook URL:', { webhookUrl });
 
         // 共通サービスを使用してマスターキーを取得
         let masterKey: string;

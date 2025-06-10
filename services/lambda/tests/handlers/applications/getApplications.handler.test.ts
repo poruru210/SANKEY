@@ -158,11 +158,13 @@ describe('getApplications.handler', () => {
             expect(responseBody.data).toEqual({
                 pending: [],
                 awaitingNotification: [],
+                failedNotification: [], // 追加
                 active: [],
                 history: [],
                 count: {
                     pending: 0,
                     awaitingNotification: 0,
+                    failedNotification: 0, // 追加
                     active: 0,
                     history: 0,
                     total: 0
@@ -207,6 +209,7 @@ describe('getApplications.handler', () => {
             expect(responseBody.data.count).toEqual({
                 pending: 1,
                 awaitingNotification: 1,
+                failedNotification: 0, // 追加
                 active: 1,
                 history: 4, // Cancelled, Rejected, Revoked, Expired
                 total: 7
@@ -318,6 +321,73 @@ describe('getApplications.handler', () => {
                 expiryDate: '2025-12-31T23:59:59Z',
                 licenseKey: 'encrypted-license-key-123'
             });
+        });
+
+        it('should correctly group FailedNotification applications', async () => {
+            // Arrange
+            const userId = 'test-user-123';
+
+            const mockApplications: EAApplication[] = [
+                createMockApplication('1', 'Pending'),
+                createMockApplication('2', 'AwaitingNotification'),
+                createMockApplication('3', 'FailedNotification', {
+                    lastFailureReason: 'Email delivery failed',
+                    failureCount: 1,
+                    lastFailedAt: '2025-01-01T02:00:00Z'
+                }),
+                createMockApplication('4', 'FailedNotification', {
+                    lastFailureReason: 'SMTP connection timeout',
+                    failureCount: 2,
+                    lastFailedAt: '2025-01-01T03:00:00Z'
+                }),
+                createMockApplication('5', 'Active'),
+                createMockApplication('6', 'Cancelled')
+            ];
+
+            mockRepository.getAllApplications.mockResolvedValueOnce(mockApplications);
+
+            const event = createTestEvent(userId);
+            const context = createTestContext();
+
+            // Act
+            const result = await handler(event, context);
+
+            // Assert
+            expect(result.statusCode).toBe(200);
+
+            const responseBody = JSON.parse(result.body);
+            expect(responseBody.success).toBe(true);
+
+            // FailedNotification アプリケーションが正しくグループ化されている
+            expect(responseBody.data.failedNotification).toHaveLength(2);
+            expect(responseBody.data.failedNotification[0]).toMatchObject({
+                id: 'APPLICATION#3',
+                status: 'FailedNotification',
+                eaName: 'TestEA',
+                accountNumber: '123456'
+            });
+            expect(responseBody.data.failedNotification[1]).toMatchObject({
+                id: 'APPLICATION#4',
+                status: 'FailedNotification',
+                eaName: 'TestEA',
+                accountNumber: '123456'
+            });
+
+            // カウントが正しい
+            expect(responseBody.data.count).toEqual({
+                pending: 1,
+                awaitingNotification: 1,
+                failedNotification: 2,
+                active: 1,
+                history: 1, // Cancelled
+                total: 6
+            });
+
+            // 他のグループには含まれていない
+            expect(responseBody.data.pending).toHaveLength(1);
+            expect(responseBody.data.awaitingNotification).toHaveLength(1);
+            expect(responseBody.data.active).toHaveLength(1);
+            expect(responseBody.data.history).toHaveLength(1);
         });
     });
 
@@ -454,6 +524,106 @@ describe('getApplications.handler', () => {
             expect(pendingApp.expiryDate).toBeUndefined();
             expect(pendingApp.licenseKey).toBeUndefined();
         });
+
+        it('should include failure details for FailedNotification status', async () => {
+            // Arrange
+            const userId = 'test-user-123';
+
+            const mockFailedApplication = createMockApplication('failed-1', 'FailedNotification', {
+                lastFailureReason: 'SMTP server connection timeout',
+                failureCount: 2,
+                lastFailedAt: '2025-01-01T10:30:00Z'
+            });
+
+            mockRepository.getAllApplications.mockResolvedValueOnce([mockFailedApplication]);
+
+            const event = createTestEvent(userId);
+            const context = createTestContext();
+
+            // Act
+            const result = await handler(event, context);
+
+            // Assert
+            expect(result.statusCode).toBe(200);
+
+            const responseBody = JSON.parse(result.body);
+            const failedApp = responseBody.data.failedNotification[0];
+
+            // 基本フィールドの確認
+            expect(failedApp.id).toBe('APPLICATION#failed-1');
+            expect(failedApp.status).toBe('FailedNotification');
+            expect(failedApp.eaName).toBe('TestEA');
+
+            // 失敗詳細フィールドの確認
+            expect(failedApp.lastFailureReason).toBe('SMTP server connection timeout');
+            expect(failedApp.failureCount).toBe(2);
+            expect(failedApp.lastFailedAt).toBe('2025-01-01T10:30:00Z');
+            expect(failedApp.isRetryable).toBe(true); // failureCount=2 < MAX_RETRY_COUNT=3
+        });
+
+        it('should correctly determine retryable status for failed notifications', async () => {
+            // Arrange
+            const userId = 'test-user-123';
+
+            const mockApplications: EAApplication[] = [
+                // リトライ可能（failureCount < MAX_RETRY_COUNT）
+                createMockApplication('retryable-1', 'FailedNotification', {
+                    lastFailureReason: 'Temporary email server error',
+                    failureCount: 1,
+                    lastFailedAt: '2025-01-01T09:00:00Z'
+                }),
+                createMockApplication('retryable-2', 'FailedNotification', {
+                    lastFailureReason: 'Network timeout',
+                    failureCount: 2,
+                    lastFailedAt: '2025-01-01T09:30:00Z'
+                }),
+                // リトライ不可（failureCount >= MAX_RETRY_COUNT）
+                createMockApplication('non-retryable-1', 'FailedNotification', {
+                    lastFailureReason: 'Invalid email address',
+                    failureCount: 3,
+                    lastFailedAt: '2025-01-01T10:00:00Z'
+                }),
+                createMockApplication('non-retryable-2', 'FailedNotification', {
+                    lastFailureReason: 'Permanent email bounce',
+                    failureCount: 5,
+                    lastFailedAt: '2025-01-01T10:30:00Z'
+                })
+            ];
+
+            mockRepository.getAllApplications.mockResolvedValueOnce(mockApplications);
+
+            const event = createTestEvent(userId);
+            const context = createTestContext();
+
+            // Act
+            const result = await handler(event, context);
+
+            // Assert
+            expect(result.statusCode).toBe(200);
+
+            const responseBody = JSON.parse(result.body);
+            const failedApps = responseBody.data.failedNotification;
+
+            expect(failedApps).toHaveLength(4);
+
+            // リトライ可能なアプリケーション
+            const retryableApp1 = failedApps.find((app: any) => app.id === 'APPLICATION#retryable-1');
+            const retryableApp2 = failedApps.find((app: any) => app.id === 'APPLICATION#retryable-2');
+
+            expect(retryableApp1.isRetryable).toBe(true);
+            expect(retryableApp1.failureCount).toBe(1);
+            expect(retryableApp2.isRetryable).toBe(true);
+            expect(retryableApp2.failureCount).toBe(2);
+
+            // リトライ不可なアプリケーション
+            const nonRetryableApp1 = failedApps.find((app: any) => app.id === 'APPLICATION#non-retryable-1');
+            const nonRetryableApp2 = failedApps.find((app: any) => app.id === 'APPLICATION#non-retryable-2');
+
+            expect(nonRetryableApp1.isRetryable).toBe(false);
+            expect(nonRetryableApp1.failureCount).toBe(3);
+            expect(nonRetryableApp2.isRetryable).toBe(false);
+            expect(nonRetryableApp2.failureCount).toBe(5);
+        });
     });
 
     describe('ステータス別グループ化テスト', () => {
@@ -465,11 +635,16 @@ describe('getApplications.handler', () => {
                 createMockApplication('1', 'Pending'),
                 createMockApplication('2', 'Approve'),
                 createMockApplication('3', 'AwaitingNotification'),
-                createMockApplication('4', 'Active'),
-                createMockApplication('5', 'Cancelled'),
-                createMockApplication('6', 'Rejected'),
-                createMockApplication('7', 'Revoked'),
-                createMockApplication('8', 'Expired')
+                createMockApplication('4', 'FailedNotification', {
+                    lastFailureReason: 'Email delivery failed',
+                    failureCount: 1,
+                    lastFailedAt: '2025-01-01T12:00:00Z'
+                }),
+                createMockApplication('5', 'Active'),
+                createMockApplication('6', 'Cancelled'),
+                createMockApplication('7', 'Rejected'),
+                createMockApplication('8', 'Revoked'),
+                createMockApplication('9', 'Expired')
             ];
 
             mockRepository.getAllApplications.mockResolvedValueOnce(mockApplications);
@@ -491,6 +666,9 @@ describe('getApplications.handler', () => {
             // AwaitingNotification: AwaitingNotification のみ
             expect(responseBody.data.awaitingNotification.map((app: any) => app.status)).toEqual(['AwaitingNotification']);
 
+            // FailedNotification: FailedNotification のみ（新規追加）
+            expect(responseBody.data.failedNotification.map((app: any) => app.status)).toEqual(['FailedNotification']);
+
             // Active: Active のみ
             expect(responseBody.data.active.map((app: any) => app.status)).toEqual(['Active']);
 
@@ -499,11 +677,64 @@ describe('getApplications.handler', () => {
             expect(historyStatuses).toEqual(['Cancelled', 'Expired', 'Rejected', 'Revoked']);
 
             // Approve ステータスはどのグループにも含まれない（想定される動作）
-            expect(responseBody.data.count.total).toBe(8);
+            expect(responseBody.data.count.total).toBe(9);
             expect(responseBody.data.count.pending +
                 responseBody.data.count.awaitingNotification +
+                responseBody.data.count.failedNotification +
                 responseBody.data.count.active +
-                responseBody.data.count.history).toBe(7); // Approve は除外される
+                responseBody.data.count.history).toBe(8); // Approve は除外される
+
+            // 各カウントの確認
+            expect(responseBody.data.count.pending).toBe(1);
+            expect(responseBody.data.count.awaitingNotification).toBe(1);
+            expect(responseBody.data.count.failedNotification).toBe(1);
+            expect(responseBody.data.count.active).toBe(1);
+            expect(responseBody.data.count.history).toBe(4);
+        });
+
+        it('should always include failedNotification field even when empty', async () => {
+            // Arrange
+            const userId = 'test-user-123';
+
+            // FailedNotification ステータスを含まないアプリケーション
+            const mockApplications: EAApplication[] = [
+                createMockApplication('1', 'Pending'),
+                createMockApplication('2', 'AwaitingNotification'),
+                createMockApplication('3', 'Active'),
+                createMockApplication('4', 'Cancelled')
+            ];
+
+            mockRepository.getAllApplications.mockResolvedValueOnce(mockApplications);
+
+            const event = createTestEvent(userId);
+            const context = createTestContext();
+
+            // Act
+            const result = await handler(event, context);
+
+            // Assert
+            expect(result.statusCode).toBe(200);
+
+            const responseBody = JSON.parse(result.body);
+
+            // failedNotification フィールドが存在し、空配列であることを確認
+            expect(responseBody.data).toHaveProperty('failedNotification');
+            expect(responseBody.data.failedNotification).toEqual([]);
+            expect(Array.isArray(responseBody.data.failedNotification)).toBe(true);
+
+            // count.failedNotification も存在し、0であることを確認
+            expect(responseBody.data.count).toHaveProperty('failedNotification');
+            expect(responseBody.data.count.failedNotification).toBe(0);
+
+            // 他のカウントは正常
+            expect(responseBody.data.count).toEqual({
+                pending: 1,
+                awaitingNotification: 1,
+                failedNotification: 0,
+                active: 1,
+                history: 1,
+                total: 4
+            });
         });
     });
 });
