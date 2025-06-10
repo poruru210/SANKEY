@@ -11,7 +11,11 @@ import {
     GetCommandOutput,
     UpdateCommandOutput,
     PutCommandOutput,
-    DeleteCommandOutput
+    DeleteCommandOutput,
+    PutCommandInput,
+    GetCommandInput,
+    QueryCommandInput,
+    DeleteCommandInput
 } from '@aws-sdk/lib-dynamodb';
 import { Logger } from '@aws-lambda-powertools/logger';
 import {
@@ -75,28 +79,28 @@ export class EAApplicationRepository {
             throw new Error(`Active application already exists for ${application.broker} account ${application.accountNumber} with EA ${application.eaName}`);
         }
 
-        const command = new PutCommand({
+        const params: PutCommandInput = {
             TableName: this.tableName,
             Item: item,
             ConditionExpression: 'attribute_not_exists(userId) AND attribute_not_exists(sk)',
-        });
+        };
 
-        await this.docClient.send(command);
+        await this.docClient.send(new PutCommand(params));
         return item;
     }
 
     async getApplication(userId: string, sk: string): Promise<EAApplication | null> {
-        const command = new GetCommand({
+        const params: GetCommandInput = {
             TableName: this.tableName,
             Key: { userId, sk },
-        });
+        };
 
-        const result: GetCommandOutput = await this.docClient.send(command);
+        const result = await this.docClient.send(new GetCommand(params)) as GetCommandOutput;
         return (result.Item as EAApplication) || null;
     }
 
     async getApplicationsByStatus(userId: string, status: EAApplication['status']): Promise<EAApplication[]> {
-        const command = new QueryCommand({
+        const params: QueryCommandInput = {
             TableName: this.tableName,
             IndexName: 'StatusIndex',
             KeyConditionExpression: 'userId = :userId AND #status = :status',
@@ -107,14 +111,14 @@ export class EAApplicationRepository {
                 ':userId': userId,
                 ':status': status,
             },
-        });
+        };
 
-        const result: QueryCommandOutput = await this.docClient.send(command);
+        const result = await this.docClient.send(new QueryCommand(params)) as QueryCommandOutput;
         return (result.Items as EAApplication[]) || [];
     }
 
     async getAllApplications(userId: string): Promise<EAApplication[]> {
-        const command = new QueryCommand({
+        const params: QueryCommandInput = {
             TableName: this.tableName,
             KeyConditionExpression: 'userId = :userId AND begins_with(sk, :prefix)',
             ExpressionAttributeValues: {
@@ -122,9 +126,9 @@ export class EAApplicationRepository {
                 ':prefix': 'APPLICATION#',
             },
             ScanIndexForward: false, // 新しい順
-        });
+        };
 
-        const result: QueryCommandOutput = await this.docClient.send(command);
+        const result = await this.docClient.send(new QueryCommand(params)) as QueryCommandOutput;
         return (result.Items as EAApplication[]) || [];
     }
 
@@ -133,7 +137,7 @@ export class EAApplicationRepository {
         accountNumber: string,
         eaName: string
     ): Promise<EAApplication | null> {
-        const command = new QueryCommand({
+        const params: QueryCommandInput = {
             TableName: this.tableName,
             IndexName: 'BrokerAccountIndex',
             KeyConditionExpression: 'broker = :broker AND accountNumber = :accountNumber',
@@ -148,9 +152,9 @@ export class EAApplicationRepository {
                 ':active': 'Active',
                 ':awaiting': 'AwaitingNotification',
             },
-        });
+        };
 
-        const result: QueryCommandOutput = await this.docClient.send(command);
+        const result = await this.docClient.send(new QueryCommand(params)) as QueryCommandOutput;
         return (result.Items?.[0] as EAApplication) || null;
     }
 
@@ -228,7 +232,7 @@ export class EAApplicationRepository {
         }
 
         try {
-            const result: UpdateCommandOutput = await this.docClient.send(new UpdateCommand(updateParams));
+            const result = await this.docClient.send(new UpdateCommand(updateParams)) as UpdateCommandOutput;
             logger.info('Successfully updated application status', { userId, sk, newStatus });
             return (result.Attributes as EAApplication) || null;
         } catch (error) {
@@ -280,10 +284,11 @@ export class EAApplicationRepository {
         }
 
         try {
-            const result: PutCommandOutput = await this.docClient.send(new PutCommand({
+            const putParams: PutCommandInput = {
                 TableName: this.tableName,
                 Item: historyItem,
-            }));
+            };
+            await this.docClient.send(new PutCommand(putParams));
             logger.info('Successfully recorded history event', { action, userId, historySkValue });
         } catch (error) {
             logger.error('Failed to record history event', { error, action, userId });
@@ -371,7 +376,7 @@ export class EAApplicationRepository {
         await this.recordHistory({
             userId,
             applicationSK: sk,
-            action: 'Active' as HistoryAction,
+            action: 'Active',
             changedBy: 'system',
             previousStatus: 'AwaitingNotification',
             newStatus: 'Active',
@@ -403,7 +408,7 @@ export class EAApplicationRepository {
         await this.recordHistory({
             userId,
             applicationSK: sk,
-            action: 'Cancelled' as HistoryAction,
+            action: 'Cancelled',
             changedBy: userId,
             previousStatus: 'AwaitingNotification',
             newStatus: 'Cancelled',
@@ -419,7 +424,7 @@ export class EAApplicationRepository {
 
         const historyPrefix = getHistoryQueryPrefix(applicationSk);
 
-        const command = new QueryCommand({
+        const params: QueryCommandInput = {
             TableName: this.tableName,
             KeyConditionExpression: 'userId = :userId AND begins_with(sk, :prefix)',
             ExpressionAttributeValues: {
@@ -427,10 +432,10 @@ export class EAApplicationRepository {
                 ':prefix': historyPrefix,
             },
             ScanIndexForward: false,
-        });
+        };
 
         try {
-            const result: QueryCommandOutput = await this.docClient.send(command);
+            const result = await this.docClient.send(new QueryCommand(params)) as QueryCommandOutput;
             const histories = (result.Items as EAApplicationHistory[]) || [];
 
             logger.info('Successfully retrieved application histories', {
@@ -448,12 +453,12 @@ export class EAApplicationRepository {
     }
 
     async deleteApplication(userId: string, sk: string): Promise<void> {
-        const command = new DeleteCommand({
+        const params: DeleteCommandInput = {
             TableName: this.tableName,
             Key: { userId, sk },
-        });
+        };
 
-        const result: DeleteCommandOutput = await this.docClient.send(command);
+        await this.docClient.send(new DeleteCommand(params));
     }
 
     async updateApprovalInfo(
@@ -473,7 +478,7 @@ export class EAApplicationRepository {
         await this.recordHistory({
             userId,
             applicationSK: sk,
-            action: 'AwaitingNotification' as HistoryAction,
+            action: 'AwaitingNotification',
             changedBy: userId,
             previousStatus: 'Pending',
             newStatus: 'AwaitingNotification',
@@ -492,7 +497,7 @@ export class EAApplicationRepository {
         await this.recordHistory({
             userId,
             applicationSK: sk,
-            action: 'SystemExpired' as HistoryAction,
+            action: 'SystemExpired',
             changedBy: 'system',
             previousStatus: 'Active',
             newStatus: 'Expired',
@@ -510,13 +515,15 @@ export class EAApplicationRepository {
 
         const adjustedTTL = Math.floor(adjustedDate.getTime() / 1000);
 
-        const result: UpdateCommandOutput = await this.docClient.send(new UpdateCommand({
+        const updateParams: UpdateCommandInput = {
             TableName: this.tableName,
             Key: { userId, sk },
             UpdateExpression: 'SET #ttl = :ttl',
             ExpressionAttributeNames: { '#ttl': 'ttl' },
             ExpressionAttributeValues: { ':ttl': adjustedTTL }
-        }));
+        };
+
+        await this.docClient.send(new UpdateCommand(updateParams));
 
         logger.info('TTL adjusted', {
             userId,
@@ -601,7 +608,7 @@ export class EAApplicationRepository {
      * 失敗通知のステータスを持つアプリケーションを取得
      */
     async getFailedNotificationApplications(userId: string): Promise<EAApplication[]> {
-        const command = new QueryCommand({
+        const params: QueryCommandInput = {
             TableName: this.tableName,
             KeyConditionExpression: 'userId = :userId AND begins_with(sk, :prefix)',
             FilterExpression: '#status = :failedStatus',
@@ -614,9 +621,9 @@ export class EAApplicationRepository {
                 ':failedStatus': 'FailedNotification',
             },
             ScanIndexForward: false, // 新しい順
-        });
+        };
 
-        const result: QueryCommandOutput = await this.docClient.send(command);
+        const result = await this.docClient.send(new QueryCommand(params)) as QueryCommandOutput;
         return (result.Items as EAApplication[]) || [];
     }
 
@@ -637,7 +644,7 @@ export class EAApplicationRepository {
     async getAllFailedNotificationApplications(): Promise<EAApplication[]> {
         // GSI を使用して status ベースでクエリ
         // 注意: この実装には StatusIndex が必要
-        const command = new QueryCommand({
+        const params: QueryCommandInput = {
             TableName: this.tableName,
             IndexName: 'StatusIndex', // ステータス用のGSI
             KeyConditionExpression: '#status = :failedStatus',
@@ -647,10 +654,10 @@ export class EAApplicationRepository {
             ExpressionAttributeValues: {
                 ':failedStatus': 'FailedNotification',
             },
-        });
+        };
 
-        const result = await this.docClient.send(command);
-        return result.Items as EAApplication[] || [];
+        const result = await this.docClient.send(new QueryCommand(params)) as QueryCommandOutput;
+        return (result.Items as EAApplication[]) || [];
     }
 
     /**
