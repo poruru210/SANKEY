@@ -37,7 +37,7 @@ export class SankeyDbStack extends cdk.Stack {
 
         this.ttlMonths = ttlMonthsParam.valueAsNumber;
 
-        // DynamoDBテーブルの作成（GSIなし）
+        // DynamoDBテーブルの作成
         this.table = CdkHelpers.createDynamoTable(
             this,
             'EAApplicationsTable',
@@ -47,7 +47,14 @@ export class SankeyDbStack extends cdk.Stack {
                 partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
                 sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING },
                 timeToLiveAttribute: 'ttl',
-                // globalSecondaryIndexes を削除
+                globalSecondaryIndexes: [
+                    {
+                        indexName: 'StatusIndex',
+                        partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
+                        sortKey: { name: 'status', type: dynamodb.AttributeType.STRING },
+                        projectionType: dynamodb.ProjectionType.ALL,
+                    }
+                ],
             }
         );
 
