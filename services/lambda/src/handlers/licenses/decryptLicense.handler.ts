@@ -3,16 +3,15 @@ import { Logger } from '@aws-lambda-powertools/logger';
 import { Tracer } from '@aws-lambda-powertools/tracer';
 import { injectLambdaContext } from '@aws-lambda-powertools/logger/middleware';
 import { captureLambdaHandler } from '@aws-lambda-powertools/tracer/middleware';
-import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
-import { webcrypto } from 'crypto';
 import middy from '@middy/core';
 import httpCors from '@middy/http-cors';
 
 import { decryptLicense } from '../../services/encryption';
 import { LicensePayloadV1 } from '../../models/licensePayload';
 import { EAApplicationRepository } from '../../repositories/eaApplicationRepository';
+import { MasterKeyService } from '../../services/masterKeyService';
 import {
     createSuccessResponse,
     createValidationErrorResponse,
@@ -30,35 +29,12 @@ const logger = new Logger({
 const tracer = new Tracer({ serviceName: 'decrypt-license' });
 
 // DI対応: クライアントとRepositoryを初期化
-const ssmClient = new SSMClient({});
 const ddbClient = tracer.captureAWSv3Client(new DynamoDBClient({}));
 const docClient = DynamoDBDocumentClient.from(ddbClient);
 const repository = new EAApplicationRepository(docClient);
 
-// Master Key の取得関数
-async function getUserMasterKey(userId: string): Promise<CryptoKey> {
-    const paramName = `${process.env.SSM_USER_PREFIX}/${userId}/master-key`;
-
-    try {
-        const { Parameter } = await ssmClient.send(
-            new GetParameterCommand({
-                Name: paramName,
-                WithDecryption: true,
-            })
-        );
-
-        if (!Parameter?.Value) {
-            logger.error('Master key parameter not found', { userId, paramName });
-            throw new Error('Master key not found');
-        }
-
-        const keyBuffer = Buffer.from(Parameter.Value, 'base64');
-        return await webcrypto.subtle.importKey('raw', keyBuffer, 'AES-CBC', true, ['decrypt']);
-    } catch (error) {
-        logger.error('Failed to retrieve master key', { userId, error });
-        throw new Error('Failed to retrieve decryption key');
-    }
-}
+// Master Key Service の初期化
+const masterKeyService = new MasterKeyService({ logger });
 
 // 任意のライセンス文字列を直接復号化
 async function handleDirectDecrypt(
@@ -89,8 +65,8 @@ async function handleDirectDecrypt(
     }
 
     try {
-        // マスターキーを取得
-        const masterKey = await getUserMasterKey(userId);
+        // 共通サービスを使用してマスターキーを取得
+        const masterKey = await masterKeyService.getUserMasterKeyForDecryption(userId);
 
         // ライセンスを復号化
         let decryptedPayload: LicensePayloadV1;
@@ -144,7 +120,7 @@ async function handleApplicationDecrypt(
     });
 
     try {
-        // 修正: DI対応のRepositoryを使用
+        // DI対応のRepositoryを使用
         const application = await repository.getApplication(userId, fullApplicationKey);
         if (!application) {
             logger.error('Application not found', { userId, applicationId: fullApplicationKey });
@@ -170,8 +146,8 @@ async function handleApplicationDecrypt(
             currentStatus: application.status
         });
 
-        // マスターキーを取得
-        const masterKey = await getUserMasterKey(userId);
+        // 共通サービスを使用してマスターキーを取得
+        const masterKey = await masterKeyService.getUserMasterKeyForDecryption(userId);
 
         // DBに保存されているライセンスキーを復号化
         let decryptedPayload: LicensePayloadV1;

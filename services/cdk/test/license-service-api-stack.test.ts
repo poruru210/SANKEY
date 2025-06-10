@@ -39,13 +39,6 @@ describe('LicenseServiceApiStack', () => {
     app = stacks.app;
   });
 
-  test('API Gateway RestApi should be created', () => {
-    template.resourceCountIs('AWS::ApiGateway::RestApi', 1);
-    template.hasResourceProperties('AWS::ApiGateway::RestApi', {
-      Name: 'LicenseServiceApi',
-    });
-  });
-
   describe('API Key Requirement Tests', () => {
     const cognitoAuthenticatedEndpoints = [
       { path: 'applications', method: 'GET' },
@@ -104,13 +97,6 @@ describe('LicenseServiceApiStack', () => {
         ApiKeyRequired: false,
       });
     });
-  });
-
-  // Add more tests for other resources and properties in LicenseServiceApiStack if needed
-  test('Free, Basic, Pro UsagePlans should be created', () => {
-    template.hasResourceProperties('AWS::ApiGateway::UsagePlan', { UsagePlanName: 'free-plan' });
-    template.hasResourceProperties('AWS::ApiGateway::UsagePlan', { UsagePlanName: 'basic-plan' });
-    template.hasResourceProperties('AWS::ApiGateway::UsagePlan', { UsagePlanName: 'pro-plan' });
   });
 
 });

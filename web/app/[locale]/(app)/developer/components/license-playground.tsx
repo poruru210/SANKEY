@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useTranslations } from "next-intl"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -35,6 +36,8 @@ import {
 } from "lucide-react"
 
 export default function LicensePlayground() {
+  const t = useTranslations('developer.playground')
+  const tCommon = useTranslations('common')
   const { toast } = useToast()
   const {
     encryptedLicense,
@@ -66,12 +69,12 @@ export default function LicensePlayground() {
 
   // プリセット期限
   const expiryPresets = [
-    { label: "7日", days: 7 },
-    { label: "30日", days: 30 },
-    { label: "90日", days: 90 },
-    { label: "1年", days: 365 },
-    { label: "2年", days: 730 },
-    { label: "無期限", days: 36000 },
+    { label: t('expiryPresets.7days'), days: 7 },
+    { label: t('expiryPresets.30days'), days: 30 },
+    { label: t('expiryPresets.90days'), days: 90 },
+    { label: t('expiryPresets.1year'), days: 365 },
+    { label: t('expiryPresets.2years'), days: 730 },
+    { label: t('expiryPresets.unlimited'), days: 36000 },
   ]
 
   const [decryptForm, setDecryptForm] = useState({
@@ -88,8 +91,8 @@ export default function LicensePlayground() {
   const handleGenerateLicense = async () => {
     if (!encryptForm.eaName.trim() || !encryptForm.accountId.trim()) {
       toast({
-        title: "入力エラー",
-        description: "EA名とアカウントIDは必須です",
+        title: tCommon('error'),
+        description: t('errors.inputRequired'),
         variant: "destructive",
       })
       return
@@ -103,8 +106,8 @@ export default function LicensePlayground() {
       })
 
       toast({
-        title: "ライセンスを生成しました",
-        description: "暗号化されたライセンスキーが生成されました",
+        title: t('success.generated'),
+        description: t('success.generatedDesc'),
         variant: "default",
       })
     } catch (error) {
@@ -117,8 +120,8 @@ export default function LicensePlayground() {
   const handleValidateLicense = async () => {
     if (!decryptForm.encryptedLicense.trim() || !decryptForm.accountId.trim()) {
       toast({
-        title: "入力エラー",
-        description: "ライセンスキーとアカウントIDは必須です",
+        title: tCommon('error'),
+        description: t('errors.validationRequired'),
         variant: "destructive",
       })
       return
@@ -131,8 +134,8 @@ export default function LicensePlayground() {
       })
 
       toast({
-        title: "ライセンスを検証しました",
-        description: "ライセンス情報が復号化されました",
+        title: t('success.validated'),
+        description: t('success.validatedDesc'),
         variant: "default",
       })
     } catch (error) {
@@ -145,14 +148,14 @@ export default function LicensePlayground() {
     try {
       await navigator.clipboard.writeText(text)
       toast({
-        title: "コピーしました",
-        description: `${label}がクリップボードにコピーされました`,
+        title: t('success.copied'),
+        description: t('success.copiedDesc', { item: label }),
         variant: "default",
       })
     } catch (error) {
       toast({
-        title: "コピーに失敗しました",
-        description: "クリップボードへのアクセスに失敗しました",
+        title: tCommon('error'),
+        description: t('errors.copyFailed'),
         variant: "destructive",
       })
     }
@@ -168,8 +171,8 @@ export default function LicensePlayground() {
       }))
       setActiveTab("validate")
       toast({
-        title: "ライセンスを設定しました",
-        description: "生成されたライセンスが検証フォームに設定されました",
+        title: t('success.licenseSet'),
+        description: t('success.licenseSetDesc'),
         variant: "default",
       })
     }
@@ -188,11 +191,11 @@ export default function LicensePlayground() {
     const daysUntilExpiry = licenseService.getDaysUntilExpiry(decryptedLicense.decryptedLicense)
 
     if (isExpired) {
-      return { status: 'expired', label: '期限切れ', color: 'destructive', days: daysUntilExpiry }
+      return { status: 'expired', label: t('expired'), color: 'destructive', days: daysUntilExpiry }
     } else if (daysUntilExpiry <= 30) {
-      return { status: 'warning', label: '期限間近', color: 'secondary', days: daysUntilExpiry }
+      return { status: 'warning', label: t('warning'), color: 'secondary', days: daysUntilExpiry }
     } else {
-      return { status: 'valid', label: '有効', color: 'default', days: daysUntilExpiry }
+      return { status: 'valid', label: t('valid'), color: 'default', days: daysUntilExpiry }
     }
   }
 
@@ -205,7 +208,7 @@ export default function LicensePlayground() {
             <div className="flex items-center justify-between">
               <div className="flex items-center">
                 <FlaskConical className="w-6 h-6 mr-2 text-emerald-400"/>
-                <CardTitle className="theme-text-primary">Playground</CardTitle>
+                <CardTitle className="theme-text-primary">{t('title')}</CardTitle>
               </div>
               <Button
                   variant="outline"
@@ -213,11 +216,11 @@ export default function LicensePlayground() {
                   className="flex items-center space-x-2"
               >
                 <RefreshCw className="w-4 h-4" />
-                <span>リセット</span>
+                <span>{t('reset')}</span>
               </Button>
             </div>
             <CardDescription className="theme-text-secondary">
-              ライセンスの生成と検証をテストできます
+              {t('description')}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -228,14 +231,14 @@ export default function LicensePlayground() {
                     className="data-[state=active]:bg-[var(--tab-active-bg)] data-[state=active]:text-[var(--tab-active-text)] data-[state=active]:shadow-lg data-[state=active]:shadow-emerald-500/25 text-[var(--tab-inactive-text)] hover:text-[var(--tab-inactive-hover-text)] hover:bg-[var(--tab-inactive-hover-bg)] transition-all duration-200 text-xs sm:text-sm rounded-l-md rounded-r-none m-0"
                 >
                   <Key className="w-4 h-4 mr-1 sm:mr-2"/>
-                  <span>ライセンス生成</span>
+                  <span>{t('generateTab')}</span>
                 </TabsTrigger>
                 <TabsTrigger
                     value="validate"
                     className="data-[state=active]:bg-[var(--tab-active-bg)] data-[state=active]:text-[var(--tab-active-text)] data-[state=active]:shadow-lg data-[state=active]:shadow-emerald-500/25 text-[var(--tab-inactive-text)] hover:text-[var(--tab-inactive-hover-text)] hover:bg-[var(--tab-inactive-hover-bg)] transition-all duration-200 text-xs sm:text-sm rounded-r-md rounded-l-none m-0"
                 >
                   <Shield className="w-4 h-4 mr-1 sm:mr-2"/>
-                  <span>ライセンス検証</span>
+                  <span>{t('validateTab')}</span>
                 </TabsTrigger>
               </TabsList>
 
@@ -248,17 +251,17 @@ export default function LicensePlayground() {
                         <div className="flex items-center space-x-3 mb-6">
                           <Key className="w-6 h-6 text-emerald-400"/>
                           <div>
-                            <h4 className="font-semibold theme-text-primary mb-2">新しいライセンスを生成</h4>
-                            <p className="text-sm text-muted-foreground">EA情報を入力してライセンスキーを生成します</p>
+                            <h4 className="font-semibold theme-text-primary mb-2">{t('generateTitle')}</h4>
+                            <p className="text-sm text-muted-foreground">{t('generateDesc')}</p>
                           </div>
                         </div>
 
                         <div className="space-y-4">
                           <div className="space-y-2">
-                            <Label htmlFor="eaName" className="theme-text-primary">EA名 *</Label>
+                            <Label htmlFor="eaName" className="theme-text-primary">{t('eaName')} *</Label>
                             <Input
                                 id="eaName"
-                                placeholder="MyTradingEA v1.0"
+                                placeholder={t('eaNamePlaceholder')}
                                 value={encryptForm.eaName}
                                 onChange={(e) => setEncryptForm((prev) => ({ ...prev, eaName: e.target.value }))}
                                 className="theme-input"
@@ -266,10 +269,10 @@ export default function LicensePlayground() {
                           </div>
 
                           <div className="space-y-2">
-                            <Label htmlFor="accountId" className="theme-text-primary">アカウントID *</Label>
+                            <Label htmlFor="accountId" className="theme-text-primary">{t('accountId')} *</Label>
                             <Input
                                 id="accountId"
-                                placeholder="1234567890"
+                                placeholder={t('accountIdPlaceholder')}
                                 value={encryptForm.accountId}
                                 onChange={(e) => {
                                   const value = e.target.value.replace(/[^0-9]/g, '')
@@ -280,7 +283,7 @@ export default function LicensePlayground() {
                           </div>
 
                           <div className="space-y-2">
-                            <Label htmlFor="expiryDays" className="theme-text-primary">有効期限（日数）</Label>
+                            <Label htmlFor="expiryDays" className="theme-text-primary">{t('expiryDays')}</Label>
 
                             {/* プリセットボタン */}
                             <div className="flex flex-wrap gap-2 mb-3">
@@ -316,7 +319,7 @@ export default function LicensePlayground() {
                                 className="theme-input"
                             />
                             <p className="text-xs theme-text-secondary">
-                              期限: {new Date(calculateExpiryDate(encryptForm.expiryDays)).toLocaleDateString('ja-JP')}
+                              {t('expiry')}: {new Date(calculateExpiryDate(encryptForm.expiryDays)).toLocaleDateString()}
                             </p>
                           </div>
                         </div>
@@ -329,12 +332,12 @@ export default function LicensePlayground() {
                           {isEncrypting ? (
                               <>
                                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                生成中...
+                                {t('generating')}
                               </>
                           ) : (
                               <>
                                 <Key className="w-4 h-4 mr-2" />
-                                ライセンス生成
+                                {t('generateLicense')}
                               </>
                           )}
                         </Button>
@@ -343,7 +346,7 @@ export default function LicensePlayground() {
                             <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
                               <div className="flex items-center text-red-400">
                                 <AlertCircle className="w-4 h-4 mr-2"/>
-                                <span className="font-medium">エラー</span>
+                                <span className="font-medium">{tCommon('error')}</span>
                               </div>
                               <p className="text-sm text-red-300 mt-1">{encryptError}</p>
                             </div>
@@ -355,8 +358,8 @@ export default function LicensePlayground() {
                         <div className="flex items-center space-x-3 mb-6">
                           <Lock className="w-6 h-6 text-blue-400"/>
                           <div>
-                            <h4 className="font-semibold theme-text-primary mb-2">生成されたライセンス</h4>
-                            <p className="text-sm text-muted-foreground">暗号化されたライセンスキー</p>
+                            <h4 className="font-semibold theme-text-primary mb-2">{t('generatedLicense')}</h4>
+                            <p className="text-sm text-muted-foreground">{t('generatedLicenseDesc')}</p>
                           </div>
                         </div>
 
@@ -364,7 +367,7 @@ export default function LicensePlayground() {
                           {encryptedLicense ? (
                               <>
                                 <div className="flex items-center justify-between mb-4">
-                                  <Label className="text-sm font-medium theme-text-primary">ライセンスキー</Label>
+                                  <Label className="text-sm font-medium theme-text-primary">{t('licenseKey')}</Label>
                                   <div className="flex space-x-2">
                                     <Button
                                         variant="outline"
@@ -376,7 +379,7 @@ export default function LicensePlayground() {
                                     <Button
                                         variant="outline"
                                         size="sm"
-                                        onClick={() => handleCopyToClipboard(encryptedLicense.encryptedLicense, "ライセンスキー")}
+                                        onClick={() => handleCopyToClipboard(encryptedLicense.encryptedLicense, t('licenseKey'))}
                                     >
                                       <Copy className="w-4 h-4" />
                                     </Button>
@@ -400,7 +403,7 @@ export default function LicensePlayground() {
                                       variant="outline"
                                       className="flex items-center space-x-2"
                                   >
-                                    <span>検証フォームで使用</span>
+                                    <span>{t('useInValidation')}</span>
                                     <ArrowRight className="w-4 h-4" />
                                   </Button>
                                 </div>
@@ -409,7 +412,7 @@ export default function LicensePlayground() {
                               <div className="text-center py-12">
                                 <Lock className="w-12 h-12 text-slate-400 mx-auto mb-4" />
                                 <p className="theme-text-secondary">
-                                  ライセンスを生成してください
+                                  {t('generateDesc')}
                                 </p>
                               </div>
                           )}
@@ -429,17 +432,17 @@ export default function LicensePlayground() {
                         <div className="flex items-center space-x-3 mb-6">
                           <Shield className="w-6 h-6 text-blue-400"/>
                           <div>
-                            <h4 className="font-semibold theme-text-primary mb-2">ライセンスを検証</h4>
-                            <p className="text-sm text-muted-foreground">ライセンスキーを入力して内容を確認します</p>
+                            <h4 className="font-semibold theme-text-primary mb-2">{t('validateTitle')}</h4>
+                            <p className="text-sm text-muted-foreground">{t('validateDesc')}</p>
                           </div>
                         </div>
 
                         <div className="space-y-4">
                           <div className="space-y-2">
-                            <Label htmlFor="licenseKey" className="theme-text-primary">ライセンスキー *</Label>
+                            <Label htmlFor="licenseKey" className="theme-text-primary">{t('licenseKey')} *</Label>
                             <Textarea
                                 id="licenseKey"
-                                placeholder="暗号化されたライセンス文字列を入力してください"
+                                placeholder={t('licenseKeyPlaceholder')}
                                 value={decryptForm.encryptedLicense}
                                 onChange={(e) => setDecryptForm((prev) => ({ ...prev, encryptedLicense: e.target.value }))}
                                 className="theme-textarea font-mono text-sm"
@@ -448,10 +451,10 @@ export default function LicensePlayground() {
                           </div>
 
                           <div className="space-y-2">
-                            <Label htmlFor="validationAccountId" className="theme-text-primary">アカウントID *</Label>
+                            <Label htmlFor="validationAccountId" className="theme-text-primary">{t('accountId')} *</Label>
                             <Input
                                 id="validationAccountId"
-                                placeholder="1234567890"
+                                placeholder={t('accountIdPlaceholder')}
                                 value={decryptForm.accountId}
                                 onChange={(e) => {
                                   const value = e.target.value.replace(/[^0-9]/g, '')
@@ -470,12 +473,12 @@ export default function LicensePlayground() {
                           {isDecrypting ? (
                               <>
                                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                検証中...
+                                {t('validating')}
                               </>
                           ) : (
                               <>
                                 <CheckCircle className="w-4 h-4 mr-2" />
-                                ライセンス検証
+                                {t('validateLicense')}
                               </>
                           )}
                         </Button>
@@ -484,7 +487,7 @@ export default function LicensePlayground() {
                             <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
                               <div className="flex items-center text-red-400">
                                 <AlertCircle className="w-4 h-4 mr-2"/>
-                                <span className="font-medium">検証失敗</span>
+                                <span className="font-medium">{t('errors.validationFailed')}</span>
                               </div>
                               <p className="text-sm text-red-300 mt-1">{decryptError}</p>
                             </div>
@@ -497,14 +500,14 @@ export default function LicensePlayground() {
                           <div className="flex items-center space-x-3">
                             <Unlock className="w-6 h-6 text-green-400"/>
                             <div>
-                              <h4 className="font-semibold theme-text-primary mb-2">ライセンス情報</h4>
-                              <p className="text-sm text-muted-foreground">復号化されたライセンス詳細</p>
+                              <h4 className="font-semibold theme-text-primary mb-2">{t('licenseInfo')}</h4>
+                              <p className="text-sm text-muted-foreground">{t('licenseInfoDesc')}</p>
                             </div>
                           </div>
                           {licenseStatus && (
                               <Badge variant={licenseStatus.color}>
                                 {licenseStatus.label}
-                                {licenseStatus.days > 0 && ` (${licenseStatus.days}日)`}
+                                {licenseStatus.days > 0 && ` (${licenseStatus.days}${t('daysRemaining')})`}
                               </Badge>
                           )}
                         </div>
@@ -515,23 +518,23 @@ export default function LicensePlayground() {
                                   <div className="space-y-6">
                                     <div className="grid grid-cols-2 gap-3">
                                       <div>
-                                        <Label className="text-xs theme-text-secondary">EA名</Label>
+                                        <Label className="text-xs theme-text-secondary">{t('eaName')}</Label>
                                         <p className="theme-text-primary font-mono">{decryptedLicense.decryptedLicense.eaName}</p>
                                       </div>
                                       <div>
-                                        <Label className="text-xs theme-text-secondary">アカウントID</Label>
+                                        <Label className="text-xs theme-text-secondary">{t('accountId')}</Label>
                                         <p className="theme-text-primary font-mono">{decryptedLicense.decryptedLicense.accountId}</p>
                                       </div>
                                       <div>
-                                        <Label className="text-xs theme-text-secondary">有効期限</Label>
+                                        <Label className="text-xs theme-text-secondary">{t('expiry')}</Label>
                                         <p className="theme-text-primary font-mono">
-                                          {new Date(decryptedLicense.decryptedLicense.expiry).toLocaleString('ja-JP')}
+                                          {new Date(decryptedLicense.decryptedLicense.expiry).toLocaleString()}
                                         </p>
                                       </div>
                                       <div>
-                                        <Label className="text-xs theme-text-secondary">発行日時</Label>
+                                        <Label className="text-xs theme-text-secondary">{t('issuedAt')}</Label>
                                         <p className="theme-text-primary font-mono">
-                                          {new Date(decryptedLicense.decryptedLicense.issuedAt).toLocaleString('ja-JP')}
+                                          {new Date(decryptedLicense.decryptedLicense.issuedAt).toLocaleString()}
                                         </p>
                                       </div>
                                     </div>
@@ -540,7 +543,7 @@ export default function LicensePlayground() {
 
                                     <div className="space-y-3">
                                       <div className="flex items-center justify-between">
-                                        <Label className="text-sm font-medium theme-text-primary">JSON表示</Label>
+                                        <Label className="text-sm font-medium theme-text-primary">{t('jsonDisplay')}</Label>
                                         <div className="flex space-x-2">
                                           <Button
                                               variant="outline"
@@ -555,7 +558,7 @@ export default function LicensePlayground() {
                                               onClick={() =>
                                                   handleCopyToClipboard(
                                                       JSON.stringify(decryptedLicense.decryptedLicense, null, 2),
-                                                      "ライセンス情報",
+                                                      t('licenseInfo'),
                                                   )
                                               }
                                           >
@@ -575,14 +578,14 @@ export default function LicensePlayground() {
                                   <div className="text-center py-12">
                                     <Eye className="w-12 h-12 text-slate-400 mx-auto mb-4" />
                                     <p className="theme-text-secondary mb-4">
-                                      ライセンス情報は非表示になっています
+                                      {t('hide')}
                                     </p>
                                     <Button
                                         variant="outline"
                                         onClick={() => setShowDecryptedPayload(true)}
                                     >
                                       <Eye className="w-4 h-4 mr-2" />
-                                      表示する
+                                      {t('show')}
                                     </Button>
                                   </div>
                               )
@@ -590,7 +593,7 @@ export default function LicensePlayground() {
                               <div className="text-center py-12">
                                 <Unlock className="w-12 h-12 text-slate-400 mx-auto mb-4" />
                                 <p className="theme-text-secondary">
-                                  ライセンスを検証してください
+                                  {t('validateDesc')}
                                 </p>
                               </div>
                           )}
