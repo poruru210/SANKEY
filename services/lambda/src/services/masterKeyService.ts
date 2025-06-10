@@ -1,5 +1,4 @@
-// services/lambda/src/services/masterKeyService.ts
-import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
+import { SSMClient, GetParameterCommand, PutParameterCommand } from '@aws-sdk/client-ssm';
 import { webcrypto } from 'crypto';
 import { Logger } from '@aws-lambda-powertools/logger';
 
@@ -17,7 +16,59 @@ export class MasterKeyService {
     constructor(options: MasterKeyServiceOptions = {}) {
         this.ssmClient = options.ssmClient || new SSMClient({});
         this.logger = options.logger || new Logger({ serviceName: 'master-key-service' });
-        this.ssmUserPrefix = options.ssmUserPrefix || process.env.SSM_USER_PREFIX || '/license-service/users';
+
+        // 環境変数から動的にパスを構築
+        const environment = process.env.ENVIRONMENT || process.env.STAGE || 'dev';
+        const defaultPrefix = `/sankey/${environment}/users`;
+        this.ssmUserPrefix = options.ssmUserPrefix || process.env.SSM_USER_PREFIX || defaultPrefix;
+
+        this.logger.debug('MasterKeyService initialized', {
+            ssmUserPrefix: this.ssmUserPrefix,
+            environment
+        });
+    }
+
+    /**
+     * マスターキーが存在しない場合は作成する（postConfirmation用）
+     */
+    async ensureMasterKeyExists(userId: string, email?: string): Promise<void> {
+        const paramName = `${this.ssmUserPrefix}/${userId}/master-key`;
+
+        try {
+            // 既存確認
+            await this.ssmClient.send(new GetParameterCommand({ Name: paramName }));
+            this.logger.info('Master key already exists', { userId, paramName });
+        } catch (error: any) {
+            if (error.name === 'ParameterNotFound') {
+                // 新規作成
+                await this.createMasterKey(userId, email);
+                this.logger.info('Created new master key', { userId, paramName });
+            } else {
+                this.logger.error('Unexpected error checking master key', { error, userId });
+                throw error;
+            }
+        }
+    }
+
+    private async createMasterKey(userId: string, email?: string): Promise<void> {
+        const masterKey = webcrypto.getRandomValues(new Uint8Array(32));
+        const masterKeyBase64 = Buffer.from(masterKey).toString('base64');
+        const paramName = `${this.ssmUserPrefix}/${userId}/master-key`;
+
+        const tags = [
+            { Key: 'userId', Value: userId },
+            ...(email ? [{ Key: 'email', Value: email }] : [])
+        ];
+
+        await this.ssmClient.send(
+            new PutParameterCommand({
+                Name: paramName,
+                Value: masterKeyBase64,
+                Type: 'String',
+                Description: email ? `Master key for user ${email}` : `Master key for user ${userId}`,
+                Tags: tags,
+            })
+        );
     }
 
     /**

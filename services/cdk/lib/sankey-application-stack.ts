@@ -417,10 +417,15 @@ export class SankeyApplicationStack extends cdk.Stack {
      * GAS Template エンドポイント作成
      */
     private createGasTemplateEndpoints(props: SankeyApplicationStackProps): void {
+
+        const apiEndpoint = `https://${this.domainName.domainName}`;
+
         const renderGasTemplateHandler = this.createLambdaFunction(
             'render-gas-template',
             '../../lambda/src/handlers/generators/renderGasTemplate.handler.ts',
-            {},
+            {
+                API_ENDPOINT: apiEndpoint, // 追加
+            },
             cdk.Duration.seconds(15),
             256,
             {
