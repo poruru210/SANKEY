@@ -98,10 +98,10 @@ export async function decryptLicense(
 
   try {
     const payload = JSON.parse(decryptedString) as LicensePayload;
-    
-    // バージョンフィールドの検証
-    if (!payload.version) {
-      throw new Error("Invalid payload: missing version field");
+
+    // バージョンフィールドの検証（整数値）
+    if (typeof payload.version !== 'number' || payload.version < 1) {
+      throw new Error("Invalid payload: missing or invalid version field");
     }
 
     return payload;

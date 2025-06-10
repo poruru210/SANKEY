@@ -1,7 +1,7 @@
 import * as cdk from 'aws-cdk-lib';
 import { Template, Match } from 'aws-cdk-lib/assertions';
 import { SankeyDbStack } from '../lib/sankey-db-stack';
-import * as cognito from 'aws-cdk-lib/aws-cognito'; // Added import
+import * as cognito from 'aws-cdk-lib/aws-cognito';
 
 describe('LicenseServiceDbStack', () => {
   let app: cdk.App;
@@ -13,9 +13,9 @@ describe('LicenseServiceDbStack', () => {
   beforeAll(() => {
     app = new cdk.App();
     testHostStack = new cdk.Stack(app, 'TestHostStackForDb');
-    mockUserPool = new cognito.UserPool(testHostStack, 'MockUserPoolForDb'); // Scope to host stack
-    stack = new SankeyDbStack(app, 'MyTestDbStack', { // This is a stack, scoped to app
-        userPool: mockUserPool
+    mockUserPool = new cognito.UserPool(testHostStack, 'MockUserPoolForDb');
+    stack = new SankeyDbStack(app, 'MyTestDbStack', {
+      userPool: mockUserPool
     });
     template = Template.fromStack(stack);
   });
@@ -26,28 +26,51 @@ describe('LicenseServiceDbStack', () => {
       AttributeDefinitions: Match.arrayWith([
         { AttributeName: 'userId', AttributeType: 'S' },
         { AttributeName: 'sk', AttributeType: 'S' },
-        { AttributeName: 'broker', AttributeType: 'S' },
-        { AttributeName: 'accountNumber', AttributeType: 'S' },
-        // 'status' attribute definition removed based on error log interpretation
       ]),
       KeySchema: Match.arrayWith([
         { AttributeName: 'userId', KeyType: 'HASH' },
         { AttributeName: 'sk', KeyType: 'RANGE' },
       ]),
-      // ProvisionedThroughput and BillingMode assertions removed based on error log showing BillingMode: undefined
-      GlobalSecondaryIndexes: Match.arrayWith([
-        Match.objectLike({
-          IndexName: 'BrokerAccountIndex',
-          KeySchema: Match.arrayWith([
-            { AttributeName: 'broker', KeyType: 'HASH' },
-            { AttributeName: 'accountNumber', KeyType: 'RANGE' },
-          ]),
-          Projection: { ProjectionType: 'ALL' },
-          // ProvisionedThroughput for GSI removed as table-level BillingMode is assumed undefined
-        }),
-        // StatusIndex removed based on error log interpretation
-      ]),
-      // TableName: Match.stringLikeRegexp('ea-applications-mytestdbstack') // Example if needed
+      TableName: Match.stringLikeRegexp('sankey-applications-dev'),
+      TimeToLiveSpecification: {
+        AttributeName: 'ttl',
+        Enabled: true
+      },
+      // No GlobalSecondaryIndexes since they're not defined in the stack
+    });
+  });
+
+  test('DynamoDB Table should have correct tags', () => {
+    template.hasResourceProperties('AWS::DynamoDB::Table', {
+      Tags: Match.arrayWith([
+        { Key: 'Environment', Value: 'dev' },
+        { Key: 'TTLMonths', Value: { Ref: 'TTLMonths' } },
+      ])
+    });
+  });
+
+  test('Stack should create correct outputs', () => {
+    // Check that outputs exist - the exact names depend on how CdkHelpers.createOutputs works
+    // Let's just verify some outputs exist for now
+    const template_obj = template.toJSON();
+    expect(template_obj.Outputs).toBeDefined();
+    expect(Object.keys(template_obj.Outputs).length).toBeGreaterThan(0);
+
+    // Check for outputs containing table information
+    const outputKeys = Object.keys(template_obj.Outputs);
+    const tableNameOutput = outputKeys.find(key => key.includes('SankeyTableName'));
+    const tableArnOutput = outputKeys.find(key => key.includes('SankeyTableArn'));
+
+    expect(tableNameOutput).toBeDefined();
+    expect(tableArnOutput).toBeDefined();
+  });
+
+  test('Stack should have TTL parameter', () => {
+    template.hasParameter('TTLMonths', {
+      Type: 'Number',
+      MinValue: 1,
+      MaxValue: 60,
+      Description: 'Number of months after which terminal status records will be automatically deleted'
     });
   });
 });

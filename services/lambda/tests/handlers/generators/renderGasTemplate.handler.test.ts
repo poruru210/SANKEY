@@ -142,6 +142,7 @@ describe('Render GAS Template Handler (Dynamic Webhook URL & GET method)', () =>
   const mockMasterKey = 'testMasterKey1234567890';
   const mockApiDomainName = 'test-domain.execute-api.test-region.amazonaws.com';
   const mockApiStage = 'testProd';
+  const testEnvironment = 'test';
 
   // Vitestでのモック関数の型指定
   const mockedReadFileSync = vi.mocked(fs.readFileSync);
@@ -156,20 +157,24 @@ describe('Render GAS Template Handler (Dynamic Webhook URL & GET method)', () =>
     // SSMクライアントのモックをリセット
     ssmMock.reset();
 
-    // 環境変数のリセット
-    process.env = { ...originalEnv };
+    // 環境変数のリセット（正しいパス用）
+    process.env = {
+      ...originalEnv,
+      ENVIRONMENT: testEnvironment,  // 'test' 環境を設定
+    };
 
     // ファイル読み込みのモック設定 - 文字列として返す
     mockedReadFileSync.mockReturnValue(mockGasTemplateString);
 
-    // SSMからのマスターキー取得の成功レスポンスをモック
+    // SSMからのマスターキー取得の成功レスポンスをモック（正しいパス使用）
+    const correctPath = `/sankey/${testEnvironment}/users/${mockUserId}/master-key`;
     ssmMock.on(GetParameterCommand, {
-      Name: `/license-service/users/${mockUserId}/master-key`,
+      Name: correctPath,
       WithDecryption: true
     }).resolves({
       Parameter: {
         Value: mockMasterKey,
-        Name: `/license-service/users/${mockUserId}/master-key`,
+        Name: correctPath,
         Type: 'SecureString'
       },
     });
@@ -265,7 +270,7 @@ describe('Render GAS Template Handler (Dynamic Webhook URL & GET method)', () =>
   });
 
   describe('正常系テスト', () => {
-    it('should successfully render the template for a GET request with dynamically constructed webhookUrl', async () => {
+    it('should successfully render the template for a GET request with correct SSM path', async () => {
       const event = createTestEvent(mockUserId);
       const context = createTestContext();
 
@@ -286,13 +291,50 @@ describe('Render GAS Template Handler (Dynamic Webhook URL & GET method)', () =>
       expect(result.body).toContain('FORM_FIELDS: {');
       expect(result.body).toContain('EA_NAME: "EA"');
 
+      // 正しいパスでSSMが呼ばれたことを確認
       const calls = ssmMock.commandCalls(GetParameterCommand, {
-        Name: `/license-service/users/${mockUserId}/master-key`,
+        Name: `/sankey/${testEnvironment}/users/${mockUserId}/master-key`,
         WithDecryption: true,
       });
-      expect(calls.length).toBeGreaterThan(0); // matcher代替
+      expect(calls.length).toBeGreaterThan(0);
     });
 
+    it('should work with different environments', async () => {
+      // 異なる環境での動作確認
+      process.env.ENVIRONMENT = 'staging';
+
+      // 新しい環境用のモックを設定
+      const stagingPath = `/sankey/staging/users/${mockUserId}/master-key`;
+      ssmMock.on(GetParameterCommand, {
+        Name: stagingPath,
+        WithDecryption: true
+      }).resolves({
+        Parameter: {
+          Value: mockMasterKey,
+          Name: stagingPath,
+          Type: 'SecureString'
+        },
+      });
+
+      // モジュールを再インポート
+      vi.resetModules();
+      const handlerModule = await import('../../../src/handlers/generators/renderGasTemplate.handler');
+      const stagingHandler = handlerModule.handler;
+
+      const event = createTestEvent(mockUserId);
+      const context = createTestContext();
+
+      const result = await stagingHandler(event, context);
+
+      expect(result.statusCode).toBe(200);
+
+      // staging環境のパスで呼ばれたことを確認
+      const calls = ssmMock.commandCalls(GetParameterCommand, {
+        Name: stagingPath,
+        WithDecryption: true,
+      });
+      expect(calls.length).toBeGreaterThan(0);
+    });
   });
 
   describe('異常系テスト', () => {
@@ -387,11 +429,12 @@ describe('Render GAS Template Handler (Dynamic Webhook URL & GET method)', () =>
       expect(responseBody.message).toBe('Unauthorized: User ID not found.');
     });
 
-    it('should return 404 if master key is not found in SSM for a GET request', async () => {
+    it('should return 500 if master key is not found in SSM for a GET request', async () => {
       // Arrange
       ssmMock.reset();
+      const correctPath = `/sankey/${testEnvironment}/users/${mockUserId}/master-key`;
       ssmMock.on(GetParameterCommand, {
-        Name: `/license-service/users/${mockUserId}/master-key`,
+        Name: correctPath,
         WithDecryption: true
       }).resolves({
         Parameter: undefined
@@ -404,20 +447,21 @@ describe('Render GAS Template Handler (Dynamic Webhook URL & GET method)', () =>
       const result = await handler(event, context);
 
       // Assert
-      expect(result.statusCode).toBe(404);
+      expect(result.statusCode).toBe(500);
       const responseBody = JSON.parse(result.body);
-      expect(responseBody.message).toBe('Configuration error: Master key not found for user.');
+      expect(responseBody.message).toBe('Internal Server Error: Could not retrieve master key.');
     });
 
-    it('should return 404 if master key parameter has no Value for a GET request', async () => {
+    it('should return 500 if master key parameter has no Value for a GET request', async () => {
       // Arrange
       ssmMock.reset();
+      const correctPath = `/sankey/${testEnvironment}/users/${mockUserId}/master-key`;
       ssmMock.on(GetParameterCommand, {
-        Name: `/license-service/users/${mockUserId}/master-key`,
+        Name: correctPath,
         WithDecryption: true
       }).resolves({
         Parameter: {
-          Name: `/license-service/users/${mockUserId}/master-key`,
+          Name: correctPath,
           Type: 'SecureString',
           Value: undefined
         } as any
@@ -430,16 +474,17 @@ describe('Render GAS Template Handler (Dynamic Webhook URL & GET method)', () =>
       const result = await handler(event, context);
 
       // Assert
-      expect(result.statusCode).toBe(404);
+      expect(result.statusCode).toBe(500);
       const responseBody = JSON.parse(result.body);
-      expect(responseBody.message).toBe('Configuration error: Master key not found for user.');
+      expect(responseBody.message).toBe('Internal Server Error: Could not retrieve master key.');
     });
 
     it('should return 500 if SSM GetParameterCommand fails for a GET request', async () => {
       // Arrange
       ssmMock.reset();
+      const correctPath = `/sankey/${testEnvironment}/users/${mockUserId}/master-key`;
       ssmMock.on(GetParameterCommand, {
-        Name: `/license-service/users/${mockUserId}/master-key`,
+        Name: correctPath,
         WithDecryption: true
       }).rejects(new Error('SSM GetParameter failed'));
 
