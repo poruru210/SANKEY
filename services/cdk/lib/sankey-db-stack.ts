@@ -11,7 +11,8 @@ export interface SankeyDbStackProps extends cdk.StackProps {
 }
 
 export class SankeyDbStack extends cdk.Stack {
-    public readonly table: dynamodb.Table;
+    public readonly eaApplicationsTable: dynamodb.Table;  // 既存（リネーム）
+    public readonly userProfileTable: dynamodb.Table;     // 新規追加
     public readonly ttlMonths: number;
     private readonly envName: string;
     private readonly config: ReturnType<typeof EnvironmentConfig.get>;
@@ -37,8 +38,8 @@ export class SankeyDbStack extends cdk.Stack {
 
         this.ttlMonths = ttlMonthsParam.valueAsNumber;
 
-        // DynamoDBテーブルの作成（GSIなし）
-        this.table = CdkHelpers.createDynamoTable(
+        // EAアプリケーション用DynamoDBテーブルの作成
+        this.eaApplicationsTable = CdkHelpers.createDynamoTable(
             this,
             'EAApplicationsTable',
             'applications',
@@ -47,7 +48,39 @@ export class SankeyDbStack extends cdk.Stack {
                 partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
                 sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING },
                 timeToLiveAttribute: 'ttl',
-                // globalSecondaryIndexes を削除
+            }
+        );
+
+        // BrokerAccountIndex GSI を追加
+        this.eaApplicationsTable.addGlobalSecondaryIndex({
+            indexName: 'BrokerAccountIndex',
+            partitionKey: { name: 'broker', type: dynamodb.AttributeType.STRING },
+            sortKey: { name: 'accountNumber', type: dynamodb.AttributeType.STRING },
+            readCapacity: 1,
+            writeCapacity: 1,
+            projectionType: dynamodb.ProjectionType.ALL,
+        });
+
+        // StatusIndex GSI も追加（統合テスト判定用）
+        this.eaApplicationsTable.addGlobalSecondaryIndex({
+            indexName: 'StatusIndex',
+            partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
+            sortKey: { name: 'status', type: dynamodb.AttributeType.STRING },
+            readCapacity: 1,
+            writeCapacity: 1,
+            projectionType: dynamodb.ProjectionType.ALL,
+        });
+
+        // ユーザープロファイル用DynamoDBテーブルの作成
+        this.userProfileTable = CdkHelpers.createDynamoTable(
+            this,
+            'UserProfileTable',
+            'user-profiles',
+            this.envName,
+            {
+                partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
+                readCapacity: 1,
+                writeCapacity: 1,
             }
         );
 
@@ -66,8 +99,21 @@ export class SankeyDbStack extends cdk.Stack {
             Environment: this.envName,
         };
 
+        // EAアプリケーションテーブルにタグ追加
         Object.entries(additionalTags).forEach(([key, value]) => {
-            cdk.Tags.of(this.table).add(key, value);
+            cdk.Tags.of(this.eaApplicationsTable).add(key, value);
+        });
+
+        // ユーザープロファイルテーブルにタグ追加（TTL関連タグは除外）
+        const profileTableTags = {
+            BillingMode: this.config.dynamodb.billingMode,
+            Environment: this.envName,
+            TableType: 'UserProfile',
+            DataRetention: 'Permanent',
+        };
+
+        Object.entries(profileTableTags).forEach(([key, value]) => {
+            cdk.Tags.of(this.userProfileTable).add(key, value);
         });
     }
 
@@ -76,15 +122,16 @@ export class SankeyDbStack extends cdk.Stack {
      */
     private createOutputs() {
         const outputs = [
+            // EAアプリケーションテーブル関連
             {
-                id: 'SankeyTableName',
-                value: this.table.tableName,
-                description: 'DynamoDB Table Name'
+                id: 'EAApplicationsTableName',
+                value: this.eaApplicationsTable.tableName,
+                description: 'EA Applications DynamoDB Table Name'
             },
             {
-                id: 'SankeyTableArn',
-                value: this.table.tableArn,
-                description: 'DynamoDB Table ARN'
+                id: 'EAApplicationsTableArn',
+                value: this.eaApplicationsTable.tableArn,
+                description: 'EA Applications DynamoDB Table ARN'
             },
             {
                 id: 'TTLAttributeName',
@@ -99,12 +146,23 @@ export class SankeyDbStack extends cdk.Stack {
             {
                 id: 'TTLConfiguration',
                 value: JSON.stringify({
-                    tableName: this.table.tableName,
+                    tableName: this.eaApplicationsTable.tableName,
                     ttlAttribute: 'ttl',
                     ttlMonths: this.ttlMonths,
                     terminalStatuses: ['Expired', 'Revoked', 'Rejected', 'Cancelled']
                 }),
                 description: 'Complete TTL configuration for Lambda functions'
+            },
+            // ユーザープロファイルテーブル関連
+            {
+                id: 'UserProfileTableName',
+                value: this.userProfileTable.tableName,
+                description: 'User Profile DynamoDB Table Name'
+            },
+            {
+                id: 'UserProfileTableArn',
+                value: this.userProfileTable.tableArn,
+                description: 'User Profile DynamoDB Table ARN'
             },
         ];
 

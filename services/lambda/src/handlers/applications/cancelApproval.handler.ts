@@ -1,15 +1,11 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { Logger } from '@aws-lambda-powertools/logger';
-import { Tracer } from '@aws-lambda-powertools/tracer';
 import { injectLambdaContext } from '@aws-lambda-powertools/logger/middleware';
 import { captureLambdaHandler } from '@aws-lambda-powertools/tracer/middleware';
 import middy from '@middy/core';
 import httpCors from '@middy/http-cors';
 
-import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
-
-import { EAApplicationRepository } from '../../repositories/eaApplicationRepository';
+import { createProductionContainer } from '../../di/container';
+import { CancelApprovalHandlerDependencies } from '../../di/types';
 import {
     createSuccessResponse,
     createUnauthorizedResponse,
@@ -18,19 +14,11 @@ import {
     createInternalErrorResponse
 } from '../../utils/apiResponse';
 
-const logger = new Logger({ serviceName: 'cancel-application' });
-const tracer = new Tracer({ serviceName: 'cancel-application' });
-
-// DI対応: Repository とクライアントを初期化
-const ddbClient = tracer.captureAWSv3Client(new DynamoDBClient({}));
-const docClient = DynamoDBDocumentClient.from(ddbClient);
-const repository = new EAApplicationRepository(docClient);
-
-// メインハンドラ
-const baseHandler = async (
+// ハンドラー作成関数
+export const createHandler = (dependencies: CancelApprovalHandlerDependencies) => async (
     event: APIGatewayProxyEvent
 ): Promise<APIGatewayProxyResult> => {
-    logger.info('Cancel approval request received');
+    dependencies.logger.info('Cancel approval request received');
 
     try {
         // パスパラメータからidを取得
@@ -51,7 +39,7 @@ const baseHandler = async (
             return createUnauthorizedResponse('User authentication required');
         }
 
-        logger.info('Processing cancel request', {
+        dependencies.logger.info('Processing cancel request', {
             applicationId: decodedApplicationId,
             userId,
         });
@@ -63,9 +51,9 @@ const baseHandler = async (
         }
 
         // リポジトリを使用してアプリケーション取得
-        const application = await repository.getApplication(userId, fullApplicationKey);
+        const application = await dependencies.eaApplicationRepository.getApplication(userId, fullApplicationKey);
         if (!application) {
-            logger.error('Application not found', { userId, applicationId: fullApplicationKey });
+            dependencies.logger.error('Application not found', { userId, applicationId: fullApplicationKey });
             return createNotFoundResponse('Application not found');
         }
 
@@ -101,13 +89,13 @@ const baseHandler = async (
         // リポジトリを使用してアプリケーション取り消し実行
         const cancellationReason = `Cancelled by user within ${Math.round(timeDiff / 1000)} seconds of approval`;
         const cancelledAt = new Date().toISOString();
-        await repository.cancelApplication(
+        await dependencies.eaApplicationRepository.cancelApplication(
             userId,
             fullApplicationKey,
             cancellationReason
         );
 
-        logger.info('Application cancelled successfully', {
+        dependencies.logger.info('Application cancelled successfully', {
             applicationId: fullApplicationKey,
             userId,
             eaName: application.eaName,
@@ -129,7 +117,7 @@ const baseHandler = async (
         );
 
     } catch (error) {
-        logger.error('Error cancelling application approval', { error });
+        dependencies.logger.error('Error cancelling application approval', { error });
 
         return createInternalErrorResponse(
             'Failed to cancel application approval',
@@ -138,6 +126,16 @@ const baseHandler = async (
     }
 };
 
+// Production configuration
+const container = createProductionContainer();
+const dependencies: CancelApprovalHandlerDependencies = {
+    eaApplicationRepository: container.resolve('eaApplicationRepository'),
+    logger: container.resolve('logger'),
+    tracer: container.resolve('tracer')
+};
+
+const baseHandler = createHandler(dependencies);
+
 // middy + Powertools middleware 適用
 export const handler = middy(baseHandler)
     .use(httpCors({
@@ -145,5 +143,5 @@ export const handler = middy(baseHandler)
         headers: 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,Accept,Cache-Control,X-Requested-With',
         methods: 'POST,OPTIONS',
     }))
-    .use(injectLambdaContext(logger, { clearState: true }))
-    .use(captureLambdaHandler(tracer));
+    .use(injectLambdaContext(dependencies.logger, { clearState: true }))
+    .use(captureLambdaHandler(dependencies.tracer));

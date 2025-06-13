@@ -22,8 +22,7 @@ import {
     isTerminalStatus,
     calculateTTLWithConfig
 } from '../models/eaApplication';
-
-const logger = new Logger();
+import { EAApplicationRepositoryDependencies } from '../di/types';
 
 // 承認情報の型定義
 interface ApprovalInfo {
@@ -36,10 +35,15 @@ interface ApprovalInfo {
 }
 
 export class EAApplicationRepository {
-    constructor(
-        private docClient: DynamoDBDocumentClient,
-        private tableName: string = process.env.TABLE_NAME || 'ea-applications-licenseservicedbstack'
-    ) {}
+    private readonly docClient: DynamoDBDocumentClient;
+    private readonly tableName: string;
+    private readonly logger: Logger;
+
+    constructor(dependencies: EAApplicationRepositoryDependencies) {
+        this.docClient = dependencies.docClient;
+        this.tableName = dependencies.tableName;
+        this.logger = dependencies.logger;
+    }
 
     async createApplication(application: Omit<EAApplication, 'sk' | 'status' | 'updatedAt'>): Promise<EAApplication> {
         const now = new Date().toISOString();
@@ -154,17 +158,17 @@ export class EAApplicationRepository {
         newStatus: ApplicationStatus,
         additionalUpdates?: Partial<EAApplication>
     ): Promise<EAApplication | null> {
-        logger.info('Attempting to update application status in repository', { userId, sk, newStatus });
+        this.logger.info('Attempting to update application status in repository', { userId, sk, newStatus });
         const now = new Date().toISOString();
 
         const currentApp = await this.getApplication(userId, sk);
         if (!currentApp) {
-            logger.warn('Application not found for status update', { userId, sk });
+            this.logger.warn('Application not found for status update', { userId, sk });
             throw new Error(`Application not found: userId=${userId}, sk=${sk}`);
         }
 
         if (!isValidStatusTransition(currentApp.status, newStatus)) {
-            logger.warn('Invalid status transition attempt', { userId, sk, currentStatus: currentApp.status, newStatus });
+            this.logger.warn('Invalid status transition attempt', { userId, sk, currentStatus: currentApp.status, newStatus });
             throw new Error(`Invalid status transition: ${currentApp.status} -> ${newStatus}`);
         }
 
@@ -192,7 +196,7 @@ export class EAApplicationRepository {
             updateParams.ExpressionAttributeNames!['#ttl'] = 'ttl';
             updateParams.ExpressionAttributeValues![':ttl'] = ttlValue;
 
-            logger.info('Setting TTL for terminal status', {
+            this.logger.info('Setting TTL for terminal status', {
                 userId,
                 sk,
                 newStatus,
@@ -205,7 +209,7 @@ export class EAApplicationRepository {
             updateParams.UpdateExpression += ' REMOVE #ttl';
             updateParams.ExpressionAttributeNames!['#ttl'] = 'ttl';
 
-            logger.info('Removing TTL for non-terminal status', { userId, sk, newStatus });
+            this.logger.info('Removing TTL for non-terminal status', { userId, sk, newStatus });
         }
 
         // Handle additional updates
@@ -223,10 +227,10 @@ export class EAApplicationRepository {
 
         try {
             const { Attributes } = await this.docClient.send(new UpdateCommand(updateParams));
-            logger.info('Successfully updated application status', { userId, sk, newStatus });
+            this.logger.info('Successfully updated application status', { userId, sk, newStatus });
             return Attributes as EAApplication | null;
         } catch (error) {
-            logger.error('Failed to update application status', { userId, sk, newStatus, error });
+            this.logger.error('Failed to update application status', { userId, sk, newStatus, error });
             throw error;
         }
     }
@@ -260,7 +264,7 @@ export class EAApplicationRepository {
         // 新しいステータスが終了ステータスの場合、履歴にもTTLを設定
         if (newStatus && isTerminalStatus(newStatus)) {
             historyItem.ttl = calculateTTLWithConfig(now);
-            logger.info('Setting TTL for history record', {
+            this.logger.info('Setting TTL for history record', {
                 userId,
                 historySkValue,
                 newStatus,
@@ -274,9 +278,9 @@ export class EAApplicationRepository {
                 TableName: this.tableName,
                 Item: historyItem,
             }));
-            logger.info('Successfully recorded history event', { action, userId, historySkValue });
+            this.logger.info('Successfully recorded history event', { action, userId, historySkValue });
         } catch (error) {
-            logger.error('Failed to record history event', { error, action, userId });
+            this.logger.error('Failed to record history event', { error, action, userId });
             throw error;
         }
     }
@@ -287,7 +291,7 @@ export class EAApplicationRepository {
         applicationSK: string,
         ttlTimestamp: number
     ): Promise<void> {
-        logger.info('Setting TTL for history records', { userId, applicationSK, ttlTimestamp });
+        this.logger.info('Setting TTL for history records', { userId, applicationSK, ttlTimestamp });
 
         // 履歴レコードを取得
         const histories = await this.getApplicationHistories(userId, applicationSK);
@@ -311,13 +315,13 @@ export class EAApplicationRepository {
 
         try {
             await Promise.all(updatePromises);
-            logger.info('Successfully set TTL for all history records', {
+            this.logger.info('Successfully set TTL for all history records', {
                 userId,
                 applicationSK,
                 count: histories.length
             });
         } catch (error) {
-            logger.error('Failed to set TTL for history records', { userId, applicationSK, error });
+            this.logger.error('Failed to set TTL for history records', { userId, applicationSK, error });
             throw error;
         }
     }
@@ -345,17 +349,22 @@ export class EAApplicationRepository {
         sk: string,
         licenseKey: string,
         issuedAt: string
-    ): Promise<void> {
-        logger.info('Activating application with license', { userId, sk, issuedAt });
+    ): Promise<EAApplication> {  // 🔧 戻り値をEAApplicationに変更
+        this.logger.info('Activating application with license', { userId, sk, issuedAt });
 
         const currentApp = await this.getApplication(userId, sk);
         if (!currentApp) {
             throw new Error(`Application not found: userId=${userId}, sk=${sk}`);
         }
 
-        await this.updateStatus(userId, sk, 'Active', {
+        // 🔧 updateStatusの戻り値を使用
+        const updatedApp = await this.updateStatus(userId, sk, 'Active', {
             licenseKey,
         });
+
+        if (!updatedApp) {
+            throw new Error('Failed to update application status');
+        }
 
         // 履歴記録
         await this.recordHistory({
@@ -367,6 +376,8 @@ export class EAApplicationRepository {
             newStatus: 'Active',
             reason: 'License generated and email sent successfully',
         });
+
+        return updatedApp;  // 🔧 更新後のアプリケーションを返す
     }
 
     async cancelApplication(
@@ -374,7 +385,7 @@ export class EAApplicationRepository {
         sk: string,
         reason: string
     ): Promise<void> {
-        logger.info('Cancelling application', { userId, sk, reason });
+        this.logger.info('Cancelling application', { userId, sk, reason });
 
         const currentApp = await this.getApplication(userId, sk);
         if (!currentApp) {
@@ -405,7 +416,7 @@ export class EAApplicationRepository {
         userId: string,
         applicationSk: string
     ): Promise<EAApplicationHistory[]> {
-        logger.info('Getting application histories', { userId, applicationSk });
+        this.logger.info('Getting application histories', { userId, applicationSk });
 
         const historyPrefix = getHistoryQueryPrefix(applicationSk);
 
@@ -423,7 +434,7 @@ export class EAApplicationRepository {
             const result = await this.docClient.send(command);
             const histories = result.Items as EAApplicationHistory[] || [];
 
-            logger.info('Successfully retrieved application histories', {
+            this.logger.info('Successfully retrieved application histories', {
                 userId,
                 applicationSk,
                 historyPrefix,
@@ -432,7 +443,7 @@ export class EAApplicationRepository {
 
             return histories;
         } catch (error) {
-            logger.error('Failed to get application histories', { userId, applicationSk, error });
+            this.logger.error('Failed to get application histories', { userId, applicationSk, error });
             throw error;
         }
     }
@@ -451,7 +462,7 @@ export class EAApplicationRepository {
         sk: string,
         approvalInfo: ApprovalInfo
     ): Promise<void> {
-        logger.info('Updating approval info', { userId, sk, approvalInfo });
+        this.logger.info('Updating approval info', { userId, sk, approvalInfo });
 
         await this.updateStatus(userId, sk, 'AwaitingNotification', {
             eaName: approvalInfo.eaName,
@@ -473,7 +484,7 @@ export class EAApplicationRepository {
 
     // システムによる期限切れ処理（TTL付き）
     async expireApplication(userId: string, sk: string): Promise<void> {
-        logger.info('Expiring application', { userId, sk });
+        this.logger.info('Expiring application', { userId, sk });
 
         // TTL付きでステータス更新
         await this.updateStatusWithHistoryTTL(userId, sk, 'Expired');
@@ -508,7 +519,7 @@ export class EAApplicationRepository {
             ExpressionAttributeValues: { ':ttl': adjustedTTL }
         }));
 
-        logger.info('TTL adjusted', {
+        this.logger.info('TTL adjusted', {
             userId,
             sk,
             requestedMonths: months,

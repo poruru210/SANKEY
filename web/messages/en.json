@@ -57,13 +57,13 @@
     "within30Days": "Within 30 days"
   },
   "developer": {
-    "title": "Development Guide",
-    "subtitle": "Complete guide for integrating SANKEY license verification into your Expert Advisors",
-    "integrationSteps": "Integration Steps",
-    "integrationStepsDesc": "Step-by-step guide to integrate SANKEY license verification",
+    "title": "Getting Started with SANKEY Authentication",
+    "subtitle": "A step-by-step guide to adding license authentication to your Expert Advisor",
+    "getStarted": "Get Started",
+    "getStartedDesc": "Step-by-step guide to integrate SANKEY license verification",
     "playground": {
-      "title": "Playground",
-      "description": "Test license generation and validation",
+      "title": "License Generator",
+      "description": "Try generating or verifying licenses here",
       "reset": "Reset",
       "generateTab": "License Generation",
       "validateTab": "License Validation",
@@ -127,8 +127,8 @@
     },
     "steps": {
       "preparation": {
-        "title": "Preparation",
-        "description": "Create necessary items for license application Google Form",
+        "title": "Prepare Form",
+        "description": "Set up a Google Form for license re-requests",
         "googleForm": "Google Form Preparation",
         "googleFormDesc": "Create the following question items in your application form (items marked with <required>{required}</required> are required):",
         "questionItem": "Question Item",
@@ -142,8 +142,8 @@
         "openExternal": "Open External Link"
       },
       "gasIntegration": {
-        "title": "Google Form Integration (GAS)",
-        "description": "Create a new Google Apps Script project and configure using the provided template",
+        "title": "Link Google Form (GAS)",
+        "description": "Use the provided script template to link your form",
         "newProject": "Create New Project",
         "newProjectSteps": [
           "Access \"Google Apps Script\"",
@@ -161,8 +161,8 @@
         "formFieldsExample": "Example: If your form question is \"Please enter your EA name\""
       },
       "integrationTest": {
-        "title": "Perform Integration Test",
-        "description": "Execute test functions within Google Apps Script to verify configuration and communication",
+        "title": "Test the Connection",
+        "description": "Run a test to make sure everything is working",
         "configValidation": "Configuration Validation",
         "configValidationSteps": [
           "Click \"Run\" in the Google Apps Script editor menu",
@@ -178,8 +178,8 @@
         ]
       },
       "moduleDownload": {
-        "title": "Download License Authentication Modules",
-        "description": "Obtain license authentication modules for integration into EA",
+        "title": "Download Authentication Modules",
+        "description": "Get the authentication module for your EA",
         "mqhLibrary": "MQH Library",
         "mqhDescription": "Dedicated library MQH header file",
         "dllLibrary": "DLL Library",
@@ -214,8 +214,8 @@
         ]
       },
       "eaIntegration": {
-        "title": "Integrate Authentication Module into EA",
-        "description": "Integrate downloaded modules into Expert Advisor",
+        "title": "Add Module to EA",
+        "description": "Include the downloaded module into your EA",
         "overview": "Overview",
         "overviewDesc": "Integrate SANKEY license authentication functionality into Expert Advisor and implement proper authentication flow.",
         "implementationCode": "Implementation Code",
@@ -235,7 +235,7 @@
       },
       "downloadUrlSetup": {
         "title": "Set EA Download URL",
-        "description": "Configure URL for authenticated users to download EA",
+        "description": "Set a download URL for licensed users\n",
         "overviewDesc": "Build a system that allows users who have completed license authentication to safely download EA files."
       }
     },

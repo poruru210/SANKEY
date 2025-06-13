@@ -4,6 +4,7 @@ import * as path from 'path';
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as iam from 'aws-cdk-lib/aws-iam';
+import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import { EnvironmentConfig, CdkHelpers } from './config';
 
 export interface SankeyAuthStackProps extends cdk.StackProps {
@@ -86,7 +87,7 @@ export class SankeyAuthStack extends cdk.Stack {
      * Post Confirmation Lambda の権限設定
      */
     private setupPostConfirmationPermissions() {
-        // SSM権限のみ（API Gateway権限を削除）
+        // SSM権限
         this.postConfirmationFn.addToRolePolicy(new iam.PolicyStatement({
             effect: iam.Effect.ALLOW,
             actions: ['ssm:GetParameter', 'ssm:GetParameters', 'ssm:PutParameter', 'ssm:AddTagsToResource'],

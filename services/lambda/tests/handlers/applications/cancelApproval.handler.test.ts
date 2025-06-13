@@ -1,82 +1,41 @@
-// tests/handlers/applications/cancelApproval.handler.test.ts
-
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { APIGatewayProxyEvent } from 'aws-lambda';
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { EAApplication } from '@lambda/models/eaApplication';
-
-// 修正: DI対応のRepository クラスモック
-const mockRepository = {
-    getApplication: vi.fn(),
-    cancelApplication: vi.fn(),
-};
-
-// 修正: DIクラスモックに変更
-vi.mock('../../../src/repositories/eaApplicationRepository', () => ({
-    EAApplicationRepository: vi.fn().mockImplementation(() => mockRepository)
-}));
-
-// DynamoDB Client のモック追加
-vi.mock('@aws-sdk/client-dynamodb', () => ({
-    DynamoDBClient: vi.fn().mockImplementation(() => ({}))
-}));
-
-vi.mock('@aws-sdk/lib-dynamodb', () => ({
-    DynamoDBDocumentClient: {
-        from: vi.fn().mockReturnValue({})
-    }
-}));
-
-// PowerTools のモック
-vi.mock('@aws-lambda-powertools/logger', () => ({
-    Logger: vi.fn().mockImplementation(() => ({
-        info: vi.fn(),
-        error: vi.fn(),
-        warn: vi.fn(),
-        debug: vi.fn(),
-    }))
-}));
-
-vi.mock('@aws-lambda-powertools/tracer', () => ({
-    Tracer: vi.fn().mockImplementation(() => ({
-        captureAWSv3Client: vi.fn((client) => client),
-        isTracingEnabled: vi.fn(() => false),
-        getSegment: vi.fn(),
-        setSegment: vi.fn(),
-        addAnnotation: vi.fn(),
-        addMetadata: vi.fn(),
-        putAnnotation: vi.fn(),
-        putMetadata: vi.fn(),
-        annotateColdStart: vi.fn(),
-        addServiceNameAnnotation: vi.fn(),
-        addResponseAsMetadata: vi.fn(),
-        captureLambdaHandler: vi.fn((handler) => handler),
-        captureMethod: vi.fn(),
-        captureAsyncFunc: vi.fn()
-    }))
-}));
-
-// Middyのモック
-vi.mock('@middy/core', () => ({
-    default: vi.fn((handler) => {
-        const wrappedHandler = async (event: any, context: any) => {
-            return await handler(event, context);
-        };
-        wrappedHandler.use = vi.fn().mockReturnValue(wrappedHandler);
-        wrappedHandler.before = vi.fn();
-        wrappedHandler.after = vi.fn();
-        wrappedHandler.onError = vi.fn();
-        return wrappedHandler;
-    })
-}));
+import type { AwilixContainer } from 'awilix';
+import type { DIContainer } from '../../../src/types/dependencies';
+import { createTestContainer } from '../../di/testContainer';
+import { createHandler } from '../../../src/handlers/applications/cancelApproval.handler';
+import type { CancelApprovalHandlerDependencies } from '../../../src/di/types';
+import type { EAApplication } from '../../../src/models/eaApplication';
 
 describe('cancelApproval.handler', () => {
+    let container: AwilixContainer<DIContainer>;
+    let mockEAApplicationRepository: any;
+    let mockLogger: any;
+    let mockTracer: any;
     let handler: any;
+    let dependencies: CancelApprovalHandlerDependencies;
 
-    beforeEach(async () => {
+    beforeEach(() => {
         vi.clearAllMocks();
 
-        const handlerModule = await import('../../../src/handlers/applications/cancelApproval.handler');
-        handler = handlerModule.handler;
+        // テストコンテナから依存関係を取得（モックサービスを使用）
+        container = createTestContainer({ useRealServices: false });
+        mockEAApplicationRepository = container.resolve('eaApplicationRepository');
+        mockLogger = container.resolve('logger');
+        mockTracer = container.resolve('tracer');
+
+        // ハンドラー用の依存関係を構築
+        dependencies = {
+            eaApplicationRepository: mockEAApplicationRepository,
+            logger: mockLogger,
+            tracer: mockTracer
+        };
+
+        handler = createHandler(dependencies);
+    });
+
+    afterEach(() => {
+        vi.clearAllMocks();
     });
 
     // ヘルパー関数: テスト用のAPIイベント作成
@@ -104,24 +63,8 @@ describe('cancelApproval.handler', () => {
         stageVariables: null
     });
 
-    // ヘルパー関数: テスト用のLambdaコンテキスト作成
-    const createTestContext = () => ({
-        callbackWaitsForEmptyEventLoop: false,
-        functionName: 'cancelApproval',
-        functionVersion: '1',
-        invokedFunctionArn: 'arn:aws:lambda:us-east-1:123456789012:function:cancelApproval',
-        memoryLimitInMB: '128',
-        awsRequestId: 'test-request-id',
-        logGroupName: '/aws/lambda/cancelApproval',
-        logStreamName: '2025/06/05/[$LATEST]test-stream',
-        getRemainingTimeInMillis: () => 30000,
-        done: vi.fn(),
-        fail: vi.fn(),
-        succeed: vi.fn()
-    });
-
     describe('正常系テスト', () => {
-        it('should successfully cancel application within 5 minutes', async () => {
+        it('5分以内にアプリケーションを正常にキャンセルする', async () => {
             // Arrange
             const applicationId = '2025-01-01T00:00:00Z#TestBroker#123456#TestEA';
             const fullApplicationSK = `APPLICATION#${applicationId}`;
@@ -143,14 +86,13 @@ describe('cancelApproval.handler', () => {
                 updatedAt: threeMinutesAgo
             };
 
-            mockRepository.getApplication.mockResolvedValueOnce(mockApplication);
-            mockRepository.cancelApplication.mockResolvedValueOnce(undefined);
+            mockEAApplicationRepository.getApplication.mockResolvedValueOnce(mockApplication);
+            mockEAApplicationRepository.cancelApplication.mockResolvedValueOnce(undefined);
 
             const event = createTestEvent(applicationId, userId);
-            const context = createTestContext();
 
             // Act
-            const result = await handler(event, context);
+            const result = await handler(event);
 
             // Assert
             expect(result.statusCode).toBe(200);
@@ -161,8 +103,8 @@ describe('cancelApproval.handler', () => {
             expect(responseBody.data.status).toBe('Cancelled');
 
             // Repository メソッドの呼び出し確認
-            expect(mockRepository.getApplication).toHaveBeenCalledWith(userId, fullApplicationSK);
-            expect(mockRepository.cancelApplication).toHaveBeenCalledWith(
+            expect(mockEAApplicationRepository.getApplication).toHaveBeenCalledWith(userId, fullApplicationSK);
+            expect(mockEAApplicationRepository.cancelApplication).toHaveBeenCalledWith(
                 userId,
                 fullApplicationSK,
                 expect.stringContaining('Cancelled by user within')
@@ -171,14 +113,13 @@ describe('cancelApproval.handler', () => {
     });
 
     describe('異常系テスト', () => {
-        it('should return 400 for missing application ID', async () => {
+        it('アプリケーションIDがない場合は400を返す', async () => {
             // Arrange
             const event = createTestEvent('');
             event.pathParameters = null; // ID なし
-            const context = createTestContext();
 
             // Act
-            const result = await handler(event, context);
+            const result = await handler(event);
 
             // Assert
             expect(result.statusCode).toBe(400);
@@ -187,29 +128,27 @@ describe('cancelApproval.handler', () => {
             expect(responseBody.message).toContain('Missing application ID parameter');
         });
 
-        it('should return 401 for missing user authentication', async () => {
+        it('ユーザー認証がない場合は401を返す', async () => {
             // Arrange
             const event = createTestEvent('test-app-id');
             event.requestContext.authorizer = null; // 認証情報なし
-            const context = createTestContext();
 
             // Act
-            const result = await handler(event, context);
+            const result = await handler(event);
 
             // Assert
             expect(result.statusCode).toBe(401);
         });
 
-        it('should return 404 for non-existent application', async () => {
+        it('アプリケーションが存在しない場合は404を返す', async () => {
             // Arrange
             const applicationId = 'non-existent-app';
-            mockRepository.getApplication.mockResolvedValueOnce(null);
+            mockEAApplicationRepository.getApplication.mockResolvedValueOnce(null);
 
             const event = createTestEvent(applicationId);
-            const context = createTestContext();
 
             // Act
-            const result = await handler(event, context);
+            const result = await handler(event);
 
             // Assert
             expect(result.statusCode).toBe(404);
@@ -217,7 +156,7 @@ describe('cancelApproval.handler', () => {
             expect(responseBody.message).toContain('Application not found');
         });
 
-        it('should return 400 for application not in AwaitingNotification status', async () => {
+        it('アプリケーションがAwaitingNotification状態でない場合は400を返す', async () => {
             // Arrange
             const applicationId = '2025-01-01T00:00:00Z#TestBroker#123456#TestEA';
             const fullApplicationSK = `APPLICATION#${applicationId}`;
@@ -236,13 +175,12 @@ describe('cancelApproval.handler', () => {
                 updatedAt: '2025-01-01T01:00:00Z'
             };
 
-            mockRepository.getApplication.mockResolvedValueOnce(mockApplication);
+            mockEAApplicationRepository.getApplication.mockResolvedValueOnce(mockApplication);
 
             const event = createTestEvent(applicationId, userId);
-            const context = createTestContext();
 
             // Act
-            const result = await handler(event, context);
+            const result = await handler(event);
 
             // Assert
             expect(result.statusCode).toBe(400);
@@ -250,7 +188,7 @@ describe('cancelApproval.handler', () => {
             expect(responseBody.message).toContain('Application cannot be cancelled');
         });
 
-        it('should return 400 for cancellation after 5 minutes', async () => {
+        it('5分経過後のキャンセルは400を返す', async () => {
             // Arrange
             const applicationId = '2025-01-01T00:00:00Z#TestBroker#123456#TestEA';
             const fullApplicationSK = `APPLICATION#${applicationId}`;
@@ -272,13 +210,12 @@ describe('cancelApproval.handler', () => {
                 updatedAt: sixMinutesAgo
             };
 
-            mockRepository.getApplication.mockResolvedValueOnce(mockApplication);
+            mockEAApplicationRepository.getApplication.mockResolvedValueOnce(mockApplication);
 
             const event = createTestEvent(applicationId, userId);
-            const context = createTestContext();
 
             // Act
-            const result = await handler(event, context);
+            const result = await handler(event);
 
             // Assert
             expect(result.statusCode).toBe(400);
@@ -286,16 +223,15 @@ describe('cancelApproval.handler', () => {
             expect(responseBody.message).toContain('Cancellation period expired');
         });
 
-        it('should return 500 for repository errors', async () => {
+        it('リポジトリエラーの場合は500を返す', async () => {
             // Arrange
             const applicationId = '2025-01-01T00:00:00Z#TestBroker#123456#TestEA';
-            mockRepository.getApplication.mockRejectedValueOnce(new Error('Database connection failed'));
+            mockEAApplicationRepository.getApplication.mockRejectedValueOnce(new Error('Database connection failed'));
 
             const event = createTestEvent(applicationId);
-            const context = createTestContext();
 
             // Act
-            const result = await handler(event, context);
+            const result = await handler(event);
 
             // Assert
             expect(result.statusCode).toBe(500);
@@ -306,7 +242,7 @@ describe('cancelApproval.handler', () => {
     });
 
     describe('時間チェックテスト', () => {
-        it('should calculate time difference correctly using updatedAt', async () => {
+        it('updatedAtを使用して時間差を正しく計算する', async () => {
             // Arrange
             const applicationId = '2025-01-01T00:00:00Z#TestBroker#123456#TestEA';
             const fullApplicationSK = `APPLICATION#${applicationId}`;
@@ -328,20 +264,19 @@ describe('cancelApproval.handler', () => {
                 updatedAt: almostFiveMinutes
             };
 
-            mockRepository.getApplication.mockResolvedValueOnce(mockApplication);
-            mockRepository.cancelApplication.mockResolvedValueOnce(undefined);
+            mockEAApplicationRepository.getApplication.mockResolvedValueOnce(mockApplication);
+            mockEAApplicationRepository.cancelApplication.mockResolvedValueOnce(undefined);
 
             const event = createTestEvent(applicationId, userId);
-            const context = createTestContext();
 
             // Act
-            const result = await handler(event, context);
+            const result = await handler(event);
 
             // Assert
             expect(result.statusCode).toBe(200);
 
             // cancelApplication が適切な理由で呼ばれた
-            expect(mockRepository.cancelApplication).toHaveBeenCalledWith(
+            expect(mockEAApplicationRepository.cancelApplication).toHaveBeenCalledWith(
                 userId,
                 fullApplicationSK,
                 expect.stringMatching(/Cancelled by user within \d+ seconds of approval/)

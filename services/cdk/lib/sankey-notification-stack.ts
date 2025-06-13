@@ -9,6 +9,7 @@ import { EnvironmentConfig, CdkHelpers } from './config';
 
 export interface SankeyNotificationStackProps extends cdk.StackProps {
     eaApplicationsTable: dynamodb.Table;
+    userProfileTable: dynamodb.Table;  // 新規追加
     environment?: string;
 }
 
@@ -69,6 +70,7 @@ export class SankeyNotificationStack extends cdk.Stack {
                 timeout: cdk.Duration.minutes(5),
                 environment: {
                     TABLE_NAME: props.eaApplicationsTable.tableName,
+                    USER_PROFILE_TABLE_NAME: props.userProfileTable.tableName,  // 新規追加
                     RESEND_API_KEY_PARAM: CdkHelpers.getSsmResendApiKeyPath(this.envName),
                     EMAIL_FROM_ADDRESS: this.config.notification.emailFromAddress,
                     SSM_USER_PREFIX: CdkHelpers.getSsmUserPrefix(this.envName),
@@ -88,6 +90,7 @@ export class SankeyNotificationStack extends cdk.Stack {
     private setupEmailFunctionPermissions(props: SankeyNotificationStackProps, emailFunction: NodejsFunction) {
         // DynamoDB権限
         props.eaApplicationsTable.grantReadWriteData(emailFunction);
+        props.userProfileTable.grantReadWriteData(emailFunction);  // UserProfileテーブルは読み取りのみ
 
         // SSMポリシーの追加
         const ssmPolicy = CdkHelpers.createSsmPolicy(
@@ -96,6 +99,14 @@ export class SankeyNotificationStack extends cdk.Stack {
             `${CdkHelpers.getSsmEnvironmentPrefix(this.envName)}/users/*/master-key`
         );
         emailFunction.addToRolePolicy(ssmPolicy);
+
+        // Resend APIキー用SSMポリシー（新規追加）
+        const resendApiKeyPolicy = CdkHelpers.createSsmPolicy(
+            this.region,
+            this.account,
+            CdkHelpers.getSsmResendApiKeyPath(this.envName)
+        );
+        emailFunction.addToRolePolicy(resendApiKeyPolicy);
     }
 
     /**

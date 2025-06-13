@@ -238,10 +238,15 @@ export class CdkHelpers {
         const config = EnvironmentConfig.get(environment);
         const tableName = this.generateTableName(baseName, environment);
 
+        // 個別指定があればそれを使用、なければ環境設定を使用
+        const billingMode = options.billingMode || config.dynamodb.billingMode;
+        const readCapacity = options.readCapacity || config.dynamodb.readCapacity;
+        const writeCapacity = options.writeCapacity || config.dynamodb.writeCapacity;
+
         // 課金モードに応じてプロパティを構築
         let tableProps: dynamodb.TableProps;
 
-        if (config.dynamodb.billingMode === 'PAY_PER_REQUEST') {
+        if (billingMode === 'PAY_PER_REQUEST') {
             tableProps = {
                 tableName,
                 partitionKey: options.partitionKey,
@@ -258,8 +263,8 @@ export class CdkHelpers {
                 removalPolicy: config.removalPolicy,
                 timeToLiveAttribute: options.timeToLiveAttribute,
                 billingMode: dynamodb.BillingMode.PROVISIONED,
-                readCapacity: config.dynamodb.readCapacity,
-                writeCapacity: config.dynamodb.writeCapacity,
+                readCapacity: readCapacity,
+                writeCapacity: writeCapacity,
             };
         }
 
@@ -270,7 +275,11 @@ export class CdkHelpers {
             options.globalSecondaryIndexes.forEach(gsi => {
                 let gsiProps: dynamodb.GlobalSecondaryIndexProps;
 
-                if (config.dynamodb.billingMode === 'PAY_PER_REQUEST') {
+                // GSI個別のキャパシティ設定があればそれを使用
+                const gsiReadCapacity = gsi.readCapacity || readCapacity;
+                const gsiWriteCapacity = gsi.writeCapacity || writeCapacity;
+
+                if (billingMode === 'PAY_PER_REQUEST') {
                     gsiProps = {
                         indexName: gsi.indexName,
                         partitionKey: gsi.partitionKey,
@@ -283,8 +292,8 @@ export class CdkHelpers {
                         partitionKey: gsi.partitionKey,
                         sortKey: gsi.sortKey,
                         projectionType: gsi.projectionType || dynamodb.ProjectionType.ALL,
-                        readCapacity: config.dynamodb.readCapacity,
-                        writeCapacity: config.dynamodb.writeCapacity,
+                        readCapacity: gsiReadCapacity,
+                        writeCapacity: gsiWriteCapacity,
                     };
                 }
 
@@ -493,10 +502,31 @@ export class CdkHelpers {
     }
 
     /**
+     * 🆕 SSMユーザーJWTシークレットパスを生成
+     */
+    static getSsmUserJwtSecretPath(environment: string, userId: string): string {
+        return `${this.getSsmUserPrefix(environment)}/${userId}/jwt-secret`;
+    }
+
+    /**
      * SSMユーザーマスターキーポリシー用パスを生成
      */
     static getSsmUserMasterKeyPolicy(environment: string): string {
         return `${this.getSsmUserPrefix(environment)}/*/master-key`;
+    }
+
+    /**
+     * 🆕 SSMユーザーJWTシークレットポリシー用パスを生成
+     */
+    static getSsmUserJwtSecretPolicy(environment: string): string {
+        return `${this.getSsmUserPrefix(environment)}/*/jwt-secret`;
+    }
+
+    /**
+     * 🆕 SSM両方のキー（MASTER_KEY + JWT_SECRET）ポリシー用パスを生成
+     */
+    static getSsmUserAllKeysPolicy(environment: string): string {
+        return `${this.getSsmUserPrefix(environment)}/*/*-key`;
     }
 
     /**
@@ -531,6 +561,36 @@ export class CdkHelpers {
         return new iam.PolicyStatement({
             actions: ['ssm:GetParameter', 'ssm:GetParameters'],
             resources: [`arn:aws:ssm:${region}:${account}:parameter${parameterPath}`],
+        });
+    }
+
+    /**
+     * 🆕 JWT_SECRET専用のSSMポリシーステートメントを作成
+     */
+    static createJwtSecretSsmPolicy(region: string, account: string, environment: string): iam.PolicyStatement {
+        return new iam.PolicyStatement({
+            actions: ['ssm:GetParameter', 'ssm:GetParameters'],
+            resources: [`arn:aws:ssm:${region}:${account}:parameter${this.getSsmUserJwtSecretPolicy(environment)}`],
+        });
+    }
+
+    /**
+     * 🆕 MASTER_KEY専用のSSMポリシーステートメントを作成
+     */
+    static createMasterKeySsmPolicy(region: string, account: string, environment: string): iam.PolicyStatement {
+        return new iam.PolicyStatement({
+            actions: ['ssm:GetParameter', 'ssm:GetParameters'],
+            resources: [`arn:aws:ssm:${region}:${account}:parameter${this.getSsmUserMasterKeyPolicy(environment)}`],
+        });
+    }
+
+    /**
+     * 🆕 両方のキー（MASTER_KEY + JWT_SECRET）用のSSMポリシーステートメントを作成
+     */
+    static createAllKeysSsmPolicy(region: string, account: string, environment: string): iam.PolicyStatement {
+        return new iam.PolicyStatement({
+            actions: ['ssm:GetParameter', 'ssm:GetParameters'],
+            resources: [`arn:aws:ssm:${region}:${account}:parameter${this.getSsmUserAllKeysPolicy(environment)}`],
         });
     }
 

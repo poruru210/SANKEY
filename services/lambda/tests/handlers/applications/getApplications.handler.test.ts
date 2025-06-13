@@ -1,80 +1,41 @@
-// tests/handlers/applications/getApplications.handler.test.ts
-
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { APIGatewayProxyEvent } from 'aws-lambda';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
-import { EAApplication } from '@lambda/models/eaApplication';
-
-// DI対応のRepository クラスモック
-const mockRepository = {
-    getAllApplications: vi.fn(),
-};
-
-vi.mock('../../../src/repositories/eaApplicationRepository', () => ({
-    EAApplicationRepository: vi.fn().mockImplementation(() => mockRepository)
-}));
-
-// DynamoDB Client のモック
-vi.mock('@aws-sdk/client-dynamodb', () => ({
-    DynamoDBClient: vi.fn().mockImplementation(() => ({}))
-}));
-
-vi.mock('@aws-sdk/lib-dynamodb', () => ({
-    DynamoDBDocumentClient: {
-        from: vi.fn().mockReturnValue({})
-    }
-}));
-
-// PowerTools のモック
-vi.mock('@aws-lambda-powertools/logger', () => ({
-    Logger: vi.fn().mockImplementation(() => ({
-        info: vi.fn(),
-        error: vi.fn(),
-        warn: vi.fn(),
-        debug: vi.fn(),
-    }))
-}));
-
-vi.mock('@aws-lambda-powertools/tracer', () => ({
-    Tracer: vi.fn().mockImplementation(() => ({
-        captureAWSv3Client: vi.fn((client) => client),
-        isTracingEnabled: vi.fn(() => false),
-        getSegment: vi.fn(),
-        setSegment: vi.fn(),
-        addAnnotation: vi.fn(),
-        addMetadata: vi.fn(),
-        putAnnotation: vi.fn(),
-        putMetadata: vi.fn(),
-        annotateColdStart: vi.fn(),
-        addServiceNameAnnotation: vi.fn(),
-        addResponseAsMetadata: vi.fn(),
-        captureLambdaHandler: vi.fn((handler) => handler),
-        captureMethod: vi.fn(),
-        captureAsyncFunc: vi.fn()
-    }))
-}));
-
-// Middyのモック
-vi.mock('@middy/core', () => ({
-    default: vi.fn((handler) => {
-        const wrappedHandler = async (event: any, context: any) => {
-            return await handler(event, context);
-        };
-        wrappedHandler.use = vi.fn().mockReturnValue(wrappedHandler);
-        wrappedHandler.before = vi.fn();
-        wrappedHandler.after = vi.fn();
-        wrappedHandler.onError = vi.fn();
-        return wrappedHandler;
-    })
-}));
+import type { AwilixContainer } from 'awilix';
+import type { DIContainer } from '../../../src/types/dependencies';
+import { createTestContainer } from '../../di/testContainer';
+import { createHandler } from '../../../src/handlers/applications/getApplications.handler';
+import type { GetApplicationsHandlerDependencies } from '../../../src/di/types';
+import type { EAApplication } from '../../../src/models/eaApplication';
 
 describe('getApplications.handler', () => {
+    let container: AwilixContainer<DIContainer>;
+    let mockEAApplicationRepository: any;
+    let mockLogger: any;
+    let mockTracer: any;
     let handler: any;
+    let dependencies: GetApplicationsHandlerDependencies;
 
-    beforeEach(async () => {
+    beforeEach(() => {
         vi.clearAllMocks();
 
-        const handlerModule = await import('../../../src/handlers/applications/getApplications.handler');
-        handler = handlerModule.handler;
+        // テストコンテナから依存関係を取得（モックサービスを使用）
+        container = createTestContainer({ useRealServices: false });
+        mockEAApplicationRepository = container.resolve('eaApplicationRepository');
+        mockLogger = container.resolve('logger');
+        mockTracer = container.resolve('tracer');
+
+        // ハンドラー用の依存関係を構築
+        dependencies = {
+            eaApplicationRepository: mockEAApplicationRepository,
+            logger: mockLogger,
+            tracer: mockTracer
+        };
+
+        handler = createHandler(dependencies);
+    });
+
+    afterEach(() => {
+        vi.clearAllMocks();
     });
 
     // ヘルパー関数: テスト用のAPIイベント作成
@@ -101,22 +62,6 @@ describe('getApplications.handler', () => {
         stageVariables: null
     });
 
-    // ヘルパー関数: テスト用のLambdaコンテキスト作成
-    const createTestContext = () => ({
-        callbackWaitsForEmptyEventLoop: false,
-        functionName: 'getApplications',
-        functionVersion: '1',
-        invokedFunctionArn: 'arn:aws:lambda:us-east-1:123456789012:function:getApplications',
-        memoryLimitInMB: '128',
-        awsRequestId: 'test-request-id',
-        logGroupName: '/aws/lambda/getApplications',
-        logStreamName: '2025/06/05/[$LATEST]test-stream',
-        getRemainingTimeInMillis: () => 30000,
-        done: vi.fn(),
-        fail: vi.fn(),
-        succeed: vi.fn()
-    });
-
     // ヘルパー関数: サンプルアプリケーション作成
     const createMockApplication = (
         id: string,
@@ -137,17 +82,16 @@ describe('getApplications.handler', () => {
     });
 
     describe('正常系テスト', () => {
-        it('should successfully return empty applications list', async () => {
+        it('空のアプリケーションリストを正常に返す', async () => {
             // Arrange
             const userId = 'test-user-123';
 
-            mockRepository.getAllApplications.mockResolvedValueOnce([]);
+            mockEAApplicationRepository.getAllApplications.mockResolvedValueOnce([]);
 
             const event = createTestEvent(userId);
-            const context = createTestContext();
 
             // Act
-            const result = await handler(event, context);
+            const result = await handler(event);
 
             // Assert
             expect(result.statusCode).toBe(200);
@@ -169,10 +113,10 @@ describe('getApplications.handler', () => {
                 }
             });
 
-            expect(mockRepository.getAllApplications).toHaveBeenCalledWith(userId);
+            expect(mockEAApplicationRepository.getAllApplications).toHaveBeenCalledWith(userId);
         });
 
-        it('should successfully return applications grouped by status', async () => {
+        it('ステータス別にグループ化されたアプリケーションを正常に返す', async () => {
             // Arrange
             const userId = 'test-user-123';
 
@@ -191,13 +135,12 @@ describe('getApplications.handler', () => {
                 createMockApplication('7', 'Expired')
             ];
 
-            mockRepository.getAllApplications.mockResolvedValueOnce(mockApplications);
+            mockEAApplicationRepository.getAllApplications.mockResolvedValueOnce(mockApplications);
 
             const event = createTestEvent(userId);
-            const context = createTestContext();
 
             // Act
-            const result = await handler(event, context);
+            const result = await handler(event);
 
             // Assert
             expect(result.statusCode).toBe(200);
@@ -247,7 +190,7 @@ describe('getApplications.handler', () => {
             expect(historyStatuses).toContain('Expired');
         });
 
-        it('should handle applications with notificationScheduledAt field', async () => {
+        it('notificationScheduledAtフィールドを持つアプリケーションを処理する', async () => {
             // Arrange
             const userId = 'test-user-123';
 
@@ -260,13 +203,12 @@ describe('getApplications.handler', () => {
                 })
             ];
 
-            mockRepository.getAllApplications.mockResolvedValueOnce(mockApplications);
+            mockEAApplicationRepository.getAllApplications.mockResolvedValueOnce(mockApplications);
 
             const event = createTestEvent(userId);
-            const context = createTestContext();
 
             // Act
-            const result = await handler(event, context);
+            const result = await handler(event);
 
             // Assert
             expect(result.statusCode).toBe(200);
@@ -279,7 +221,7 @@ describe('getApplications.handler', () => {
             expect(responseBody.data.awaitingNotification[1].notificationScheduledAt).toBe('2025-01-01T01:10:00Z');
         });
 
-        it('should return complete application summary fields', async () => {
+        it('完全なアプリケーションサマリーフィールドを返す', async () => {
             // Arrange
             const userId = 'test-user-123';
 
@@ -289,13 +231,12 @@ describe('getApplications.handler', () => {
                 notificationScheduledAt: '2025-01-01T01:05:00Z'
             });
 
-            mockRepository.getAllApplications.mockResolvedValueOnce([mockApplication]);
+            mockEAApplicationRepository.getAllApplications.mockResolvedValueOnce([mockApplication]);
 
             const event = createTestEvent(userId);
-            const context = createTestContext();
 
             // Act
-            const result = await handler(event, context);
+            const result = await handler(event);
 
             // Assert
             expect(result.statusCode).toBe(200);
@@ -322,14 +263,13 @@ describe('getApplications.handler', () => {
     });
 
     describe('異常系テスト', () => {
-        it('should return 401 for missing user authentication', async () => {
+        it('ユーザー認証がない場合は401を返す', async () => {
             // Arrange
             const event = createTestEvent();
             event.requestContext.authorizer = null; // 認証情報なし
-            const context = createTestContext();
 
             // Act
-            const result = await handler(event, context);
+            const result = await handler(event);
 
             // Assert
             expect(result.statusCode).toBe(401);
@@ -338,14 +278,13 @@ describe('getApplications.handler', () => {
             expect(responseBody.message).toContain('User ID not found in authorization context');
         });
 
-        it('should return 401 for missing user ID in claims', async () => {
+        it('claimsにユーザーIDがない場合は401を返す', async () => {
             // Arrange
             const event = createTestEvent();
             event.requestContext.authorizer!.claims = {}; // sub なし
-            const context = createTestContext();
 
             // Act
-            const result = await handler(event, context);
+            const result = await handler(event);
 
             // Assert
             expect(result.statusCode).toBe(401);
@@ -354,16 +293,15 @@ describe('getApplications.handler', () => {
             expect(responseBody.message).toContain('User ID not found in authorization context');
         });
 
-        it('should return 500 for repository errors', async () => {
+        it('リポジトリエラーの場合は500を返す', async () => {
             // Arrange
             const userId = 'test-user-123';
-            mockRepository.getAllApplications.mockRejectedValueOnce(new Error('Database connection failed'));
+            mockEAApplicationRepository.getAllApplications.mockRejectedValueOnce(new Error('Database connection failed'));
 
             const event = createTestEvent(userId);
-            const context = createTestContext();
 
             // Act
-            const result = await handler(event, context);
+            const result = await handler(event);
 
             // Assert
             expect(result.statusCode).toBe(500);
@@ -372,16 +310,15 @@ describe('getApplications.handler', () => {
             expect(responseBody.message).toContain('Failed to retrieve applications');
         });
 
-        it('should handle empty applications gracefully', async () => {
+        it('空のアプリケーションを適切に処理する', async () => {
             // Arrange
             const userId = 'test-user-123';
-            mockRepository.getAllApplications.mockResolvedValueOnce([]);
+            mockEAApplicationRepository.getAllApplications.mockResolvedValueOnce([]);
 
             const event = createTestEvent(userId);
-            const context = createTestContext();
 
             // Act
-            const result = await handler(event, context);
+            const result = await handler(event);
 
             // Assert
             expect(result.statusCode).toBe(200);
@@ -395,7 +332,7 @@ describe('getApplications.handler', () => {
     });
 
     describe('データ変換テスト', () => {
-        it('should correctly transform application data to summary format', async () => {
+        it('アプリケーションデータをサマリー形式に正しく変換する', async () => {
             // Arrange
             const userId = 'test-user-123';
 
@@ -407,13 +344,12 @@ describe('getApplications.handler', () => {
                 xAccount: '@custom'
             });
 
-            mockRepository.getAllApplications.mockResolvedValueOnce([mockApplication]);
+            mockEAApplicationRepository.getAllApplications.mockResolvedValueOnce([mockApplication]);
 
             const event = createTestEvent(userId);
-            const context = createTestContext();
 
             // Act
-            const result = await handler(event, context);
+            const result = await handler(event);
 
             // Assert
             expect(result.statusCode).toBe(200);
@@ -429,20 +365,19 @@ describe('getApplications.handler', () => {
             expect(pendingApp.xAccount).toBe('@custom');
         });
 
-        it('should handle applications without optional fields', async () => {
+        it('オプショナルフィールドのないアプリケーションを処理する', async () => {
             // Arrange
             const userId = 'test-user-123';
 
             const mockApplication = createMockApplication('1', 'Pending');
             // notificationScheduledAt, expiryDate, licenseKey は未設定
 
-            mockRepository.getAllApplications.mockResolvedValueOnce([mockApplication]);
+            mockEAApplicationRepository.getAllApplications.mockResolvedValueOnce([mockApplication]);
 
             const event = createTestEvent(userId);
-            const context = createTestContext();
 
             // Act
-            const result = await handler(event, context);
+            const result = await handler(event);
 
             // Assert
             expect(result.statusCode).toBe(200);
@@ -457,7 +392,7 @@ describe('getApplications.handler', () => {
     });
 
     describe('ステータス別グループ化テスト', () => {
-        it('should correctly group all possible statuses', async () => {
+        it('すべての可能なステータスを正しくグループ化する', async () => {
             // Arrange
             const userId = 'test-user-123';
 
@@ -472,13 +407,12 @@ describe('getApplications.handler', () => {
                 createMockApplication('8', 'Expired')
             ];
 
-            mockRepository.getAllApplications.mockResolvedValueOnce(mockApplications);
+            mockEAApplicationRepository.getAllApplications.mockResolvedValueOnce(mockApplications);
 
             const event = createTestEvent(userId);
-            const context = createTestContext();
 
             // Act
-            const result = await handler(event, context);
+            const result = await handler(event);
 
             // Assert
             expect(result.statusCode).toBe(200);

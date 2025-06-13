@@ -1,18 +1,19 @@
-// hooks/use-developer.ts - ライセンス機能統合版
 'use client'
 
-import { useCallback } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { useApi } from './use-api'
 import { useLicenseEncryption, useLicenseDecryption } from './use-license'
-import { developerService, DeveloperServiceError } from '@/lib/services/developer.service'
+import {
+    developerService,
+    DeveloperServiceError,
+    type IntegrationTestResponse,
+    type UserProfile
+} from '@/lib/services/developer.service'
 import type { EncryptLicenseRequest, DecryptLicenseRequest } from '@/lib/services/license.service'
 
-/**
- * 開発者機能統合Hook
- * GASテンプレートダウンロード + ライセンス機能（Playground用）
- */
 export function useDeveloper() {
-    // GASテンプレートダウンロード
+    const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
     const {
         data: downloadedFile,
         loading: isDownloading,
@@ -21,7 +22,22 @@ export function useDeveloper() {
         reset: resetDownload,
     } = useApi<Blob>()
 
-    // ライセンス暗号化機能
+    const {
+        data: integrationTestResult,
+        loading: isIntegrationTesting,
+        error: integrationTestError,
+        execute: executeIntegrationTest,
+        reset: resetIntegrationTest,
+    } = useApi<IntegrationTestResponse>()
+
+    const {
+        data: userProfile,
+        loading: isLoadingProfile,
+        error: profileError,
+        execute: executeGetProfile,
+        reset: resetProfile,
+    } = useApi<UserProfile>()
+
     const {
         encryptedLicense,
         isEncrypting,
@@ -30,7 +46,6 @@ export function useDeveloper() {
         resetEncryption
     } = useLicenseEncryption()
 
-    // ライセンス復号化機能
     const {
         decryptedLicense,
         isDecrypting,
@@ -39,92 +54,165 @@ export function useDeveloper() {
         resetDecryption
     } = useLicenseDecryption()
 
-    /**
-     * GASテンプレートダウンロード
-     */
     const downloadGasTemplate = useCallback(async () => {
         try {
             const fileBlob = await executeDownload(() => developerService.downloadGasTemplate())
-
-            if (fileBlob) {
-                return fileBlob
-            }
-            return null
+            return fileBlob
         } catch (apiError) {
             throw apiError
         }
     }, [executeDownload])
 
-    /**
-     * ライセンス生成（Playground用）
-     */
+    const getUserProfile = useCallback(async () => {
+        try {
+            const profile = await executeGetProfile(() => developerService.getUserProfile())
+            return profile
+        } catch (apiError) {
+            throw apiError
+        }
+    }, [executeGetProfile])
+
+    const startProgressPolling = useCallback(() => {
+        if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current);
+        }
+
+        pollingIntervalRef.current = setInterval(() => {
+            getUserProfile().catch(console.error);
+        }, 5000);
+    }, [getUserProfile]);
+
+    const stopProgressPolling = useCallback(() => {
+        if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current);
+            pollingIntervalRef.current = null;
+        }
+    }, []);
+
+    const isIntegrationTestCompleted = useCallback(() => {
+        const progress = userProfile?.testResults?.integrationTest?.progress;
+        return progress?.currentStep === 'COMPLETED';
+    }, [userProfile]);
+
+    useEffect(() => {
+        if (isIntegrationTestCompleted()) {
+            stopProgressPolling();
+        }
+    }, [isIntegrationTestCompleted, stopProgressPolling]);
+
+    useEffect(() => {
+        return () => {
+            if (pollingIntervalRef.current) {
+                clearInterval(pollingIntervalRef.current);
+            }
+        };
+    }, []);
+
+    const startIntegrationTest = useCallback(async (gasWebappUrl: string) => {
+        if (!gasWebappUrl || typeof gasWebappUrl !== 'string') {
+            throw new DeveloperServiceError('WebApp URL is required');
+        }
+
+        const trimmedUrl = gasWebappUrl.trim();
+        if (!trimmedUrl) {
+            throw new DeveloperServiceError('WebApp URL cannot be empty');
+        }
+
+        try {
+            const url = new URL(trimmedUrl);
+            if (!url.hostname.includes('script.google.com')) {
+                throw new DeveloperServiceError('WebApp URL must be a Google Apps Script URL');
+            }
+        } catch (e) {
+            if (e instanceof DeveloperServiceError) throw e;
+            throw new DeveloperServiceError('WebApp URL must be a valid URL');
+        }
+
+        try {
+            const result = await executeIntegrationTest(() =>
+                developerService.triggerIntegrationTest(trimmedUrl)
+            );
+
+            if (result?.testId) {
+                startProgressPolling();
+            }
+
+            return result;
+        } catch (apiError) {
+            throw apiError;
+        }
+    }, [executeIntegrationTest, startProgressPolling])
+
     const generateLicense = useCallback(async (request: EncryptLicenseRequest) => {
         try {
             const result = await encryptLicense(request)
             return result
         } catch (error) {
-            console.error('Failed to generate license:', error)
             throw error
         }
     }, [encryptLicense])
 
-    /**
-     * ライセンス検証（Playground用）
-     */
     const validateLicense = useCallback(async (request: DecryptLicenseRequest) => {
         try {
             const result = await decryptLicense(request)
             return result
         } catch (error) {
-            console.error('Failed to validate license:', error)
             throw error
         }
     }, [decryptLicense])
 
-    // 統合ローディング状態
-    const isLoading = isDownloading || isEncrypting || isDecrypting
-
-    // 統合エラー状態
-    const error = downloadError || encryptError || decryptError
+    const isLoading = isDownloading || isEncrypting || isDecrypting || isIntegrationTesting || isLoadingProfile
+    const error = downloadError || encryptError || decryptError || integrationTestError || profileError
 
     return {
-        // GASテンプレート関連
         downloadedFile,
         isDownloading,
         downloadError,
         downloadGasTemplate,
         resetDownload,
 
-        // ライセンス暗号化関連
+        integrationTestResult,
+        isIntegrationTesting,
+        integrationTestError,
+        startIntegrationTest,
+        resetIntegrationTest,
+
+        userProfile,
+        isLoadingProfile,
+        profileError,
+        getUserProfile,
+        resetProfile,
+
         encryptedLicense,
         isEncrypting,
         encryptError,
         generateLicense,
         resetEncryption,
 
-        // ライセンス復号化関連
         decryptedLicense,
         isDecrypting,
         decryptError,
         validateLicense,
         resetDecryption,
 
-        // 統合状態
         isLoading,
         error,
 
-        // 全リセット
         resetAll: () => {
             resetDownload()
+            resetIntegrationTest()
+            resetProfile()
             resetEncryption()
             resetDecryption()
-        }
+            stopProgressPolling()
+        },
+
+        startProgressPolling,
+        stopProgressPolling,
+        isIntegrationTestCompleted
     }
 }
 
-/**
- * GASダウンロード専用Hook（軽量版）
- */
 export function useGasDownload() {
     const {
         data: downloadedFile,
@@ -152,9 +240,70 @@ export function useGasDownload() {
     }
 }
 
-/**
- * Playground専用Hook（ライセンス機能のみ）
- */
+export function useIntegrationTest() {
+    const {
+        data: integrationTestResult,
+        loading: isLoading,
+        error,
+        execute: executeIntegrationTest,
+        reset,
+    } = useApi<IntegrationTestResponse>()
+
+    const {
+        data: userProfile,
+        loading: isLoadingProfile,
+        error: profileError,
+        execute: executeGetProfile,
+        reset: resetProfile,
+    } = useApi<UserProfile>()
+
+    const startIntegrationTest = useCallback(async (gasWebappUrl: string) => {
+        if (!gasWebappUrl?.trim()) {
+            throw new DeveloperServiceError('WebApp URL is required');
+        }
+
+        try {
+            const result = await executeIntegrationTest(() =>
+                developerService.triggerIntegrationTest(gasWebappUrl.trim())
+            );
+            return result;
+        } catch (apiError) {
+            throw apiError;
+        }
+    }, [executeIntegrationTest])
+
+    const getUserProfile = useCallback(async () => {
+        try {
+            const profile = await executeGetProfile(() => developerService.getUserProfile())
+            return profile
+        } catch (apiError) {
+            throw apiError
+        }
+    }, [executeGetProfile])
+
+    return {
+        integrationTestResult,
+        isLoading,
+        error,
+        startIntegrationTest,
+        reset,
+
+        userProfile,
+        isLoadingProfile,
+        profileError,
+        getUserProfile,
+        resetProfile,
+
+        isAnyLoading: isLoading || isLoadingProfile,
+        hasAnyError: !!(error || profileError),
+
+        resetAll: () => {
+            reset()
+            resetProfile()
+        }
+    }
+}
+
 export function usePlayground() {
     const {
         encryptedLicense,
@@ -181,21 +330,18 @@ export function usePlayground() {
     }, [decryptLicense])
 
     return {
-        // 暗号化
         encryptedLicense,
         isEncrypting,
         encryptError,
         generateLicense,
         resetEncryption,
 
-        // 復号化
         decryptedLicense,
         isDecrypting,
         decryptError,
         validateLicense,
         resetDecryption,
 
-        // ユーティリティ
         isLoading: isEncrypting || isDecrypting,
         hasError: !!(encryptError || decryptError),
         resetAll: () => {

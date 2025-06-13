@@ -1,15 +1,11 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { Logger } from '@aws-lambda-powertools/logger';
-import { Tracer } from '@aws-lambda-powertools/tracer';
 import { injectLambdaContext } from '@aws-lambda-powertools/logger/middleware';
 import { captureLambdaHandler } from '@aws-lambda-powertools/tracer/middleware';
-
-import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import middy from '@middy/core';
 import httpCors from '@middy/http-cors';
 
-import { EAApplicationRepository } from '../../repositories/eaApplicationRepository';
+import { createProductionContainer } from '../../di/container';
+import { RejectApplicationHandlerDependencies } from '../../di/types';
 import {
     createSuccessResponse,
     createValidationErrorResponse,
@@ -19,30 +15,17 @@ import {
     createInternalErrorResponse
 } from '../../utils/apiResponse';
 
-// Logger設定
-const logger = new Logger({
-    logLevel: 'DEBUG',
-    serviceName: 'reject-application'
-});
-
-const tracer = new Tracer({ serviceName: 'reject-application' });
-
-// DI対応: Repository を初期化
-const ddbClient = tracer.captureAWSv3Client(new DynamoDBClient({}));
-const docClient = DynamoDBDocumentClient.from(ddbClient);
-const repository = new EAApplicationRepository(docClient);
-
 // リクエストボディ型定義
 interface RejectRequest {
     reason?: string;
 }
 
-// ベースハンドラ
-const baseHandler = async (
+// ハンドラー作成関数
+export const createHandler = (dependencies: RejectApplicationHandlerDependencies) => async (
     event: APIGatewayProxyEvent
 ): Promise<APIGatewayProxyResult> => {
 
-    logger.info('Reject application request received');
+    dependencies.logger.info('Reject application request received');
 
     try {
         // RESTful: パスパラメータから ID を取得
@@ -62,7 +45,7 @@ const baseHandler = async (
 
         // 権限チェック（開発者は自分のEAのみ、管理者は全て）
         const userRole = event.requestContext.authorizer?.claims?.role || 'developer';
-        logger.info('Processing reject application request', {
+        dependencies.logger.info('Processing reject application request', {
             applicationId: decodedApplicationId,
             userId,
             userRole,
@@ -74,7 +57,7 @@ const baseHandler = async (
             try {
                 requestBody = JSON.parse(event.body);
             } catch (e) {
-                logger.warn('Failed to parse request body, proceeding without reason', { error: e });
+                dependencies.logger.warn('Failed to parse request body, proceeding without reason', { error: e });
             }
         }
 
@@ -87,15 +70,15 @@ const baseHandler = async (
         }
 
         // 1. アプリケーション情報を取得して検証
-        const application = await repository.getApplication(userId, fullApplicationSK);
+        const application = await dependencies.eaApplicationRepository.getApplication(userId, fullApplicationSK);
         if (!application) {
-            logger.error('Application not found', { userId, applicationSK: fullApplicationSK });
+            dependencies.logger.error('Application not found', { userId, applicationSK: fullApplicationSK });
             return createNotFoundResponse('Application not found');
         }
 
         // 権限チェック: 開発者は自分のEAのみ
         if (userRole === 'developer' && application.userId !== userId) {
-            logger.warn('Developer attempting to reject another user\'s application', {
+            dependencies.logger.warn('Developer attempting to reject another user\'s application', {
                 requestUserId: userId,
                 applicationUserId: application.userId
             });
@@ -104,7 +87,7 @@ const baseHandler = async (
 
         // 2. ステータス確認
         if (application.status !== 'Pending') {
-            logger.error('Application not in Pending status', {
+            dependencies.logger.error('Application not in Pending status', {
                 userId,
                 applicationSK: fullApplicationSK,
                 currentStatus: application.status
@@ -115,11 +98,11 @@ const baseHandler = async (
         }
 
         // 3. ステータス更新
-        await repository.updateStatus(userId, fullApplicationSK, 'Rejected');
+        await dependencies.eaApplicationRepository.updateStatus(userId, fullApplicationSK, 'Rejected');
 
         // 4. 履歴記録
         const rejectionReason = reason || `Application rejected by ${userRole}: ${userId}`;
-        await repository.recordHistory({
+        await dependencies.eaApplicationRepository.recordHistory({
             userId,
             applicationSK: fullApplicationSK,
             action: 'Rejected',
@@ -129,7 +112,7 @@ const baseHandler = async (
             reason: rejectionReason
         });
 
-        logger.info('Application rejected successfully', {
+        dependencies.logger.info('Application rejected successfully', {
             userId,
             applicationSK: fullApplicationSK,
             eaName: application.eaName,
@@ -148,10 +131,20 @@ const baseHandler = async (
         });
 
     } catch (error) {
-        logger.error('Error rejecting application', { error });
+        dependencies.logger.error('Error rejecting application', { error });
         return createInternalErrorResponse('Failed to reject application', error as Error);
     }
 };
+
+// Production configuration
+const container = createProductionContainer();
+const dependencies: RejectApplicationHandlerDependencies = {
+    eaApplicationRepository: container.resolve('eaApplicationRepository'),
+    logger: container.resolve('logger'),
+    tracer: container.resolve('tracer')
+};
+
+const baseHandler = createHandler(dependencies);
 
 // middy + Powertools middleware 適用
 export const handler = middy(baseHandler)
@@ -160,5 +153,5 @@ export const handler = middy(baseHandler)
         headers: 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,Accept,Cache-Control,X-Requested-With',
         methods: 'POST,OPTIONS',
     }))
-    .use(injectLambdaContext(logger, { clearState: true }))
-    .use(captureLambdaHandler(tracer));
+    .use(injectLambdaContext(dependencies.logger, { clearState: true }))
+    .use(captureLambdaHandler(dependencies.tracer));

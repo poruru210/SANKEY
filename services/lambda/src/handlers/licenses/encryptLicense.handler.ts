@@ -1,31 +1,19 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { Logger } from '@aws-lambda-powertools/logger';
-import { Tracer } from '@aws-lambda-powertools/tracer';
-import { injectLambdaContext } from '@aws-lambda-powertools/logger/middleware';
-import { captureLambdaHandler } from '@aws-lambda-powertools/tracer/middleware';
+import { createProductionContainer } from '../../di/container';
 import middy from '@middy/core';
 import httpCors from '@middy/http-cors';
+import { injectLambdaContext } from '@aws-lambda-powertools/logger/middleware';
+import { captureLambdaHandler } from '@aws-lambda-powertools/tracer/middleware';
 
 import { encryptLicense } from '../../services/encryption';
 import { createLicensePayloadV1, LicensePayloadV1, PAYLOAD_VERSIONS } from '../../models/licensePayload';
-import { MasterKeyService } from '../../services/masterKeyService';
+import type { EncryptLicenseHandlerDependencies } from '../../di/types';
 import {
     createSuccessResponse,
     createValidationErrorResponse,
     createUnauthorizedResponse,
     createInternalErrorResponse
 } from '../../utils/apiResponse';
-
-// Logger設定
-const logger = new Logger({
-    logLevel: 'DEBUG',
-    serviceName: 'encrypt-license'
-});
-
-const tracer = new Tracer({ serviceName: 'encrypt-license' });
-
-// Master Key Service の初期化
-const masterKeyService = new MasterKeyService({ logger });
 
 // リクエストボディの型定義
 interface EncryptLicenseRequest {
@@ -104,99 +92,108 @@ function validateRequest(body: any): ValidatedRequest {
     };
 }
 
-// メインハンドラ
-const baseHandler = async (
-    event: APIGatewayProxyEvent
-): Promise<APIGatewayProxyResult> => {
+// ハンドラーファクトリー（必須）
+export const createHandler = (deps: EncryptLicenseHandlerDependencies) => {
+    return async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
+        deps.logger.info('License encrypt request received');
 
-    logger.info('License encrypt request received');
-
-    try {
-        // 認証情報からuserIdを取得
-        const userId = event.requestContext.authorizer?.claims?.sub;
-        if (!userId) {
-            return createUnauthorizedResponse('User authentication required');
-        }
-
-        // この時点でuserIdは確実に文字列
-        const authenticatedUserId: string = userId;
-
-        // リクエストボディの解析
-        if (!event.body) {
-            return createValidationErrorResponse('Request body is required');
-        }
-
-        let requestBody: any;
         try {
-            requestBody = JSON.parse(event.body);
-        } catch (error) {
-            return createValidationErrorResponse('Invalid JSON format in request body');
-        }
-
-        // リクエストの検証
-        let validatedRequest: ValidatedRequest;
-        try {
-            validatedRequest = validateRequest(requestBody);
-        } catch (error) {
-            return createValidationErrorResponse((error as Error).message);
-        }
-
-        logger.info('Processing license encrypt request', {
-            userId: authenticatedUserId,
-            eaName: validatedRequest.eaName,
-            accountId: validatedRequest.accountId,
-            expiry: validatedRequest.expiry,
-            version: validatedRequest.version
-        });
-
-        // 共通サービスを使用してマスターキーを取得
-        const masterKey = await masterKeyService.getUserMasterKeyForEncryption(authenticatedUserId);
-
-        // ペイロードを作成
-        const payload: LicensePayloadV1 = createLicensePayloadV1({
-            eaName: validatedRequest.eaName,
-            accountId: validatedRequest.accountId,
-            expiry: validatedRequest.expiry,
-            userId: authenticatedUserId, // 型安全なuserIdを使用
-            issuedAt: validatedRequest.issuedAt,
-        });
-
-        // ライセンスを暗号化
-        const encryptedLicense = await encryptLicense(masterKey, payload, validatedRequest.accountId);
-
-        logger.info('License encrypted successfully', {
-            userId: authenticatedUserId,
-            eaName: validatedRequest.eaName,
-            accountId: validatedRequest.accountId,
-            version: payload.version,
-            licenseLength: encryptedLicense.length
-        });
-
-        // 暗号化されたライセンスを返却
-        return createSuccessResponse('License encrypted successfully', {
-            encryptedLicense,
-            payload: {
-                version: payload.version,
-                eaName: payload.eaName,
-                accountId: payload.accountId,
-                expiry: payload.expiry,
-                userId: payload.userId,
-                issuedAt: payload.issuedAt
+            // 認証情報からuserIdを取得
+            const userId = event.requestContext.authorizer?.claims?.sub;
+            if (!userId) {
+                return createUnauthorizedResponse('User authentication required');
             }
-        });
 
-    } catch (error) {
-        logger.error('Error encrypting license', { error });
-        return createInternalErrorResponse('Failed to encrypt license', error as Error);
-    }
+            // この時点でuserIdは確実に文字列
+            const authenticatedUserId: string = userId;
+
+            // リクエストボディの解析
+            if (!event.body) {
+                return createValidationErrorResponse('Request body is required');
+            }
+
+            let requestBody: any;
+            try {
+                requestBody = JSON.parse(event.body);
+            } catch (error) {
+                return createValidationErrorResponse('Invalid JSON format in request body');
+            }
+
+            // リクエストの検証
+            let validatedRequest: ValidatedRequest;
+            try {
+                validatedRequest = validateRequest(requestBody);
+            } catch (error) {
+                return createValidationErrorResponse((error as Error).message);
+            }
+
+            deps.logger.info('Processing license encrypt request', {
+                userId: authenticatedUserId,
+                eaName: validatedRequest.eaName,
+                accountId: validatedRequest.accountId,
+                expiry: validatedRequest.expiry,
+                version: validatedRequest.version
+            });
+
+            // 共通サービスを使用してマスターキーを取得
+            const masterKey = await deps.masterKeyService.getUserMasterKeyForEncryption(authenticatedUserId);
+
+            // ペイロードを作成
+            const payload: LicensePayloadV1 = createLicensePayloadV1({
+                eaName: validatedRequest.eaName,
+                accountId: validatedRequest.accountId,
+                expiry: validatedRequest.expiry,
+                userId: authenticatedUserId, // 型安全なuserIdを使用
+                issuedAt: validatedRequest.issuedAt,
+            });
+
+            // ライセンスを暗号化
+            const encryptedLicense = await encryptLicense(masterKey, payload, validatedRequest.accountId);
+
+            deps.logger.info('License encrypted successfully', {
+                userId: authenticatedUserId,
+                eaName: validatedRequest.eaName,
+                accountId: validatedRequest.accountId,
+                version: payload.version,
+                licenseLength: encryptedLicense.length
+            });
+
+            // 暗号化されたライセンスを返却
+            return createSuccessResponse('License encrypted successfully', {
+                encryptedLicense,
+                payload: {
+                    version: payload.version,
+                    eaName: payload.eaName,
+                    accountId: payload.accountId,
+                    expiry: payload.expiry,
+                    userId: payload.userId,
+                    issuedAt: payload.issuedAt
+                }
+            });
+
+        } catch (error) {
+            deps.logger.error('Error encrypting license', { error });
+            return createInternalErrorResponse('Failed to encrypt license', error as Error);
+        }
+    };
 };
 
-// middy + Powertools middleware 適用
+// Production設定（必須）
+const container = createProductionContainer();
+const dependencies: EncryptLicenseHandlerDependencies = {
+    masterKeyService: container.resolve('masterKeyService'),
+    logger: container.resolve('logger'),
+    tracer: container.resolve('tracer')
+};
+
+const baseHandler = createHandler(dependencies);
+
+// Middleware適用（必須）
 export const handler = middy(baseHandler)
     .use(httpCors({
         origin: '*',
         headers: 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,Accept,Cache-Control,X-Requested-With',
         methods: 'POST,OPTIONS',
     }))
-    .use(injectLambdaContext(logger, { clearState: true }))
-    .use(captureLambdaHandler(tracer));
+    .use(injectLambdaContext(dependencies.logger, { clearState: true }))
+    .use(captureLambdaHandler(dependencies.tracer));

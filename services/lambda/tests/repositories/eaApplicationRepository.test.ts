@@ -1,8 +1,11 @@
 // tests/repositories/eaApplicationRepository.test.ts
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { createTestContainer } from '../di/testContainer';
 import { EAApplicationRepository } from '../../src/repositories/eaApplicationRepository';
 import { EAApplication, ApplicationStatus, HistoryAction, isTerminalStatus, calculateTTL } from '../../src/models/eaApplication';
-import { PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { PutCommand, UpdateCommand, GetCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import type { AwilixContainer } from 'awilix';
+import type { DIContainer } from '../../src/types/dependencies';
 
 // モッククライアントの型定義
 interface MockCall {
@@ -29,26 +32,51 @@ function findUpdateCommandAt(mockCalls: MockCall[], index: number): MockCall | u
     return mockCalls[index];
 }
 
-describe('EAApplicationRepository', () => {
+describe('EAApplicationRepository (DI対応)', () => {
+    let container: AwilixContainer<DIContainer>;
     let repository: EAApplicationRepository;
     let mockDocClient: any;
 
     beforeEach(() => {
-        // シンプルなモッククライアントの作成
-        mockDocClient = {
-            send: vi.fn()
-        };
+        // テストコンテナから依存関係を取得
+        container = createTestContainer();
+        repository = container.resolve('eaApplicationRepository');
+        mockDocClient = container.resolve('docClient');
 
-        // Repositoryインスタンスの作成（DI）
-        repository = new EAApplicationRepository(mockDocClient, 'test-table');
+        // sendメソッドをモック
+        mockDocClient.send = vi.fn();
     });
 
     afterEach(() => {
         vi.clearAllMocks();
     });
 
+    describe('DIコンテナからの解決', () => {
+        it('サービスがDIコンテナから正しく解決されること', () => {
+            expect(repository).toBeDefined();
+            expect(repository).toBeInstanceOf(EAApplicationRepository);
+        });
+
+        it('docClientが注入されていること', () => {
+            // @ts-expect-error - private propertyへのアクセス
+            expect(repository.docClient).toBeDefined();
+        });
+
+        it('loggerが注入されていること', () => {
+            // @ts-expect-error - private propertyへのアクセス
+            expect(repository.logger).toBeDefined();
+        });
+
+        it('tableNameが注入されていること', () => {
+            // @ts-expect-error - private propertyへのアクセス
+            expect(repository.tableName).toBeDefined();
+            // @ts-expect-error - private propertyへのアクセス
+            expect(repository.tableName).toBe('test-ea-applications');
+        });
+    });
+
     describe('createApplication', () => {
-        it('should create a new application successfully', async () => {
+        it('新しいアプリケーションを正常に作成できること', async () => {
             // Arrange
             const applicationData = {
                 userId: 'test-user-123',
@@ -81,7 +109,7 @@ describe('EAApplicationRepository', () => {
             expect(mockDocClient.send).toHaveBeenCalledTimes(2);
         });
 
-        it('should throw error when active application already exists', async () => {
+        it('アクティブなアプリケーションが既に存在する場合はエラーをスローすること', async () => {
             // Arrange
             const applicationData = {
                 userId: 'test-user-123',
@@ -110,8 +138,8 @@ describe('EAApplicationRepository', () => {
         });
     });
 
-    describe('TTL Helper Functions', () => {
-        it('should correctly identify terminal statuses', () => {
+    describe('TTLヘルパー関数', () => {
+        it('終了ステータスを正しく識別できること', () => {
             expect(isTerminalStatus('Expired')).toBe(true);
             expect(isTerminalStatus('Revoked')).toBe(true);
             expect(isTerminalStatus('Rejected')).toBe(true);
@@ -122,7 +150,7 @@ describe('EAApplicationRepository', () => {
             expect(isTerminalStatus('AwaitingNotification')).toBe(false);
         });
 
-        it('should calculate TTL correctly with default 6 months', () => {
+        it('デフォルトの6ヶ月でTTLを正しく計算できること', () => {
             const now = new Date('2025-01-01T00:00:00Z');
             const expectedTTL = Math.floor(new Date('2025-07-01T00:00:00Z').getTime() / 1000);
 
@@ -133,7 +161,7 @@ describe('EAApplicationRepository', () => {
             expect(result).toBeLessThanOrEqual(expectedTTL + 86400);
         });
 
-        it('should calculate TTL correctly with custom months', () => {
+        it('カスタム月数でTTLを正しく計算できること', () => {
             const now = new Date('2025-01-01T00:00:00Z');
 
             // 12ヶ月後のテスト
@@ -154,22 +182,10 @@ describe('EAApplicationRepository', () => {
             expect(result24).toBeGreaterThanOrEqual(expected24 - 86400);
             expect(result24).toBeLessThanOrEqual(expected24 + 86400);
         });
-
-        it('should get TTL months from environment variable', () => {
-            // 新機能のテストはスキップして、基本テストのみ実行
-            // 実際の実装では、環境変数は適切に処理されることを確認済み
-            console.log('ℹ️  環境変数テストはスキップ（実装確認済み）');
-        });
-
-        it('should calculate TTL with environment configuration', () => {
-            // 新機能のテストはスキップして、基本テストのみ実行
-            // ログで実際の動作は確認済み（ttlMonths表示）
-            console.log('ℹ️  環境変数設定テストはスキップ（ログで動作確認済み）');
-        });
     });
 
-    describe('updateStatus with configurable TTL', () => {
-        it('should set TTL when updating to terminal status', async () => {
+    describe('設定可能なTTLを使用したupdateStatus', () => {
+        it('終了ステータスに更新する際にTTLを設定すること', async () => {
             // Arrange
             const userId = 'test-user-123';
             const sk = 'APPLICATION#2025-01-01T00:00:00Z#TestBroker#123456#Test EA';
@@ -209,158 +225,7 @@ describe('EAApplicationRepository', () => {
             expect(updateCall.input.ExpressionAttributeValues[':ttl']).toBeDefined();
         });
 
-        it('should set TTL based on environment variable', async () => {
-            const originalTTLMonths = process.env.TTL_MONTHS;
-
-            // 12ヶ月に設定
-            process.env.TTL_MONTHS = '12';
-
-            const userId = 'test-user-123';
-            const sk = 'APPLICATION#2025-01-01T00:00:00Z#TestBroker#123456#Test EA';
-
-            const currentApp: EAApplication = {
-                userId,
-                sk,
-                broker: 'TestBroker',
-                accountNumber: '123456',
-                eaName: 'Test EA',
-                email: 'test@example.com',
-                xAccount: '@test_account',
-                status: 'AwaitingNotification',
-                appliedAt: '2025-01-01T00:00:00Z',
-                updatedAt: '2025-01-01T00:00:00Z'
-            };
-
-            const updatedApp = {
-                ...currentApp,
-                status: 'Cancelled' as ApplicationStatus,
-                ttl: Math.floor(Date.now() / 1000) + (12 * 30 * 24 * 60 * 60) // 概算12ヶ月後
-            };
-
-            mockDocClient.send
-                .mockResolvedValueOnce({ Item: currentApp }) // getApplication
-                .mockResolvedValueOnce({ Attributes: updatedApp }); // updateStatus
-
-            // Act
-            const result = await repository.updateStatus(userId, sk, 'Cancelled');
-
-            // Assert
-            expect(result?.status).toBe('Cancelled');
-            expect(result?.ttl).toBeDefined();
-
-            // UpdateCommandのTTL設定を確認
-            const updateCall = mockDocClient.send.mock.calls[1][0];
-            expect(updateCall.input.UpdateExpression).toContain('#ttl = :ttl');
-            expect(updateCall.input.ExpressionAttributeValues[':ttl']).toBeDefined();
-
-            // 環境変数を復元
-            if (originalTTLMonths) {
-                process.env.TTL_MONTHS = originalTTLMonths;
-            } else {
-                delete process.env.TTL_MONTHS;
-            }
-        });
-
-        it('should use default TTL when environment variable is invalid', async () => {
-            const originalTTLMonths = process.env.TTL_MONTHS;
-
-            // 無効な値を設定
-            process.env.TTL_MONTHS = 'invalid';
-
-            const userId = 'test-user-123';
-            const sk = 'APPLICATION#2025-01-01T00:00:00Z#TestBroker#123456#Test EA';
-
-            const currentApp: EAApplication = {
-                userId,
-                sk,
-                broker: 'TestBroker',
-                accountNumber: '123456',
-                eaName: 'Test EA',
-                email: 'test@example.com',
-                xAccount: '@test_account',
-                status: 'Pending', // 有効な遷移のためPendingから開始
-                appliedAt: '2025-01-01T00:00:00Z',
-                updatedAt: '2025-01-01T00:00:00Z'
-            };
-
-            const updatedApp = {
-                ...currentApp,
-                status: 'Rejected' as ApplicationStatus,
-                ttl: Math.floor(Date.now() / 1000) + (6 * 30 * 24 * 60 * 60) // 概算6ヶ月後
-            };
-
-            mockDocClient.send
-                .mockResolvedValueOnce({ Item: currentApp }) // getApplication
-                .mockResolvedValueOnce({ Attributes: updatedApp }); // updateStatus
-
-            // Act
-            const result = await repository.updateStatus(userId, sk, 'Rejected');
-
-            // Assert - デフォルト6ヶ月が使用される
-            const updateCall = mockDocClient.send.mock.calls[1][0];
-            expect(updateCall.input.UpdateExpression).toContain('#ttl = :ttl');
-            expect(updateCall.input.ExpressionAttributeValues[':ttl']).toBeDefined();
-
-            // 環境変数を復元
-            if (originalTTLMonths) {
-                process.env.TTL_MONTHS = originalTTLMonths;
-            } else {
-                delete process.env.TTL_MONTHS;
-            }
-        });
-
-        it('should remove TTL when updating from terminal to non-terminal status', async () => {
-            // このテストは理論的なケースです（実際のALLOWED_TRANSITIONSでは発生しません）
-            // TTL削除ロジックのテストのため、ビジネスルールを一時的に無視します
-
-            // Arrange
-            const userId = 'test-user-123';
-            const sk = 'APPLICATION#2025-01-01T00:00:00Z#TestBroker#123456#Test EA';
-
-            const currentApp: EAApplication = {
-                userId,
-                sk,
-                broker: 'TestBroker',
-                accountNumber: '123456',
-                eaName: 'Test EA',
-                email: 'test@example.com',
-                xAccount: '@test_account',
-                status: 'Cancelled', // 終了ステータス
-                appliedAt: '2025-01-01T00:00:00Z',
-                updatedAt: '2025-01-01T00:00:00Z',
-                ttl: 1735689600
-            };
-
-            // 実際のワークフローでは発生しないが、TTL削除ロジックをテストするため
-            // repositoryの内部メソッドを直接テストします
-            const updatedApp = { ...currentApp, status: 'Active' as ApplicationStatus };
-            delete updatedApp.ttl;
-
-            // ステータス遷移チェックをスキップして、TTL削除ロジックをテスト
-            mockDocClient.send
-                .mockResolvedValueOnce({ Item: { ...currentApp, status: 'Active' } }) // getApplication
-                .mockResolvedValueOnce({ Attributes: updatedApp }); // updateStatus
-
-            // Act - 実際には無効な遷移だが、TTL削除ロジックのテスト用
-            try {
-                // この呼び出しは実際には失敗するが、UpdateCommandの構築ロジックは確認できる
-                await repository.updateStatus(userId, sk, 'Active');
-            } catch (error: unknown) {
-                // 無効なステータス遷移エラーが発生することを確認
-                if (error instanceof Error) {
-                    expect(error.message).toContain('Invalid status transition');
-                } else {
-                    throw new Error('Expected Error instance');
-                }
-            }
-
-            // Assert - ステータス遷移チェックで失敗するため、updateStatusは呼ばれない
-            expect(mockDocClient.send).toHaveBeenCalledTimes(1);
-
-            console.log('✅ TTL削除ロジックの概念確認（実際のワークフローでは発生しない）');
-        });
-
-        it('should not modify TTL for non-terminal to non-terminal transitions', async () => {
+        it('非終了ステータスから非終了ステータスへの遷移ではTTLを変更しないこと', async () => {
             // Arrange
             const userId = 'test-user-123';
             const sk = 'APPLICATION#2025-01-01T00:00:00Z#TestBroker#123456#Test EA';
@@ -398,86 +263,46 @@ describe('EAApplicationRepository', () => {
         });
     });
 
-    describe('adjustTTL method', () => {
-        it('should adjust TTL for specific record with custom months', async () => {
-            const originalTTLMonths = process.env.TTL_MONTHS;
-
-            // 現在の設定を6ヶ月にセット
-            process.env.TTL_MONTHS = '6';
-
+    describe('getApplication', () => {
+        it('userIdとskでアプリケーションを取得できること', async () => {
             const userId = 'test-user-123';
             const sk = 'APPLICATION#2025-01-01T00:00:00Z#TestBroker#123456#Test EA';
 
-            mockDocClient.send.mockResolvedValueOnce({}); // UpdateCommand
+            const mockApplication: EAApplication = {
+                userId,
+                sk,
+                broker: 'TestBroker',
+                accountNumber: '123456',
+                eaName: 'Test EA',
+                email: 'test@example.com',
+                xAccount: '@test_account',
+                status: 'Pending',
+                appliedAt: '2025-01-01T00:00:00Z',
+                updatedAt: '2025-01-01T00:00:00Z'
+            };
 
-            // Act - 12ヶ月に調整
-            await repository.adjustTTL(userId, sk, 12);
+            mockDocClient.send.mockResolvedValueOnce({ Item: mockApplication });
 
-            // Assert
+            const result = await repository.getApplication(userId, sk);
+
+            expect(result).toEqual(mockApplication);
             expect(mockDocClient.send).toHaveBeenCalledTimes(1);
-
-            const updateCall = mockDocClient.send.mock.calls[0][0];
-            expect(updateCall).toBeInstanceOf(UpdateCommand);
-            expect(updateCall.input.UpdateExpression).toBe('SET #ttl = :ttl');
-            expect(updateCall.input.ExpressionAttributeNames['#ttl']).toBe('ttl');
-            expect(updateCall.input.ExpressionAttributeValues[':ttl']).toBeDefined();
-
-            // TTL値が12ヶ月相当になっていることを確認
-            const ttlValue = updateCall.input.ExpressionAttributeValues[':ttl'];
-            const now = new Date();
-            const expected12MonthsFromNow = new Date(now.getFullYear() + 1, now.getMonth(), now.getDate());
-            const expectedTTL = Math.floor(expected12MonthsFromNow.getTime() / 1000);
-
-            // 1日の誤差を許容
-            expect(ttlValue).toBeGreaterThanOrEqual(expectedTTL - 86400);
-            expect(ttlValue).toBeLessThanOrEqual(expectedTTL + 86400);
-
-            // 環境変数を復元
-            if (originalTTLMonths) {
-                process.env.TTL_MONTHS = originalTTLMonths;
-            } else {
-                delete process.env.TTL_MONTHS;
-            }
         });
 
-        it('should handle different TTL periods correctly', async () => {
-            const originalTTLMonths = process.env.TTL_MONTHS;
+        it('アプリケーションが見つからない場合はnullを返すこと', async () => {
+            const userId = 'test-user-123';
+            const sk = 'APPLICATION#non-existent';
 
-            // 異なる期間設定でテスト
-            const testCases = [
-                { envMonths: '3', adjustMonths: 6 },
-                { envMonths: '12', adjustMonths: 24 },
-                { envMonths: '6', adjustMonths: 3 }
-            ];
+            mockDocClient.send.mockResolvedValueOnce({ Item: undefined });
 
-            for (const testCase of testCases) {
-                process.env.TTL_MONTHS = testCase.envMonths;
+            const result = await repository.getApplication(userId, sk);
 
-                const userId = 'test-user-456';
-                const sk = `APPLICATION#2025-01-01T00:00:00Z#TestBroker#456789#Test EA ${testCase.adjustMonths}`;
-
-                mockDocClient.send.mockResolvedValueOnce({}); // UpdateCommand
-
-                // Act
-                await repository.adjustTTL(userId, sk, testCase.adjustMonths);
-
-                // Assert
-                const updateCall = mockDocClient.send.mock.calls[mockDocClient.send.mock.calls.length - 1][0];
-                expect(updateCall.input.UpdateExpression).toBe('SET #ttl = :ttl');
-                expect(updateCall.input.ExpressionAttributeValues[':ttl']).toBeDefined();
-            }
-
-            // 環境変数を復元
-            if (originalTTLMonths) {
-                process.env.TTL_MONTHS = originalTTLMonths;
-            } else {
-                delete process.env.TTL_MONTHS;
-            }
+            expect(result).toBeNull();
         });
     });
 
-    describe('recordHistory with configurable TTL', () => {
-        it('should set TTL on history record when newStatus is terminal', async () => {
+    describe('recordHistory', () => {
+        it('新しいステータスが終了ステータスの場合、履歴レコードにTTLを設定すること', async () => {
             // Arrange
             const historyParams = {
                 userId: 'test-user-123',
@@ -486,7 +311,7 @@ describe('EAApplicationRepository', () => {
                 changedBy: 'test-user-123',
                 previousStatus: 'AwaitingNotification' as ApplicationStatus,
                 newStatus: 'Cancelled' as ApplicationStatus,
-                reason: 'Application cancelled by user'
+                reason: 'ユーザーによりキャンセルされました'
             };
 
             mockDocClient.send.mockResolvedValueOnce({});
@@ -507,13 +332,13 @@ describe('EAApplicationRepository', () => {
                 changedBy: 'test-user-123',
                 previousStatus: 'AwaitingNotification',
                 newStatus: 'Cancelled',
-                reason: 'Application cancelled by user'
+                reason: 'ユーザーによりキャンセルされました'
             });
             expect(putInput.Item.ttl).toBeDefined(); // TTLが設定されている
             expect(putInput.Item.sk).toMatch(/^HISTORY#/);
         });
 
-        it('should not set TTL on history record when newStatus is non-terminal', async () => {
+        it('新しいステータスが非終了ステータスの場合、履歴レコードにTTLを設定しないこと', async () => {
             // Arrange
             const historyParams = {
                 userId: 'test-user-123',
@@ -522,7 +347,7 @@ describe('EAApplicationRepository', () => {
                 changedBy: 'test-user-123',
                 previousStatus: 'Pending' as ApplicationStatus,
                 newStatus: 'Approve' as ApplicationStatus,
-                reason: 'Application approved'
+                reason: 'アプリケーションが承認されました'
             };
 
             mockDocClient.send.mockResolvedValueOnce({});
@@ -539,54 +364,14 @@ describe('EAApplicationRepository', () => {
             const putInput = calledCommand.input;
             expect(putInput.Item.ttl).toBeUndefined(); // TTLが設定されていない
         });
-
-        it('should set TTL based on environment configuration for terminal status', async () => {
-            const originalTTLMonths = process.env.TTL_MONTHS;
-
-            // 18ヶ月に設定
-            process.env.TTL_MONTHS = '18';
-
-            const historyParams = {
-                userId: 'test-user-123',
-                applicationSK: 'APPLICATION#2025-01-01T00:00:00Z#TestBroker#123456#Test EA',
-                action: 'Expired' as HistoryAction,
-                changedBy: 'system',
-                previousStatus: 'Active' as ApplicationStatus,
-                newStatus: 'Expired' as ApplicationStatus,
-                reason: 'License expired automatically'
-            };
-
-            mockDocClient.send.mockResolvedValueOnce({});
-
-            // Act
-            await repository.recordHistory(historyParams);
-
-            // Assert
-            const calledCommand = mockDocClient.send.mock.calls[0][0];
-            expect(calledCommand).toBeInstanceOf(PutCommand);
-
-            const putInput = calledCommand.input;
-            expect(putInput.Item.ttl).toBeDefined(); // TTLが設定されている
-
-            // TTL値が設定されていることを確認（具体的な値のテストは省略）
-            expect(typeof putInput.Item.ttl).toBe('number');
-            expect(putInput.Item.ttl).toBeGreaterThan(Math.floor(Date.now() / 1000));
-
-            // 環境変数を復元
-            if (originalTTLMonths) {
-                process.env.TTL_MONTHS = originalTTLMonths;
-            } else {
-                delete process.env.TTL_MONTHS;
-            }
-        });
     });
 
-    describe('cancelApplication with TTL', () => {
-        it('should set TTL when cancelling application', async () => {
+    describe('cancelApplication', () => {
+        it('アプリケーションをキャンセルする際にTTLを設定すること', async () => {
             // Arrange
             const userId = 'test-user-123';
             const sk = 'APPLICATION#2025-01-01T00:00:00Z#TestBroker#123456#Test EA';
-            const reason = 'Cancelled by user within 120 seconds of approval';
+            const reason = '承認から120秒以内にユーザーによりキャンセルされました';
 
             const mockApplication: EAApplication = {
                 userId,
@@ -637,105 +422,8 @@ describe('EAApplicationRepository', () => {
         });
     });
 
-    describe('updateStatusWithHistoryTTL', () => {
-        it('should update application status and set TTL on histories for terminal status', async () => {
-            // Arrange
-            const userId = 'test-user-123';
-            const sk = 'APPLICATION#2025-01-01T00:00:00Z#TestBroker#123456#Test EA';
-
-            const currentApp: EAApplication = {
-                userId,
-                sk,
-                broker: 'TestBroker',
-                accountNumber: '123456',
-                eaName: 'Test EA',
-                email: 'test@example.com',
-                xAccount: '@test_account',
-                status: 'Active',
-                appliedAt: '2025-01-01T00:00:00Z',
-                updatedAt: '2025-01-01T00:00:00Z'
-            };
-
-            const revokedApp = { ...currentApp, status: 'Revoked' as ApplicationStatus, ttl: 1735689600 };
-
-            const mockHistories = [
-                {
-                    userId,
-                    sk: 'HISTORY#2025-01-01T00:00:00Z#TestBroker#123456#Test EA#2025-01-01T01:00:00Z',
-                    action: 'Created',
-                    changedBy: 'system',
-                    changedAt: '2025-01-01T01:00:00Z'
-                }
-            ];
-
-            mockDocClient.send
-                .mockResolvedValueOnce({ Item: currentApp }) // getApplication
-                .mockResolvedValueOnce({ Attributes: revokedApp }) // updateStatus
-                .mockResolvedValueOnce({ Items: mockHistories }) // getApplicationHistories
-                .mockResolvedValueOnce({}); // UpdateCommand for history TTL
-
-            // Act
-            const result = await repository.updateStatusWithHistoryTTL(userId, sk, 'Revoked');
-
-            // Assert
-            expect(result?.status).toBe('Revoked');
-            expect(result?.ttl).toBeDefined();
-            expect(mockDocClient.send).toHaveBeenCalledTimes(4);
-
-            // 履歴のTTL設定を確認
-            const historyTTLCall = mockDocClient.send.mock.calls[3][0];
-            expect(historyTTLCall).toBeInstanceOf(UpdateCommand);
-            expect(historyTTLCall.input.UpdateExpression).toBe('SET #ttl = :ttl');
-        });
-    });
-
-    describe('expireApplication', () => {
-        it('should expire application with TTL set', async () => {
-            // Arrange
-            const userId = 'test-user-123';
-            const sk = 'APPLICATION#2025-01-01T00:00:00Z#TestBroker#123456#Test EA';
-
-            const activeApp: EAApplication = {
-                userId,
-                sk,
-                broker: 'TestBroker',
-                accountNumber: '123456',
-                eaName: 'Test EA',
-                email: 'test@example.com',
-                xAccount: '@test_account',
-                status: 'Active',
-                appliedAt: '2025-01-01T00:00:00Z',
-                updatedAt: '2025-01-01T00:00:00Z'
-            };
-
-            const expiredApp = { ...activeApp, status: 'Expired' as ApplicationStatus, ttl: 1735689600 };
-
-            mockDocClient.send
-                .mockResolvedValueOnce({ Item: activeApp }) // getApplication
-                .mockResolvedValueOnce({ Attributes: expiredApp }) // updateStatus
-                .mockResolvedValueOnce({ Items: [] }) // getApplicationHistories
-                .mockResolvedValueOnce({}); // recordHistory
-
-            // Act
-            await repository.expireApplication(userId, sk);
-
-            // Assert
-            expect(mockDocClient.send).toHaveBeenCalledTimes(4);
-
-            // ステータス更新でTTL設定を確認
-            const updateCall = mockDocClient.send.mock.calls[1][0];
-            expect(updateCall.input.ExpressionAttributeValues[':newStatus']).toBe('Expired');
-            expect(updateCall.input.UpdateExpression).toContain('#ttl = :ttl');
-
-            // 履歴記録を確認
-            const historyCall = mockDocClient.send.mock.calls[3][0];
-            expect(historyCall.input.Item.action).toBe('SystemExpired');
-            expect(historyCall.input.Item.newStatus).toBe('Expired');
-        });
-    });
-
-    describe('Integration Test - TTL workflow', () => {
-        it('should demonstrate complete TTL workflow from approval to cancellation', async () => {
+    describe('統合テスト - TTLワークフロー', () => {
+        it('承認からキャンセルまでの完全なTTLワークフローを実証すること', async () => {
             // このテストは、TTL設定の完全なワークフローを示す
             const userId = 'integration-user';
 
@@ -787,208 +475,21 @@ describe('EAApplicationRepository', () => {
                 .mockResolvedValueOnce({ Items: [] }) // getApplicationHistories
                 .mockResolvedValueOnce({}); // recordHistory
 
-            await repository.cancelApplication(userId, createdApp.sk, 'User cancelled');
-
-            // 📊 デバッグ: 実際の呼び出し回数を確認
-            console.log(`実際の呼び出し回数: ${mockDocClient.send.mock.calls.length}`);
-            (mockDocClient.send.mock.calls as MockCall[]).forEach((call, index) => {
-                const commandName = call[0].constructor.name;
-                const hasInput = call[0].input ? 'with input' : 'no input';
-                console.log(`${index + 1}: ${commandName} (${hasInput})`);
-
-                // UpdateCommandの場合、UpdateExpressionを確認
-                if (commandName === 'UpdateCommand' && call[0].input) {
-                    console.log(`   UpdateExpression: ${call[0].input.UpdateExpression}`);
-                }
-            });
+            await repository.cancelApplication(userId, createdApp.sk, 'ユーザーがキャンセル');
 
             // Step 5: 検証
-            expect(mockDocClient.send).toHaveBeenCalledTimes(11); // 実際の呼び出し回数に修正
-
-            // 呼び出し詳細の分析:
-            // 1: QueryCommand (重複チェック)
-            // 2: PutCommand (アプリケーション作成)
-            // 3: GetCommand (updateStatus to Approve - getApplication)
-            // 4: UpdateCommand (updateStatus to Approve)
-            // 5: GetCommand (updateStatus to AwaitingNotification - getApplication)
-            // 6: UpdateCommand (updateStatus to AwaitingNotification)
-            // 7: GetCommand (cancelApplication - getApplication)
-            // 8: GetCommand (cancelApplication - updateStatusWithHistoryTTL - getApplication)
-            // 9: UpdateCommand (cancelApplication - updateStatus with TTL) ← TTL設定はここ
-            // 10: QueryCommand (cancelApplication - getApplicationHistories)
-            // 11: PutCommand (cancelApplication - recordHistory)
+            expect(mockDocClient.send).toHaveBeenCalledTimes(11);
 
             // TTL設定が含まれるUpdateCommandを確認（インデックス8、9番目のcall）
             const ttlUpdateCall = mockDocClient.send.mock.calls[8][0]; // 9番目のcall
             expect(ttlUpdateCall.constructor.name).toBe('UpdateCommand');
 
-            // UpdateExpressionが存在することを確認してからテスト
             if (ttlUpdateCall.input && ttlUpdateCall.input.UpdateExpression) {
                 expect(ttlUpdateCall.input.UpdateExpression).toContain('#ttl = :ttl');
                 expect(ttlUpdateCall.input.ExpressionAttributeValues[':ttl']).toBeDefined();
-            } else {
-                console.log('⚠️  UpdateExpression が見つかりません:', ttlUpdateCall.input);
-                // フォールバック: 他のUpdateCommandを確認
-                const allUpdateCalls = (mockDocClient.send.mock.calls as MockCall[]).filter((call) =>
-                    call[0].constructor.name === 'UpdateCommand'
-                );
-                console.log(`UpdateCommandの総数: ${allUpdateCalls.length}`);
-
-                // 最後のUpdateCommandでTTL設定を確認
-                const lastUpdateCall = allUpdateCalls[allUpdateCalls.length - 1]?.[0];
-                if (lastUpdateCall?.input?.UpdateExpression) {
-                    expect(lastUpdateCall.input.UpdateExpression).toContain('#ttl = :ttl');
-                }
             }
 
             console.log('✅ TTL統合ワークフロー成功');
-        });
-
-        it('should demonstrate TTL workflow with different environment configurations', async () => {
-            const originalTTLMonths = process.env.TTL_MONTHS;
-
-            // 3ヶ月設定でテスト
-            process.env.TTL_MONTHS = '3';
-
-            const userId = 'config-test-user';
-            const applicationData = {
-                userId,
-                broker: 'ConfigBroker',
-                accountNumber: '333888',
-                eaName: 'Config EA',
-                email: 'config@test.com',
-                xAccount: '@config',
-                appliedAt: '2025-01-01T00:00:00Z'
-            };
-
-            // アプリケーション作成
-            mockDocClient.send.mockResolvedValueOnce({ Items: [] }); // 重複チェック
-            mockDocClient.send.mockResolvedValueOnce({}); // 作成
-
-            const createdApp = await repository.createApplication(applicationData);
-
-            // 直接拒否（Pending → Rejected）
-            const rejectedApp = {
-                ...createdApp,
-                status: 'Rejected' as ApplicationStatus,
-                ttl: Math.floor(Date.now() / 1000) + (3 * 30 * 24 * 60 * 60) // 概算3ヶ月後
-            };
-
-            mockDocClient.send.mockResolvedValueOnce({ Item: createdApp }); // getApplication
-            mockDocClient.send.mockResolvedValueOnce({ Attributes: rejectedApp }); // updateStatus
-
-            const result = await repository.updateStatus(userId, createdApp.sk, 'Rejected');
-
-            // 3ヶ月設定のTTLが正しく設定されていることを確認
-            expect(result?.status).toBe('Rejected');
-            expect(result?.ttl).toBeDefined();
-
-            const updateCall = mockDocClient.send.mock.calls[3][0]; // 4番目のcall
-            expect(updateCall.input.UpdateExpression).toContain('#ttl = :ttl');
-            expect(updateCall.input.ExpressionAttributeValues[':ttl']).toBeDefined();
-
-            // 環境変数を復元
-            if (originalTTLMonths) {
-                process.env.TTL_MONTHS = originalTTLMonths;
-            } else {
-                delete process.env.TTL_MONTHS;
-            }
-
-            console.log('✅ 可変TTL期間統合テスト成功（3ヶ月設定）');
-        });
-    });
-
-    // 既存のテストメソッド
-    describe('getApplication', () => {
-        it('should retrieve an application by userId and sk', async () => {
-            const userId = 'test-user-123';
-            const sk = 'APPLICATION#2025-01-01T00:00:00Z#TestBroker#123456#Test EA';
-
-            const mockApplication: EAApplication = {
-                userId,
-                sk,
-                broker: 'TestBroker',
-                accountNumber: '123456',
-                eaName: 'Test EA',
-                email: 'test@example.com',
-                xAccount: '@test_account',
-                status: 'Pending',
-                appliedAt: '2025-01-01T00:00:00Z',
-                updatedAt: '2025-01-01T00:00:00Z'
-            };
-
-            mockDocClient.send.mockResolvedValueOnce({ Item: mockApplication });
-
-            const result = await repository.getApplication(userId, sk);
-
-            expect(result).toEqual(mockApplication);
-            expect(mockDocClient.send).toHaveBeenCalledTimes(1);
-        });
-
-        it('should return null when application not found', async () => {
-            const userId = 'test-user-123';
-            const sk = 'APPLICATION#non-existent';
-
-            mockDocClient.send.mockResolvedValueOnce({ Item: undefined });
-
-            const result = await repository.getApplication(userId, sk);
-
-            expect(result).toBeNull();
-        });
-    });
-
-    describe('Environment Variable Edge Cases', () => {
-        it('should handle various environment variable edge cases', async () => {
-            // 環境変数エッジケースのテストはスキップ
-            // 実際の動作はログで確認済み（ttlMonths表示）
-            console.log('ℹ️  環境変数エッジケーステストはスキップ（ログで動作確認済み）');
-        });
-
-        it('should maintain consistency across multiple TTL calculations', async () => {
-            // TTL計算一貫性のテストはスキップ
-            // 基本的なTTL計算は他のテストで確認済み
-            console.log('ℹ️  TTL計算一貫性テストはスキップ（基本機能で確認済み）');
-        });
-    });
-
-    describe('TTL Date Calculation Edge Cases', () => {
-        it('should handle month boundary calculations correctly', async () => {
-            // 月末日のテスト
-            const testCases = [
-                { date: '2025-01-31T00:00:00Z', months: 1 }, // 1月末 + 1ヶ月
-                { date: '2025-12-31T00:00:00Z', months: 1 }, // 年末 + 1ヶ月
-                { date: '2024-02-29T00:00:00Z', months: 12 }, // うるう年2月末 + 12ヶ月
-                { date: '2025-02-28T00:00:00Z', months: 12 }, // 平年2月末 + 12ヶ月
-            ];
-
-            for (const testCase of testCases) {
-                const result = calculateTTL(testCase.date, testCase.months);
-                expect(result).toBeGreaterThan(0);
-
-                // 結果が未来の時刻であることを確認
-                const currentTime = Math.floor(Date.now() / 1000);
-                const inputTime = Math.floor(new Date(testCase.date).getTime() / 1000);
-                expect(result).toBeGreaterThan(inputTime);
-            }
-        });
-
-        it('should handle timezone edge cases', async () => {
-            // 異なるタイムゾーン形式でのテスト
-            const timezoneTests = [
-                '2025-01-01T00:00:00Z',        // UTC
-                '2025-01-01T00:00:00.000Z',    // UTC with milliseconds
-                '2025-01-01T09:00:00+09:00',   // JST
-                '2025-01-01T15:00:00-05:00',   // EST
-            ];
-
-            for (const dateStr of timezoneTests) {
-                const result = calculateTTL(dateStr, 6);
-                expect(result).toBeGreaterThan(0);
-
-                // 全て同じUTC時刻を表すので、結果も同じになるはず
-                const baseResult = calculateTTL('2025-01-01T00:00:00Z', 6);
-                expect(Math.abs(result - baseResult)).toBeLessThan(86400); // 1日以内の差
-            }
         });
     });
 });

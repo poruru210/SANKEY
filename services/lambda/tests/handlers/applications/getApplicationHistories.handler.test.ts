@@ -1,64 +1,41 @@
-// tests/handlers/applications/getApplicationHistories.handler.test.ts
-
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { APIGatewayProxyEvent } from 'aws-lambda';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
-import { EAApplicationHistory } from '../../../src/models/eaApplication';
-
-// Repository のモック
-const mockRepository = {
-    getApplicationHistories: vi.fn(),
-};
-
-vi.mock('../../../src/repositories/eaApplicationRepository', () => ({
-    EAApplicationRepository: vi.fn().mockImplementation(() => mockRepository)
-}));
-
-// PowerTools のモック
-vi.mock('@aws-lambda-powertools/logger', () => ({
-    Logger: vi.fn().mockImplementation(() => ({
-        info: vi.fn(),
-        error: vi.fn(),
-        warn: vi.fn(),
-        debug: vi.fn(),
-    }))
-}));
-
-vi.mock('@aws-lambda-powertools/tracer', () => ({
-    Tracer: vi.fn().mockImplementation(() => ({
-        captureAWSv3Client: vi.fn((client) => client),
-    }))
-}));
-
-// DynamoDB のモック
-vi.mock('@aws-sdk/client-dynamodb', () => ({
-    DynamoDBClient: vi.fn().mockImplementation(() => ({}))
-}));
-
-vi.mock('@aws-sdk/lib-dynamodb', () => ({
-    DynamoDBDocumentClient: {
-        from: vi.fn().mockReturnValue({})
-    }
-}));
-
-// Middyのモック
-vi.mock('@middy/core', () => ({
-    default: vi.fn((handler) => {
-        const wrappedHandler = async (event: any, context: any) => {
-            return await handler(event, context);
-        };
-        wrappedHandler.use = vi.fn().mockReturnValue(wrappedHandler);
-        return wrappedHandler;
-    })
-}));
+import type { AwilixContainer } from 'awilix';
+import type { DIContainer } from '../../../src/types/dependencies';
+import { createTestContainer } from '../../di/testContainer';
+import { createHandler } from '../../../src/handlers/applications/getApplicationHistories.handler';
+import type { GetApplicationHistoriesHandlerDependencies } from '../../../src/di/types';
+import type { EAApplicationHistory } from '../../../src/models/eaApplication';
 
 describe('getApplicationHistories.handler', () => {
+    let container: AwilixContainer<DIContainer>;
+    let mockEAApplicationRepository: any;
+    let mockLogger: any;
+    let mockTracer: any;
     let handler: any;
+    let dependencies: GetApplicationHistoriesHandlerDependencies;
 
-    beforeEach(async () => {
+    beforeEach(() => {
         vi.clearAllMocks();
 
-        const handlerModule = await import('../../../src/handlers/applications/getApplicationHistories.handler');
-        handler = handlerModule.handler;
+        // テストコンテナから依存関係を取得（モックサービスを使用）
+        container = createTestContainer({ useRealServices: false });
+        mockEAApplicationRepository = container.resolve('eaApplicationRepository');
+        mockLogger = container.resolve('logger');
+        mockTracer = container.resolve('tracer');
+
+        // ハンドラー用の依存関係を構築
+        dependencies = {
+            eaApplicationRepository: mockEAApplicationRepository,
+            logger: mockLogger,
+            tracer: mockTracer
+        };
+
+        handler = createHandler(dependencies);
+    });
+
+    afterEach(() => {
+        vi.clearAllMocks();
     });
 
     // ヘルパー関数: テスト用のAPIイベント作成
@@ -87,7 +64,7 @@ describe('getApplicationHistories.handler', () => {
     });
 
     describe('正常系テスト', () => {
-        it('should successfully retrieve application histories', async () => {
+        it('アプリケーション履歴を正常に取得する', async () => {
             // Arrange
             const applicationId = '2025-01-01T00:00:00Z#TestBroker#123456#TestEA';
             const userId = 'test-user-123';
@@ -124,7 +101,7 @@ describe('getApplicationHistories.handler', () => {
                 }
             ];
 
-            mockRepository.getApplicationHistories.mockResolvedValueOnce(mockHistories);
+            mockEAApplicationRepository.getApplicationHistories.mockResolvedValueOnce(mockHistories);
 
             const event = createTestEvent(applicationId, userId);
 
@@ -142,18 +119,18 @@ describe('getApplicationHistories.handler', () => {
             expect(responseBody.data.histories[0].action).toBe('Active');
 
             // Repository メソッドの呼び出し確認
-            expect(mockRepository.getApplicationHistories).toHaveBeenCalledWith(
+            expect(mockEAApplicationRepository.getApplicationHistories).toHaveBeenCalledWith(
                 userId,
                 applicationId
             );
         });
 
-        it('should return empty array when no histories found', async () => {
+        it('履歴が見つからない場合は空の配列を返す', async () => {
             // Arrange
             const applicationId = '2025-01-01T00:00:00Z#TestBroker#123456#NoHistory';
             const userId = 'test-user-123';
 
-            mockRepository.getApplicationHistories.mockResolvedValueOnce([]);
+            mockEAApplicationRepository.getApplicationHistories.mockResolvedValueOnce([]);
 
             const event = createTestEvent(applicationId, userId);
 
@@ -168,13 +145,13 @@ describe('getApplicationHistories.handler', () => {
             expect(responseBody.data.histories).toEqual([]);
         });
 
-        it('should handle encoded application ID correctly', async () => {
+        it('エンコードされたアプリケーションIDを正しく処理する', async () => {
             // Arrange
             const originalId = '2025-01-01T00:00:00Z#TestBroker#123456#Test EA';
             const encodedId = encodeURIComponent(originalId);
             const userId = 'test-user-123';
 
-            mockRepository.getApplicationHistories.mockResolvedValueOnce([]);
+            mockEAApplicationRepository.getApplicationHistories.mockResolvedValueOnce([]);
 
             const event = createTestEvent(encodedId, userId);
 
@@ -185,7 +162,7 @@ describe('getApplicationHistories.handler', () => {
             expect(result.statusCode).toBe(200);
 
             // デコードされたIDでリポジトリが呼ばれることを確認
-            expect(mockRepository.getApplicationHistories).toHaveBeenCalledWith(
+            expect(mockEAApplicationRepository.getApplicationHistories).toHaveBeenCalledWith(
                 userId,
                 originalId
             );
@@ -193,7 +170,7 @@ describe('getApplicationHistories.handler', () => {
     });
 
     describe('異常系テスト', () => {
-        it('should return 401 for missing user authentication', async () => {
+        it('ユーザー認証がない場合は401を返す', async () => {
             // Arrange
             const event = createTestEvent('test-app-id');
             event.requestContext.authorizer = null; // 認証情報なし
@@ -208,7 +185,7 @@ describe('getApplicationHistories.handler', () => {
             expect(responseBody.message).toContain('User authentication required');
         });
 
-        it('should return 400 for missing application ID', async () => {
+        it('アプリケーションIDがない場合は400を返す', async () => {
             // Arrange
             const event = createTestEvent('');
             event.pathParameters = null; // ID なし
@@ -223,7 +200,7 @@ describe('getApplicationHistories.handler', () => {
             expect(responseBody.message).toContain('Application ID is required');
         });
 
-        it('should return 400 for empty application ID', async () => {
+        it('アプリケーションIDが空の場合は400を返す', async () => {
             // Arrange
             const event = createTestEvent('');
             event.pathParameters = { id: '' }; // 空のID
@@ -238,12 +215,12 @@ describe('getApplicationHistories.handler', () => {
             expect(responseBody.message).toContain('Application ID is required');
         });
 
-        it('should return 500 for repository errors', async () => {
+        it('リポジトリエラーの場合は500を返す', async () => {
             // Arrange
             const applicationId = '2025-01-01T00:00:00Z#TestBroker#123456#ErrorEA';
             const userId = 'test-user-123';
 
-            mockRepository.getApplicationHistories.mockRejectedValueOnce(
+            mockEAApplicationRepository.getApplicationHistories.mockRejectedValueOnce(
                 new Error('DynamoDB connection failed')
             );
 
@@ -261,7 +238,7 @@ describe('getApplicationHistories.handler', () => {
     });
 
     describe('データ形式テスト', () => {
-        it('should return correctly formatted response structure', async () => {
+        it('正しくフォーマットされたレスポンス構造を返す', async () => {
             // Arrange
             const applicationId = '2025-01-01T00:00:00Z#TestBroker#123456#TestEA';
             const userId = 'test-user-123';
@@ -279,7 +256,7 @@ describe('getApplicationHistories.handler', () => {
                 }
             ];
 
-            mockRepository.getApplicationHistories.mockResolvedValueOnce(mockHistories);
+            mockEAApplicationRepository.getApplicationHistories.mockResolvedValueOnce(mockHistories);
 
             const event = createTestEvent(applicationId, userId);
 
@@ -310,7 +287,7 @@ describe('getApplicationHistories.handler', () => {
             expect(history).toHaveProperty('reason');
         });
 
-        it('should handle various action types correctly', async () => {
+        it('様々なアクションタイプを正しく処理する', async () => {
             // Arrange
             const applicationId = '2025-01-01T00:00:00Z#TestBroker#123456#TestEA';
             const userId = 'test-user-123';
@@ -348,7 +325,7 @@ describe('getApplicationHistories.handler', () => {
                 }
             ];
 
-            mockRepository.getApplicationHistories.mockResolvedValueOnce(mockHistories);
+            mockEAApplicationRepository.getApplicationHistories.mockResolvedValueOnce(mockHistories);
 
             const event = createTestEvent(applicationId, userId);
 
@@ -370,7 +347,7 @@ describe('getApplicationHistories.handler', () => {
     });
 
     describe('時系列順序テスト', () => {
-        it('should return histories in reverse chronological order (newest first)', async () => {
+        it('履歴を逆時系列順（新しい順）で返す', async () => {
             // Arrange
             const applicationId = '2025-01-01T00:00:00Z#TestBroker#123456#TestEA';
             const userId = 'test-user-123';
@@ -404,7 +381,7 @@ describe('getApplicationHistories.handler', () => {
                 }
             ];
 
-            mockRepository.getApplicationHistories.mockResolvedValueOnce(mockHistories);
+            mockEAApplicationRepository.getApplicationHistories.mockResolvedValueOnce(mockHistories);
 
             const event = createTestEvent(applicationId, userId);
 

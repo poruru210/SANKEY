@@ -1,16 +1,12 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { Logger } from '@aws-lambda-powertools/logger';
-import { Tracer } from '@aws-lambda-powertools/tracer';
 import { injectLambdaContext } from '@aws-lambda-powertools/logger/middleware';
 import { captureLambdaHandler } from '@aws-lambda-powertools/tracer/middleware';
-
-import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
-import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
+import { SendMessageCommand } from '@aws-sdk/client-sqs';
 import middy from '@middy/core';
 import httpCors from '@middy/http-cors';
 
-import { EAApplicationRepository } from '../../repositories/eaApplicationRepository';
+import { createProductionContainer } from '../../di/container';
+import { ApproveApplicationHandlerDependencies } from '../../di/types';
 import {
     createSuccessResponse,
     createValidationErrorResponse,
@@ -20,21 +16,6 @@ import {
     createInternalErrorResponse
 } from '../../utils/apiResponse';
 import { NotificationMessage } from '../../models/eaApplication';
-
-// Logger設定
-const logger = new Logger({
-    logLevel: 'DEBUG',
-    serviceName: 'approve-application'
-});
-
-const tracer = new Tracer({ serviceName: 'approve-application' });
-
-// DI対応: Repository とクライアントを初期化
-const ddbClient = tracer.captureAWSv3Client(new DynamoDBClient({}));
-const docClient = DynamoDBDocumentClient.from(ddbClient);
-const repository = new EAApplicationRepository(docClient);
-
-const sqsClient = new SQSClient({});
 
 // RESTful版のリクエスト形式
 interface ApprovalRequest {
@@ -48,8 +29,9 @@ interface ApprovalRequest {
 // SQSに通知メッセージ送信
 async function sendNotificationToQueue(
     applicationSK: string,
-    userId: string
-) {
+    userId: string,
+    dependencies: ApproveApplicationHandlerDependencies
+): Promise<any> {
     try {
         const messageBody: NotificationMessage = {
             applicationSK,
@@ -65,9 +47,9 @@ async function sendNotificationToQueue(
             DelaySeconds: delaySeconds  // 環境変数から取得した値を使用
         };
 
-        const result = await sqsClient.send(new SendMessageCommand(sendParams));
+        const result = await dependencies.sqsClient.send(new SendMessageCommand(sendParams));
 
-        logger.info('Notification message sent to queue successfully', {
+        dependencies.logger.info('Notification message sent to queue successfully', {
             messageId: result.MessageId,
             applicationSK,
             userId,
@@ -76,7 +58,7 @@ async function sendNotificationToQueue(
 
         return result;
     } catch (error) {
-        logger.error('Failed to send notification to queue', {
+        dependencies.logger.error('Failed to send notification to queue', {
             error,
             applicationSK,
             userId
@@ -85,12 +67,12 @@ async function sendNotificationToQueue(
     }
 }
 
-// ベースハンドラ
-const baseHandler = async (
+// ハンドラー作成関数
+export const createHandler = (dependencies: ApproveApplicationHandlerDependencies) => async (
     event: APIGatewayProxyEvent
 ): Promise<APIGatewayProxyResult> => {
 
-    logger.info('Application approval request received');
+    dependencies.logger.info('Application approval request received');
 
     try {
         // RESTful: パスパラメータから ID を取得
@@ -110,7 +92,7 @@ const baseHandler = async (
 
         // 権限チェック（開発者は自分のEAのみ、管理者は全て）
         const userRole = event.requestContext.authorizer?.claims?.role || 'developer';
-        logger.info('Processing approval request', {
+        dependencies.logger.info('Processing approval request', {
             applicationId: decodedApplicationId,
             userId,
             userRole,
@@ -125,7 +107,7 @@ const baseHandler = async (
         try {
             requestBody = JSON.parse(event.body);
         } catch (e) {
-            logger.error('Failed to parse request body', { error: e, body: event.body });
+            dependencies.logger.error('Failed to parse request body', { error: e, body: event.body });
             return createValidationErrorResponse('Invalid JSON in request body');
         }
 
@@ -133,7 +115,7 @@ const baseHandler = async (
 
         // パラメータ検証
         if (!eaName || !expiry || !accountId || !email || !broker) {
-            logger.error('Missing required parameters', {
+            dependencies.logger.error('Missing required parameters', {
                 eaName: !!eaName,
                 expiry: !!expiry,
                 accountId: !!accountId,
@@ -159,15 +141,15 @@ const baseHandler = async (
         }
 
         // 1. アプリケーション情報を取得して検証
-        const application = await repository.getApplication(userId, fullApplicationSK);
+        const application = await dependencies.eaApplicationRepository.getApplication(userId, fullApplicationSK);
         if (!application) {
-            logger.error('Application not found', { userId, applicationSK: fullApplicationSK });
+            dependencies.logger.error('Application not found', { userId, applicationSK: fullApplicationSK });
             return createNotFoundResponse('Application not found');
         }
 
         // 権限チェック: 開発者は自分のEAのみ
         if (userRole === 'developer' && application.userId !== userId) {
-            logger.warn('Developer attempting to approve another user\'s application', {
+            dependencies.logger.warn('Developer attempting to approve another user\'s application', {
                 requestUserId: userId,
                 applicationUserId: application.userId
             });
@@ -175,7 +157,7 @@ const baseHandler = async (
         }
 
         if (application.status !== 'Pending') {
-            logger.error('Application not in Pending status', {
+            dependencies.logger.error('Application not in Pending status', {
                 userId,
                 applicationSK: fullApplicationSK,
                 currentStatus: application.status
@@ -187,7 +169,7 @@ const baseHandler = async (
 
         // 2. 新しいステータス遷移: Pending → Approve → AwaitingNotification
         // Step 1: Approve ステータスに更新
-        await repository.updateStatus(userId, fullApplicationSK, 'Approve', {
+        await dependencies.eaApplicationRepository.updateStatus(userId, fullApplicationSK, 'Approve', {
             eaName,
             email,
             broker,
@@ -195,7 +177,7 @@ const baseHandler = async (
         });
 
         // Step 2: 承認履歴を記録
-        await repository.recordHistory({
+        await dependencies.eaApplicationRepository.recordHistory({
             userId,
             applicationSK: fullApplicationSK,
             action: 'Approve',
@@ -205,7 +187,7 @@ const baseHandler = async (
             reason: `Application approved by ${userRole}: ${userId}`
         });
 
-        logger.info('Application approved successfully', {
+        dependencies.logger.info('Application approved successfully', {
             userId,
             applicationSK: fullApplicationSK,
             newStatus: 'Approve'
@@ -216,12 +198,12 @@ const baseHandler = async (
         const notificationScheduledAt = new Date(Date.now() + delaySeconds * 1000).toISOString();
 
         // Step 4: AwaitingNotification ステータスに更新 + notificationScheduledAt設定
-        await repository.updateStatus(userId, fullApplicationSK, 'AwaitingNotification', {
+        await dependencies.eaApplicationRepository.updateStatus(userId, fullApplicationSK, 'AwaitingNotification', {
             notificationScheduledAt
         });
 
         // Step 5: AwaitingNotification 履歴を記録
-        await repository.recordHistory({
+        await dependencies.eaApplicationRepository.recordHistory({
             userId,
             applicationSK: fullApplicationSK,
             action: 'AwaitingNotification',
@@ -231,16 +213,16 @@ const baseHandler = async (
             reason: `License generation scheduled for ${notificationScheduledAt}`
         });
 
-        logger.info('Application status updated to AwaitingNotification', {
+        dependencies.logger.info('Application status updated to AwaitingNotification', {
             userId,
             applicationSK: fullApplicationSK,
             notificationScheduledAt
         });
 
         // 3. SQSに通知メッセージ送信（5分遅延）
-        await sendNotificationToQueue(fullApplicationSK, userId);
+        await sendNotificationToQueue(fullApplicationSK, userId, dependencies);
 
-        logger.info('License approval process initiated successfully', {
+        dependencies.logger.info('License approval process initiated successfully', {
             userId,
             accountId,
             eaName,
@@ -260,11 +242,22 @@ const baseHandler = async (
         });
 
     } catch (error) {
-        logger.error('Error approving application', { error });
+        dependencies.logger.error('Error approving application', { error });
 
         return createInternalErrorResponse('Failed to approve application', error as Error);
     }
 };
+
+// Production configuration
+const container = createProductionContainer();
+const dependencies: ApproveApplicationHandlerDependencies = {
+    eaApplicationRepository: container.resolve('eaApplicationRepository'),
+    sqsClient: container.resolve('sqsClient'),
+    logger: container.resolve('logger'),
+    tracer: container.resolve('tracer')
+};
+
+const baseHandler = createHandler(dependencies);
 
 // middy + Powertools middleware 適用
 export const handler = middy(baseHandler)
@@ -273,5 +266,5 @@ export const handler = middy(baseHandler)
         headers: 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,Accept,Cache-Control,X-Requested-With',
         methods: 'POST,OPTIONS',
     }))
-    .use(injectLambdaContext(logger, { clearState: true }))
-    .use(captureLambdaHandler(tracer));
+    .use(injectLambdaContext(dependencies.logger, { clearState: true }))
+    .use(captureLambdaHandler(dependencies.tracer));

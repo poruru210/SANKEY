@@ -60,10 +60,17 @@ const dbStack = new SankeyDbStack(app, `${stackPrefix}DbStack`, {
   tags: commonTags,
 });
 
-// 3. 通知スタック（SQS + メール送信Lambda）
+// AuthStackのpostConfirmationFnにUserProfileTableの権限を追加
+dbStack.userProfileTable.grantWriteData(authStack.postConfirmationFn);
+
+// postConfirmationFnに環境変数を追加
+authStack.postConfirmationFn.addEnvironment('USER_PROFILE_TABLE_NAME', dbStack.userProfileTable.tableName);
+
+// 3. 通知スタック（UserProfileTableを追加）
 const notificationStack = new SankeyNotificationStack(app, `${stackPrefix}NotificationStack`, {
   environment,
-  eaApplicationsTable: dbStack.table,
+  eaApplicationsTable: dbStack.eaApplicationsTable,
+  userProfileTable: dbStack.userProfileTable,
   tags: commonTags,
 });
 
@@ -72,16 +79,15 @@ const applicationStack = new SankeyApplicationStack(app, `${stackPrefix}ApiStack
   environment,
   userPool: authStack.userPool,
   userPoolClient: authStack.userPoolClient,
-  eaApplicationsTable: dbStack.table,
+  eaApplicationsTable: dbStack.eaApplicationsTable,
+  userProfileTable: dbStack.userProfileTable,
   licenseNotificationQueue: notificationStack.licenseNotificationQueue,
   tags: commonTags,
 });
 
 // 依存関係の明示
-applicationStack.addDependency(authStack);
-applicationStack.addDependency(dbStack);
-applicationStack.addDependency(notificationStack);
 notificationStack.addDependency(dbStack);
+applicationStack.addDependency(notificationStack);
 
 // 環境別の追加設定
 if (EnvironmentConfig.isProduction(environment)) {

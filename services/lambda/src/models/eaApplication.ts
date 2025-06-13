@@ -33,26 +33,30 @@ export interface EAApplicationHistory {
     ttl?: number; // Unix timestamp (TTL用)
 }
 
-export interface EAApplication {
-    userId: string;
-    sk: string;
-
-    // 基本情報
+// === ApplicationInput (申請入力データ) ===
+export interface ApplicationInput {
     eaName: string;
     accountNumber: string;
     broker: string;
     email: string;
     xAccount: string;
+    integrationTestId?: string;
+}
+
+export interface EAApplication extends ApplicationInput {
+    // システム管理用プロパティ
+    userId: string;
+    sk: string;
 
     // ステータス管理
     status: ApplicationStatus;
     appliedAt: string;
     updatedAt: string;
 
-    // 通知スケジュール（復活）
+    // 通知スケジュール
     notificationScheduledAt?: string;
 
-    // ビジネスロジックで必要な情報のみ
+    // ビジネスロジックで必要な情報
     licenseKey?: string;
     expiryDate?: string;
 
@@ -176,4 +180,9 @@ export function isHistoryAction(value: string): value is HistoryAction {
         'Created', 'Updated', 'SystemExpired', 'SystemUpdate', 'LicenseGenerated', 'EmailSent', 'AdminAction'
     ];
     return validActions.includes(value as HistoryAction);
+}
+
+// === 統合テスト関連のヘルパー関数 ===
+export function isIntegrationTestApplication(application: EAApplication): boolean {
+    return !!application.integrationTestId;
 }

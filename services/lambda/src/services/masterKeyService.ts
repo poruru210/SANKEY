@@ -2,25 +2,31 @@ import { SSMClient, GetParameterCommand, PutParameterCommand } from '@aws-sdk/cl
 import { webcrypto } from 'crypto';
 import { Logger } from '@aws-lambda-powertools/logger';
 
-export interface MasterKeyServiceOptions {
-    ssmClient?: SSMClient;
-    logger?: Logger;
-    ssmUserPrefix?: string;
+/**
+ * DI用の依存関係インターフェース
+ */
+export interface MasterKeyServiceDependencies {
+    ssmClient: SSMClient;
+    logger: Logger;
 }
 
 export class MasterKeyService {
-    private ssmClient: SSMClient;
-    private logger: Logger;
-    private ssmUserPrefix: string;
+    private readonly ssmClient: SSMClient;
+    private readonly logger: Logger;
+    private readonly ssmUserPrefix: string;
 
-    constructor(options: MasterKeyServiceOptions = {}) {
-        this.ssmClient = options.ssmClient || new SSMClient({});
-        this.logger = options.logger || new Logger({ serviceName: 'master-key-service' });
+    /**
+     * DI対応コンストラクタ
+     */
+    constructor(dependencies: MasterKeyServiceDependencies) {
+        this.ssmClient = dependencies.ssmClient;
+        this.logger = dependencies.logger;
 
         // 環境変数から動的にパスを構築
         const environment = process.env.ENVIRONMENT || process.env.STAGE || 'dev';
         const defaultPrefix = `/sankey/${environment}/users`;
-        this.ssmUserPrefix = options.ssmUserPrefix || process.env.SSM_USER_PREFIX || defaultPrefix;
+        // ssmUserPrefixは依存関係からではなく、環境変数から直接取得
+        this.ssmUserPrefix = process.env.SSM_USER_PREFIX || defaultPrefix;
 
         this.logger.debug('MasterKeyService initialized', {
             ssmUserPrefix: this.ssmUserPrefix,
@@ -208,23 +214,4 @@ export class MasterKeyService {
             throw new Error(`Failed to check master key existence for user: ${userId}`);
         }
     }
-}
-
-// デフォルトインスタンスをエクスポート（後方互換性とシンプルな使用のため）
-export const masterKeyService = new MasterKeyService();
-
-// ヘルパー関数（既存コードとの互換性を保つため）
-export async function getUserMasterKey(
-    userId: string,
-    keyUsage: KeyUsage[] = ['encrypt', 'decrypt']
-): Promise<CryptoKey> {
-    return masterKeyService.getUserMasterKey(userId, keyUsage);
-}
-
-export async function getUserMasterKeyForEncryption(userId: string): Promise<CryptoKey> {
-    return masterKeyService.getUserMasterKeyForEncryption(userId);
-}
-
-export async function getUserMasterKeyForDecryption(userId: string): Promise<CryptoKey> {
-    return masterKeyService.getUserMasterKeyForDecryption(userId);
 }

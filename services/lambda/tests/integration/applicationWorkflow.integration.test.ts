@@ -2,27 +2,38 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { EAApplicationRepository } from '../../src/repositories/eaApplicationRepository';
+import type { EAApplicationRepositoryDependencies } from '../../src/di/types';
 import { EAApplication, ApplicationStatus, isTerminalStatus, calculateTTL } from '../../src/models/eaApplication';
-import { mockClient } from 'aws-sdk-client-mock';
-import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
-
-// DynamoDB Client のモック
-const dynamoMock = mockClient(DynamoDBDocumentClient);
 
 describe('Application Workflow Integration Tests with TTL', () => {
     let repository: EAApplicationRepository;
     let mockDocClient: any;
+    let mockLogger: any;
 
     beforeEach(() => {
         vi.clearAllMocks();
-        dynamoMock.reset();
 
         // モッククライアントの作成
         mockDocClient = {
             send: vi.fn()
         };
 
-        repository = new EAApplicationRepository(mockDocClient, 'test-table');
+        // モックロガーの作成
+        mockLogger = {
+            info: vi.fn(),
+            error: vi.fn(),
+            debug: vi.fn(),
+            warn: vi.fn()
+        };
+
+        // DI対応の依存関係オブジェクト
+        const dependencies: EAApplicationRepositoryDependencies = {
+            docClient: mockDocClient,
+            tableName: 'test-table',
+            logger: mockLogger
+        };
+
+        repository = new EAApplicationRepository(dependencies);
     });
 
     afterEach(() => {
@@ -31,7 +42,7 @@ describe('Application Workflow Integration Tests with TTL', () => {
 
     describe('完全な承認ワークフロー: 申請 → 承認 → 通知待ち → アクティブ化（TTL対応）', () => {
         it('should complete full approval workflow successfully without TTL for non-terminal statuses', async () => {
-            // 📝 Step 1: アプリケーション作成
+            // Step 1: アプリケーション作成
             const applicationData = {
                 userId: 'integration-user-001',
                 broker: 'MetaTrader5',
@@ -53,7 +64,7 @@ describe('Application Workflow Integration Tests with TTL', () => {
             expect(createdApp.sk).toMatch(/^APPLICATION#/);
             expect(createdApp.ttl).toBeUndefined(); // TTLは設定されていない
 
-            // 📝 Step 2: 承認処理 (Pending → Approve)
+            // Step 2: 承認処理 (Pending → Approve)
             mockDocClient.send.mockResolvedValueOnce({ Item: createdApp }); // getApplication
             mockDocClient.send.mockResolvedValueOnce({
                 Attributes: { ...createdApp, status: 'Approve' }
@@ -73,7 +84,7 @@ describe('Application Workflow Integration Tests with TTL', () => {
             expect(approvedApp?.status).toBe('Approve');
             expect(approvedApp?.ttl).toBeUndefined(); // 非終了ステータスなのでTTLなし
 
-            // 📝 Step 3: 承認履歴記録（TTLなし）
+            // Step 3: 承認履歴記録（TTLなし）
             mockDocClient.send.mockResolvedValueOnce({}); // recordHistory
 
             await repository.recordHistory({
@@ -86,7 +97,7 @@ describe('Application Workflow Integration Tests with TTL', () => {
                 reason: 'Application approved by admin'
             });
 
-            // 📝 Step 4: 通知待ち状態への遷移 + notificationScheduledAt設定
+            // Step 4: 通知待ち状態への遷移 + notificationScheduledAt設定
             const notificationScheduledAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
 
             mockDocClient.send.mockResolvedValueOnce({ Item: approvedApp }); // getApplication
@@ -109,7 +120,7 @@ describe('Application Workflow Integration Tests with TTL', () => {
             expect(awaitingApp?.notificationScheduledAt).toBeDefined();
             expect(awaitingApp?.ttl).toBeUndefined(); // 非終了ステータスなのでTTLなし
 
-            // 📝 Step 5: 通知待ち履歴記録（TTLなし）
+            // Step 5: 通知待ち履歴記録（TTLなし）
             mockDocClient.send.mockResolvedValueOnce({}); // recordHistory
 
             await repository.recordHistory({
@@ -122,7 +133,7 @@ describe('Application Workflow Integration Tests with TTL', () => {
                 reason: `License generation scheduled for ${notificationScheduledAt}`
             });
 
-            // 📝 Step 6: ライセンス有効化 (AwaitingNotification → Active)
+            // Step 6: ライセンス有効化 (AwaitingNotification → Active)
             mockDocClient.send.mockResolvedValueOnce({ Item: awaitingApp }); // getApplication (in activateApplicationWithLicense)
             mockDocClient.send.mockResolvedValueOnce({ Item: awaitingApp }); // getApplication (in updateStatus)
             mockDocClient.send.mockResolvedValueOnce({
@@ -141,7 +152,7 @@ describe('Application Workflow Integration Tests with TTL', () => {
                 '2025-06-05T12:00:00Z'
             );
 
-            // 📊 検証: 全ステップの実行確認
+            // 検証: 全ステップの実行確認
             expect(mockDocClient.send).toHaveBeenCalledTimes(12);
 
             // 作成: 2回 (重複チェック + 作成)
@@ -157,7 +168,7 @@ describe('Application Workflow Integration Tests with TTL', () => {
 
     describe('キャンセルワークフローでTTL設定テスト', () => {
         it('should complete cancellation workflow with TTL set for terminal status', async () => {
-            // 📝 Step 1-4: 申請から通知待ちまで (notificationScheduledAt設定)
+            // Step 1-4: 申請から通知待ちまで (notificationScheduledAt設定)
             const applicationData = {
                 userId: 'integration-user-003',
                 broker: 'cTrader',
@@ -211,7 +222,7 @@ describe('Application Workflow Integration Tests with TTL', () => {
                 { notificationScheduledAt }
             );
 
-            // 📝 Step 5: キャンセル処理 (AwaitingNotification → Cancelled) - TTL設定
+            // Step 5: キャンセル処理 (AwaitingNotification → Cancelled) - TTL設定
             const awaitingAppWithSchedule = {
                 ...awaitingApp,
                 notificationScheduledAt
@@ -237,7 +248,7 @@ describe('Application Workflow Integration Tests with TTL', () => {
                 'Cancelled by user within notification schedule'
             );
 
-            // 📊 検証: TTL設定の確認
+            // 検証: TTL設定の確認
             expect(mockDocClient.send).toHaveBeenCalledTimes(12);
 
             // updateStatusでTTL設定を確認
@@ -275,7 +286,7 @@ describe('Application Workflow Integration Tests with TTL', () => {
 
     describe('拒否ワークフローでTTL設定テスト', () => {
         it('should complete rejection workflow with TTL set', async () => {
-            // 📝 Step 1: アプリケーション作成
+            // Step 1: アプリケーション作成
             const applicationData = {
                 userId: 'integration-user-002',
                 broker: 'MetaTrader4',
@@ -293,7 +304,7 @@ describe('Application Workflow Integration Tests with TTL', () => {
             expect(createdApp.status).toBe('Pending');
             expect(createdApp.ttl).toBeUndefined(); // 初期状態はTTLなし
 
-            // 📝 Step 2: 拒否処理 (Pending → Rejected) - TTL設定
+            // Step 2: 拒否処理 (Pending → Rejected) - TTL設定
             const rejectedAppWithTTL = {
                 ...createdApp,
                 status: 'Rejected' as ApplicationStatus,
@@ -314,7 +325,7 @@ describe('Application Workflow Integration Tests with TTL', () => {
             expect(rejectedApp?.status).toBe('Rejected');
             expect(rejectedApp?.ttl).toBeDefined(); // TTLが設定されている
 
-            // 📝 Step 3: 拒否履歴記録（TTL付き）
+            // Step 3: 拒否履歴記録（TTL付き）
             mockDocClient.send.mockResolvedValueOnce({}); // recordHistory
 
             await repository.recordHistory({
@@ -327,7 +338,7 @@ describe('Application Workflow Integration Tests with TTL', () => {
                 reason: 'Application rejected by administrator'
             });
 
-            // 📊 検証
+            // 検証
             expect(mockDocClient.send).toHaveBeenCalledTimes(5);
 
             // updateStatusでTTL設定を確認
@@ -344,7 +355,7 @@ describe('Application Workflow Integration Tests with TTL', () => {
 
     describe('無効化ワークフローでTTL設定テスト', () => {
         it('should complete revocation workflow with TTL set', async () => {
-            // 📝 Setup: アクティブなアプリケーション
+            // Setup: アクティブなアプリケーション
             const activeApp: EAApplication = {
                 userId: 'integration-user-004',
                 sk: 'APPLICATION#2025-01-01T00:00:00Z#MetaTrader5#2025004#Revoked EA',
@@ -359,7 +370,7 @@ describe('Application Workflow Integration Tests with TTL', () => {
                 licenseKey: 'encrypted-license-key-004'
             };
 
-            // 📝 Step 1: 無効化処理 (Active → Revoked) - TTL設定
+            // Step 1: 無効化処理 (Active → Revoked) - TTL設定
             const revokedAppWithTTL = {
                 ...activeApp,
                 status: 'Revoked' as ApplicationStatus,
@@ -380,7 +391,7 @@ describe('Application Workflow Integration Tests with TTL', () => {
             expect(revokedApp?.status).toBe('Revoked');
             expect(revokedApp?.ttl).toBeDefined(); // TTLが設定されている
 
-            // 📝 Step 2: 無効化履歴記録（TTL付き）
+            // Step 2: 無効化履歴記録（TTL付き）
             mockDocClient.send.mockResolvedValueOnce({}); // recordHistory
 
             await repository.recordHistory({
@@ -393,7 +404,7 @@ describe('Application Workflow Integration Tests with TTL', () => {
                 reason: 'Security violation detected'
             });
 
-            // 📊 検証
+            // 検証
             expect(mockDocClient.send).toHaveBeenCalledTimes(3);
 
             // updateStatusでTTL設定を確認
@@ -410,7 +421,7 @@ describe('Application Workflow Integration Tests with TTL', () => {
 
     describe('期限切れワークフローでTTL設定テスト', () => {
         it('should complete expiration workflow with TTL set', async () => {
-            // 📝 Setup: アクティブなアプリケーション
+            // Setup: アクティブなアプリケーション
             const activeApp: EAApplication = {
                 userId: 'integration-user-005',
                 sk: 'APPLICATION#2025-01-01T00:00:00Z#MetaTrader5#2025005#Expired EA',
@@ -426,7 +437,7 @@ describe('Application Workflow Integration Tests with TTL', () => {
                 expiryDate: '2025-06-01T00:00:00Z'
             };
 
-            // 📝 期限切れ処理テスト
+            // 期限切れ処理テスト
             const expiredAppWithTTL = {
                 ...activeApp,
                 status: 'Expired' as ApplicationStatus,
@@ -445,7 +456,7 @@ describe('Application Workflow Integration Tests with TTL', () => {
                 activeApp.sk
             );
 
-            // 📊 検証
+            // 検証
             expect(mockDocClient.send).toHaveBeenCalledTimes(4);
 
             // updateStatusでTTL設定を確認
@@ -500,7 +511,7 @@ describe('Application Workflow Integration Tests with TTL', () => {
                 reason: 'TTL test cancellation'
             });
 
-            // 📊 検証: 履歴にTTLが設定されている
+            // 検証: 履歴にTTLが設定されている
             const historyCall = mockDocClient.send.mock.calls[0][0];
             expect(historyCall.input.Item.ttl).toBeDefined();
             expect(historyCall.input.Item.newStatus).toBe('Cancelled');
@@ -518,7 +529,7 @@ describe('Application Workflow Integration Tests with TTL', () => {
                 reason: 'TTL test approval'
             });
 
-            // 📊 検証: 履歴にTTLが設定されていない
+            // 検証: 履歴にTTLが設定されていない
             const nonTerminalHistoryCall = mockDocClient.send.mock.calls[1][0];
             expect(nonTerminalHistoryCall.input.Item.ttl).toBeUndefined();
             expect(nonTerminalHistoryCall.input.Item.newStatus).toBe('Approve');
@@ -529,7 +540,7 @@ describe('Application Workflow Integration Tests with TTL', () => {
 
     describe('エラーハンドリング統合テスト（TTL対応）', () => {
         it('should handle workflow errors gracefully with TTL considerations', async () => {
-            // 📝 シナリオ: 承認処理中にエラー
+            // シナリオ: 承認処理中にエラー
             const applicationData = {
                 userId: 'integration-user-006',
                 broker: 'ErrorBroker',
@@ -549,7 +560,7 @@ describe('Application Workflow Integration Tests with TTL', () => {
             mockDocClient.send.mockResolvedValueOnce({ Item: createdApp });
             mockDocClient.send.mockRejectedValueOnce(new Error('DynamoDB update failed'));
 
-            // 📊 検証: エラーが適切に伝播される
+            // 検証: エラーが適切に伝播される
             await expect(
                 repository.updateStatus(createdApp.userId, createdApp.sk, 'Approve')
             ).rejects.toThrow('DynamoDB update failed');
@@ -558,7 +569,7 @@ describe('Application Workflow Integration Tests with TTL', () => {
         });
 
         it('should handle invalid status transitions with TTL considerations', async () => {
-            // 📝 シナリオ: 無効なステータス遷移
+            // シナリオ: 無効なステータス遷移
             const cancelledApp: EAApplication = {
                 userId: 'integration-user-007',
                 sk: 'APPLICATION#2025-01-01T00:00:00Z#TestBroker#2025007#Invalid EA',
@@ -575,7 +586,7 @@ describe('Application Workflow Integration Tests with TTL', () => {
 
             mockDocClient.send.mockResolvedValueOnce({ Item: cancelledApp });
 
-            // 📊 検証: キャンセル済みからアクティブへの遷移は無効
+            // 検証: キャンセル済みからアクティブへの遷移は無効
             await expect(
                 repository.updateStatus(cancelledApp.userId, cancelledApp.sk, 'Active')
             ).rejects.toThrow('Invalid status transition: Cancelled -> Active');
@@ -586,7 +597,7 @@ describe('Application Workflow Integration Tests with TTL', () => {
 
     describe('手動TTL調整機能テスト', () => {
         it('should allow manual TTL adjustment', async () => {
-            // 📝 手動TTL調整のテスト
+            // 手動TTL調整のテスト
             const userId = 'manual-ttl-user';
             const sk = 'APPLICATION#2025-01-01T00:00:00Z#ManualBroker#2025001#Manual EA';
 
@@ -595,7 +606,7 @@ describe('Application Workflow Integration Tests with TTL', () => {
             // 3ヶ月でTTL調整
             await repository.adjustTTL(userId, sk, 3);
 
-            // 📊 検証
+            // 検証
             expect(mockDocClient.send).toHaveBeenCalledTimes(1);
 
             const updateCall = mockDocClient.send.mock.calls[0][0];

@@ -125,6 +125,11 @@ export interface DynamoDbCreationOptions {
     sortKey?: { name: string; type: dynamodb.AttributeType };
     timeToLiveAttribute?: string;
     globalSecondaryIndexes?: GlobalSecondaryIndexConfig[];
+    // 個別のキャパシティ設定を追加
+    readCapacity?: number;
+    writeCapacity?: number;
+    // 課金モードの個別指定も可能にする
+    billingMode?: DynamoDbBillingMode;
 }
 
 /**
@@ -135,6 +140,9 @@ export interface GlobalSecondaryIndexConfig {
     partitionKey: { name: string; type: dynamodb.AttributeType };
     sortKey?: { name: string; type: dynamodb.AttributeType };
     projectionType?: dynamodb.ProjectionType;
+    // GSI個別のキャパシティ設定
+    readCapacity?: number;
+    writeCapacity?: number;
 }
 
 /**

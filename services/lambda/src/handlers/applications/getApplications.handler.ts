@@ -1,31 +1,17 @@
-import { Logger } from '@aws-lambda-powertools/logger';
-import { Tracer } from '@aws-lambda-powertools/tracer';
+import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { injectLambdaContext } from '@aws-lambda-powertools/logger/middleware';
 import { captureLambdaHandler } from '@aws-lambda-powertools/tracer/middleware';
-
-import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-
 import middy from '@middy/core';
 import httpCors from '@middy/http-cors';
 
-import { EAApplicationRepository } from '../../repositories/eaApplicationRepository';
-import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
+import { createProductionContainer } from '../../di/container';
+import { GetApplicationsHandlerDependencies } from '../../di/types';
 import { EAApplication } from '../../models/eaApplication';
 import {
     createSuccessResponse,
     createUnauthorizedResponse,
     createInternalErrorResponse
 } from '../../utils/apiResponse';
-
-// Powertools 初期化（サービス名を更新）
-const logger = new Logger({ serviceName: 'get-applications' });
-const tracer = new Tracer({ serviceName: 'get-applications' });
-
-// DI対応: Repository を初期化
-const ddbClient = tracer.captureAWSv3Client(new DynamoDBClient({}));
-const docClient = DynamoDBDocumentClient.from(ddbClient);
-const repository = new EAApplicationRepository(docClient);
 
 // レスポンス用の型定義
 interface ApplicationListResponse {
@@ -75,22 +61,24 @@ function toApplicationSummary(app: EAApplication): ApplicationSummary {
     };
 }
 
-// ベースハンドラ
-const baseHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
+// ハンドラー作成関数
+export const createHandler = (dependencies: GetApplicationsHandlerDependencies) => async (
+    event: APIGatewayProxyEvent
+): Promise<APIGatewayProxyResult> => {
     try {
         const userId = event.requestContext.authorizer?.claims?.sub;
 
         if (!userId) {
-            logger.error('No user ID found in authorizer claims');
+            dependencies.logger.error('No user ID found in authorizer claims');
             return createUnauthorizedResponse('User ID not found in authorization context');
         }
 
-        logger.info('Fetching applications for user', { userId });
+        dependencies.logger.info('Fetching applications for user', { userId });
 
         // 統一データアクセス層を使用して全申請を取得
-        const applications = await repository.getAllApplications(userId);
+        const applications = await dependencies.eaApplicationRepository.getAllApplications(userId);
 
-        logger.info('Applications retrieved', {
+        dependencies.logger.info('Applications retrieved', {
             userId,
             totalCount: applications.length,
             statuses: applications.reduce((acc, app) => {
@@ -130,7 +118,7 @@ const baseHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxy
             },
         };
 
-        logger.info('Response prepared', {
+        dependencies.logger.info('Response prepared', {
             userId,
             counts: response.count
         });
@@ -138,10 +126,20 @@ const baseHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxy
         // 統一レスポンス形式を使用
         return createSuccessResponse('Applications retrieved successfully', response);
     } catch (err) {
-        logger.error('Error getting applications', err as Error);
+        dependencies.logger.error('Error getting applications', err as Error);
         return createInternalErrorResponse('Failed to retrieve applications', err as Error);
     }
 };
+
+// Production configuration
+const container = createProductionContainer();
+const dependencies: GetApplicationsHandlerDependencies = {
+    eaApplicationRepository: container.resolve('eaApplicationRepository'),
+    logger: container.resolve('logger'),
+    tracer: container.resolve('tracer')
+};
+
+const baseHandler = createHandler(dependencies);
 
 export const handler = middy(baseHandler)
     .use(httpCors({
@@ -150,5 +148,5 @@ export const handler = middy(baseHandler)
             'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,Accept,Cache-Control,X-Requested-With',
         methods: 'GET,OPTIONS',
     }))
-    .use(injectLambdaContext(logger))
-    .use(captureLambdaHandler(tracer));
+    .use(injectLambdaContext(dependencies.logger))
+    .use(captureLambdaHandler(dependencies.tracer));
