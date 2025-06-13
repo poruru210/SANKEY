@@ -1,11 +1,354 @@
+/**
+ * 統合版ユーティリティモジュール
+ * logger + cli-helpers + interactive-menu を統合
+ */
+
 const readline = require('readline');
-const { log, colors, displayTitle } = require('../lib/logger');
-const { ENVIRONMENTS } = require('../lib/constants');
-const { BaseError, ConfigurationError, ApiError, CdkNotDeployedError, ResourceNotFoundError } = require('../lib/errors');
+const { ENVIRONMENTS, APPROVAL_MODES } = require('./constants');
+const { BaseError, ConfigurationError, ApiError, CdkNotDeployedError, ResourceNotFoundError } = require('./errors');
+
+// ============================================================
+// ログ機能 (旧 logger.js)
+// ============================================================
+
+// 色定義
+const colors = {
+    reset: '\x1b[0m',
+    bright: '\x1b[1m',
+    red: '\x1b[31m',
+    green: '\x1b[32m',
+    yellow: '\x1b[33m',
+    blue: '\x1b[34m',
+    magenta: '\x1b[35m',
+    cyan: '\x1b[36m',
+    gray: '\x1b[37m'
+};
 
 /**
- * カーソル選択可能なインタラクティブメニューモジュール
+ * ログオブジェクト
  */
+const log = {
+    info: (msg) => console.log(`${colors.cyan}ℹ${colors.reset} ${msg}`),
+    success: (msg) => console.log(`${colors.green}✅${colors.reset} ${msg}`),
+    warning: (msg) => console.log(`${colors.yellow}⚠️${colors.reset} ${msg}`),
+    error: (msg) => console.error(`${colors.red}❌${colors.reset} ${msg}`),
+    debug: (msg, options) => {
+        if (options?.debug) {
+            console.log(`${colors.gray}🔍 DEBUG:${colors.reset} ${msg}`);
+        }
+    },
+    progress: (msg) => console.log(`${colors.yellow}🔄${colors.reset} ${msg}`),
+    search: (msg) => console.log(`${colors.blue}🔍${colors.reset} ${msg}`),
+    generate: (msg) => console.log(`${colors.magenta}🎲${colors.reset} ${msg}`),
+    database: (msg) => console.log(`${colors.blue}📊${colors.reset} ${msg}`),
+    complete: (msg) => console.log(`${colors.green}🎉${colors.reset} ${msg}`),
+    user: (msg) => console.log(`${colors.cyan}👤${colors.reset} ${msg}`),
+    email: (msg) => console.log(`${colors.yellow}📧${colors.reset} ${msg}`)
+};
+
+/**
+ * タイトル表示関数
+ */
+function displayTitle(title, color = 'green') {
+    const colorCode = colors[color] || colors.green;
+    console.log(`${colorCode}=== ${title} ===${colors.reset}`);
+}
+
+/**
+ * セクション表示関数
+ */
+function displaySection(section, color = 'cyan') {
+    const colorCode = colors[color] || colors.cyan;
+    console.log(`\n${colorCode}📋 ${section}:${colors.reset}`);
+}
+
+/**
+ * ユーザー一覧表示関数
+ */
+function displayUserList(users) {
+    displaySection('Available Users');
+    users.forEach((user, index) => {
+        const statusColor = user.userStatus === 'CONFIRMED' ? colors.green : colors.yellow;
+        console.log(`   ${index + 1}. ${colors.cyan}${user.email || 'No email'}${colors.reset} - ${statusColor}${user.userStatus}${colors.reset}`);
+    });
+}
+
+/**
+ * プログレスバー表示関数
+ */
+function displayProgress(current, total, label = '') {
+    const percentage = Math.floor((current / total) * 100);
+    const barLength = 20;
+    const filledLength = Math.floor((current / total) * barLength);
+    const bar = '█'.repeat(filledLength) + '░'.repeat(barLength - filledLength);
+
+    process.stdout.write(`\r${colors.cyan}${label}${colors.reset} [${bar}] ${percentage}% (${current}/${total})`);
+
+    if (current === total) {
+        console.log(''); // 改行
+    }
+}
+
+// ============================================================
+// CLI ヘルパー機能 (旧 cli-helpers.js)
+// ============================================================
+
+/**
+ * ユーザー選択関数（スタック組み合わせ用）
+ */
+async function selectStackCombination(stackCombinations, options) {
+    // 自動承認の場合
+    if (options.requireApproval === APPROVAL_MODES.NEVER && stackCombinations.length === 1) {
+        log.info(`🚀 Auto-selecting: ${stackCombinations[0].environment.toUpperCase()} Environment`);
+        return stackCombinations[0];
+    }
+
+    const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout
+    });
+
+    try {
+        console.log(''); // 空行
+
+        const answer = await new Promise((resolve) => {
+            rl.question(`Please select a combination (1-${stackCombinations.length}): `, resolve);
+        });
+
+        const selection = parseInt(answer.trim());
+
+        if (isNaN(selection) || selection < 1 || selection > stackCombinations.length) {
+            throw new Error(`Invalid selection: ${answer}. Please enter a number between 1 and ${stackCombinations.length}.`);
+        }
+
+        const selectedCombination = stackCombinations[selection - 1];
+        log.success(`Selected: ${selectedCombination.environment.toUpperCase()} Environment`);
+
+        return selectedCombination;
+
+    } finally {
+        rl.close();
+    }
+}
+
+/**
+ * ユーザー選択関数（Cognitoユーザー用）
+ */
+async function selectUser(users, options) {
+    // 自動承認またはユーザーが1人の場合
+    if ((options.requireApproval === APPROVAL_MODES.NEVER && users.length === 1) || users.length === 1) {
+        log.info(`🚀 Auto-selecting user: ${users[0].email}`);
+        return users[0];
+    }
+
+    const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout
+    });
+
+    try {
+        console.log(''); // 空行
+
+        const answer = await new Promise((resolve) => {
+            rl.question(`Please select a user (1-${users.length}): `, resolve);
+        });
+
+        const selection = parseInt(answer.trim());
+
+        if (isNaN(selection) || selection < 1 || selection > users.length) {
+            throw new Error(`Invalid selection: ${answer}. Please enter a number between 1 and ${users.length}.`);
+        }
+
+        const selectedUser = users[selection - 1];
+        log.success(`Selected user: ${selectedUser.email} (${selectedUser.userId})`);
+
+        return selectedUser;
+
+    } finally {
+        rl.close();
+    }
+}
+
+/**
+ * 確認プロンプト関数
+ */
+async function confirm(message, defaultValue = false) {
+    const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout
+    });
+
+    try {
+        const defaultText = defaultValue ? '[Y/n]' : '[y/N]';
+        const answer = await new Promise((resolve) => {
+            rl.question(`${message} ${defaultText}: `, resolve);
+        });
+
+        const trimmed = answer.trim().toLowerCase();
+
+        if (trimmed === '') {
+            return defaultValue;
+        }
+
+        return trimmed === 'y' || trimmed === 'yes';
+
+    } finally {
+        rl.close();
+    }
+}
+
+/**
+ * 入力プロンプト関数
+ */
+async function prompt(message, defaultValue = '') {
+    const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout
+    });
+
+    try {
+        const defaultText = defaultValue ? ` (default: ${defaultValue})` : '';
+        const answer = await new Promise((resolve) => {
+            rl.question(`${message}${defaultText}: `, resolve);
+        });
+
+        return answer.trim() || defaultValue;
+
+    } finally {
+        rl.close();
+    }
+}
+
+/**
+ * 数値入力プロンプト関数
+ */
+async function promptNumber(message, defaultValue = 0, min = 0, max = Infinity) {
+    const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout
+    });
+
+    try {
+        while (true) {
+            const defaultText = defaultValue !== undefined ? ` (default: ${defaultValue})` : '';
+            const rangeText = max !== Infinity ? ` [${min}-${max}]` : ` [${min}+]`;
+
+            const answer = await new Promise((resolve) => {
+                rl.question(`${message}${rangeText}${defaultText}: `, resolve);
+            });
+
+            if (answer.trim() === '' && defaultValue !== undefined) {
+                return defaultValue;
+            }
+
+            const number = parseInt(answer.trim());
+
+            if (isNaN(number)) {
+                log.error('Please enter a valid number.');
+                continue;
+            }
+
+            if (number < min || number > max) {
+                log.error(`Please enter a number between ${min} and ${max}.`);
+                continue;
+            }
+
+            return number;
+        }
+
+    } finally {
+        rl.close();
+    }
+}
+
+/**
+ * 選択肢プロンプト関数
+ */
+async function promptChoice(message, choices, defaultValue = null) {
+    const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout
+    });
+
+    try {
+        console.log(`\n${message}`);
+        choices.forEach((choice, index) => {
+            const marker = choice === defaultValue ? ' (default)' : '';
+            console.log(`  ${index + 1}. ${choice}${marker}`);
+        });
+
+        while (true) {
+            const answer = await new Promise((resolve) => {
+                rl.question(`Please select (1-${choices.length}): `, resolve);
+            });
+
+            if (answer.trim() === '' && defaultValue !== null) {
+                return defaultValue;
+            }
+
+            const selection = parseInt(answer.trim());
+
+            if (isNaN(selection) || selection < 1 || selection > choices.length) {
+                log.error(`Please enter a number between 1 and ${choices.length}.`);
+                continue;
+            }
+
+            return choices[selection - 1];
+        }
+
+    } finally {
+        rl.close();
+    }
+}
+
+/**
+ * コマンドライン引数の検証
+ */
+function validateOptions(options, requiredOptions = []) {
+    const missing = [];
+
+    for (const required of requiredOptions) {
+        if (!options[required]) {
+            missing.push(required);
+        }
+    }
+
+    if (missing.length > 0) {
+        log.error(`Missing required options: ${missing.join(', ')}`);
+        process.exit(1);
+    }
+}
+
+/**
+ * 実行時間測定ユーティリティ
+ */
+class Timer {
+    constructor() {
+        this.startTime = Date.now();
+    }
+
+    elapsed() {
+        return Date.now() - this.startTime;
+    }
+
+    elapsedFormatted() {
+        const elapsed = this.elapsed();
+
+        if (elapsed < 1000) {
+            return `${elapsed}ms`;
+        } else if (elapsed < 60000) {
+            return `${(elapsed / 1000).toFixed(1)}s`;
+        } else {
+            const minutes = Math.floor(elapsed / 60000);
+            const seconds = Math.floor((elapsed % 60000) / 1000);
+            return `${minutes}m ${seconds}s`;
+        }
+    }
+}
+
+// ============================================================
+// インタラクティブメニュー機能 (旧 interactive-menu-module.js)
+// ============================================================
 
 /**
  * メニュー項目の定義
@@ -63,9 +406,6 @@ class InteractiveMenu {
         this.rl = null;
     }
 
-    /**
-     * メニューを表示して選択を待つ
-     */
     async show(context) {
         return new Promise((resolve) => {
             this.rl = readline.createInterface({
@@ -116,28 +456,17 @@ class InteractiveMenu {
         });
     }
 
-    /**
-     * カーソルを上に移動
-     */
     moveUp() {
         this.selectedIndex = (this.selectedIndex - 1 + this.items.length) % this.items.length;
     }
 
-    /**
-     * カーソルを下に移動
-     */
     moveDown() {
         this.selectedIndex = (this.selectedIndex + 1) % this.items.length;
     }
 
-    /**
-     * メニューを描画
-     */
     render(context) {
-        // 画面クリア
         console.clear();
         
-        // タイトル表示
         displayTitle('Sankey Environment Setup', 'cyan');
         console.log('━'.repeat(40));
         console.log(`AWS Profile: ${colors.green}${context.profile}${colors.reset}`);
@@ -146,10 +475,9 @@ class InteractiveMenu {
         }
         console.log('');
         console.log('Use ↑↓ arrows to navigate, Enter to select, Esc to exit');
-        console.log('Or press 1-6 to select directly');
+        console.log('Or press 1-8 to select directly');
         console.log('');
 
-        // メニュー項目表示
         this.items.forEach((item, index) => {
             const isSelected = index === this.selectedIndex;
             const prefix = isSelected ? `${colors.cyan}▶${colors.reset} ` : '  ';
@@ -158,29 +486,21 @@ class InteractiveMenu {
             
             console.log(`${prefix}${number} ${label}`);
             
-            // 選択中の項目の説明を表示
             if (isSelected && item.description) {
                 console.log(`     ${colors.gray}${item.description}${colors.reset}`);
             }
         });
     }
 
-    /**
-     * クリーンアップ
-     */
     cleanup() {
-        // カーソルを表示
         process.stdout.write('\x1B[?25h');
         
-        // Rawモードを解除
         if (process.stdin.isTTY) {
             process.stdin.setRawMode(false);
         }
         
-        // リスナーを削除
         process.stdin.removeAllListeners('keypress');
         
-        // readline インターフェースを閉じる
         if (this.rl) {
             this.rl.close();
         }
@@ -188,11 +508,10 @@ class InteractiveMenu {
 }
 
 /**
- * メインメニュー表示（カーソル選択版）
+ * メインメニュー表示
  */
 async function displayMainMenu(context) {
     try {
-        // TTYチェック（CI環境などでは数値入力にフォールバック）
         if (!process.stdin.isTTY) {
             log.info('Non-interactive environment detected. Using number selection.');
             return await displayMainMenuFallback(context);
@@ -208,7 +527,6 @@ async function displayMainMenu(context) {
         return selected.id;
         
     } catch (error) {
-        // エラー時は数値入力にフォールバック
         log.warning('Interactive menu failed, falling back to number selection');
         return await displayMainMenuFallback(context);
     }
@@ -235,7 +553,6 @@ async function displayMainMenuFallback(context) {
         console.log('What would you like to do?');
         console.log('');
 
-        // メニュー項目表示
         MENU_ITEMS.forEach((item, index) => {
             console.log(`${colors.yellow}${index + 1}.${colors.reset} ${item.label}`);
         });
@@ -372,7 +689,7 @@ async function confirmContinue() {
 
     try {
         console.log('');
-        const answer = await new Promise((resolve) => {
+        await new Promise((resolve) => {
             rl.question('Press Enter to continue...', resolve);
         });
         return true;
@@ -403,11 +720,10 @@ async function handleMenuError(error, options = {}) {
         if (error.cause) log.warning(`Cause: ${error.cause.message || error.cause}`);
     } else if (error instanceof ResourceNotFoundError) {
         log.error(`❌ Resource Not Found: ${error.message}`);
-    } else if (error instanceof BaseError) { // Catch any other custom errors
+    } else if (error instanceof BaseError) {
         log.error(`❌ An operation failed: ${error.message}`);
         if (error.cause) log.warning(`Cause: ${error.cause.message || error.cause}`);
-    }
-     else {
+    } else {
         log.error(`An unexpected error occurred: ${error.message}`);
     }
 
@@ -432,13 +748,6 @@ function showProgress(message, options = {}) {
 }
 
 /**
- * メニューアイテムの詳細取得
- */
-function getMenuItem(menuId) {
-    return MENU_ITEMS.find(item => item.id === menuId);
-}
-
-/**
  * バッチ実行用のメニューID配列取得
  */
 function getBatchMenuItems() {
@@ -450,14 +759,32 @@ function getBatchMenuItems() {
     ];
 }
 
+// エクスポート
 module.exports = {
+    // ログ機能
+    log,
+    colors,
+    displayTitle,
+    displaySection,
+    displayUserList,
+    displayProgress,
+    
+    // CLIヘルパー機能
+    selectStackCombination,
+    selectUser,
+    confirm,
+    prompt,
+    promptNumber,
+    promptChoice,
+    validateOptions,
+    Timer,
+    
+    // メニュー機能
     displayMainMenu,
     selectEnvironment,
     confirmExecution,
     confirmContinue,
     handleMenuError,
     showProgress,
-    getMenuItem,
-    getBatchMenuItems,
-    MENU_ITEMS
+    getBatchMenuItems
 };

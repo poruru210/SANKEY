@@ -1,18 +1,30 @@
+/**
+ * Cloudflare統合サービスモジュール
+ * certificate-module + custom-domain-module を統合
+ */
+
 const https = require('https');
 const forge = require('node-forge');
 const { ACMClient, ImportCertificateCommand, ListCertificatesCommand, DescribeCertificateCommand } = require('@aws-sdk/client-acm');
-const { log, displaySection } = require('../lib/logger');
-const { saveCertificateArn } = require('./ssm-module');
-const { SSM_PARAMETERS, CERTIFICATE, CUSTOM_DOMAINS, AWS_REGIONS, CLOUDFLARE_API } = require('../lib/constants');
-const { ConfigurationError, ApiError } = require('../lib/errors');
+const { log, displaySection } = require('../core/utils');
+const { saveCertificateArn, getCertificateArn } = require('./aws');
+const { 
+    SSM_PARAMETERS, 
+    CERTIFICATE, 
+    CUSTOM_DOMAINS, 
+    AWS_REGIONS, 
+    CLOUDFLARE_API,
+    DNS_RECORD_TYPES,
+    DEFAULT_DNS_TTL
+} = require('../core/constants');
+const { ConfigurationError, ApiError } = require('../core/errors');
+
+// ============================================================
+// Cloudflare API Client 基底クラス
+// ============================================================
 
 /**
- * ワイルドカード証明書管理モジュール
- * Cloudflare Origin CA証明書の作成とACMへのインポートを管理
- */
-
-/**
- * Cloudflare API Client (証明書操作専用)
+ * Cloudflare API Client
  */
 class CloudflareClient {
     constructor(authConfig, zoneId) {
@@ -33,14 +45,13 @@ class CloudflareClient {
                 'User-Agent': CLOUDFLARE_API.USER_AGENT
             };
 
-            // Origin CA API 認証
-            if (this.authConfig.originCaKey) {
+            // 認証設定
+            if (this.authConfig.originCaKey && endpoint.includes(CLOUDFLARE_API.ENDPOINTS.CERTIFICATES)) {
                 headers['X-Auth-User-Service-Key'] = this.authConfig.originCaKey;
-            } else if (this.authConfig.apiToken && endpoint.includes(CLOUDFLARE_API.ENDPOINTS.CERTIFICATES)) {
-                // API Token でも証明書操作可能な場合
+            } else if (this.authConfig.apiToken) {
                 headers['Authorization'] = `Bearer ${this.authConfig.apiToken}`;
             } else {
-                reject(new ConfigurationError('No valid Cloudflare authentication provided for certificate operations. Set CLOUDFLARE_ORIGIN_CA_KEY or CLOUDFLARE_API_TOKEN.'));
+                reject(new ConfigurationError('No valid Cloudflare authentication provided. Set CLOUDFLARE_ORIGIN_CA_KEY or CLOUDFLARE_API_TOKEN.'));
                 return;
             }
 
@@ -67,16 +78,16 @@ class CloudflareClient {
                             resolve(parsed.result);
                         } else {
                             const errors = parsed.errors?.map(e => `${e.code}: ${e.message}`).join(', ') || `Status ${res.statusCode} - Unknown Cloudflare error`;
-                            reject(new ApiError(errors, 'Cloudflare Certificates', res.statusCode));
+                            reject(new ApiError(errors, 'Cloudflare', res.statusCode));
                         }
                     } catch (parseError) {
-                        reject(new ApiError(`Failed to parse Cloudflare API response: ${parseError.message}`, 'Cloudflare Certificates', res.statusCode, parseError));
+                        reject(new ApiError(`Failed to parse Cloudflare API response: ${parseError.message}`, 'Cloudflare', res.statusCode, parseError));
                     }
                 });
             });
 
             req.on('error', (networkError) => {
-                reject(new ApiError(`Cloudflare API request failed: ${networkError.message}`, 'Cloudflare Certificates', null, networkError));
+                reject(new ApiError(`Cloudflare API request failed: ${networkError.message}`, 'Cloudflare', null, networkError));
             });
 
             if (data) {
@@ -86,7 +97,16 @@ class CloudflareClient {
             req.end();
         });
     }
+}
 
+// ============================================================
+// 証明書管理 (旧 certificate-module.js)
+// ============================================================
+
+/**
+ * Origin CA 証明書操作
+ */
+class CloudflareCertificateClient extends CloudflareClient {
     /**
      * List all Origin CA certificates
      */
@@ -178,7 +198,6 @@ function shouldRenewCertificate(certificate, options = {}) {
 
     log.info(`Certificate expires in ${daysUntilExpiration} days`);
 
-    // 定数から閾値を取得
     if (daysUntilExpiration > CERTIFICATE.RENEWAL_THRESHOLD_DAYS) {
         return { 
             shouldRenew: false, 
@@ -187,7 +206,6 @@ function shouldRenewCertificate(certificate, options = {}) {
         };
     }
 
-    // 閾値以内の場合は更新推奨
     if (daysUntilExpiration <= CERTIFICATE.RENEWAL_THRESHOLD_DAYS) {
         return { 
             shouldRenew: true, 
@@ -196,7 +214,6 @@ function shouldRenewCertificate(certificate, options = {}) {
         };
     }
 
-    // 期限切れ間近
     if (daysUntilExpiration <= renewalThreshold) {
         return { 
             shouldRenew: true, 
@@ -220,9 +237,8 @@ async function findWildcardCertificate(cloudflareClient, options = {}) {
         log.debug('Searching for existing wildcard certificate...', options);
         const certificates = await cloudflareClient.listOriginCertificates();
         
-        // *.sankey.trade を含む証明書を検索
         const wildcardCert = certificates.find(cert => {
-            return cert.hostnames && cert.hostnames.some(h => h === CERTIFICATE.HOSTNAMES[0]); // Assuming '*.sankey.trade' is the first
+            return cert.hostnames && cert.hostnames.some(h => h === CERTIFICATE.HOSTNAMES[0]);
         });
 
         if (wildcardCert) {
@@ -257,7 +273,6 @@ async function findExistingAcmCertificate(acmClient, hostname, options = {}) {
             });
             const details = await acmClient.send(describeCommand);
             
-            // ワイルドカード証明書を確認
             if (details.Certificate?.DomainName === hostname || 
                 details.Certificate?.SubjectAlternativeNames?.includes(hostname)) {
                 log.debug(`Found existing ACM certificate: ${cert.CertificateArn}`, options);
@@ -343,16 +358,14 @@ async function prepareWildcardCertificate(config) {
         }
 
         // Initialize clients
-        const cloudflareClient = new CloudflareClient(authConfig, CLOUDFLARE_ZONE_ID);
+        const cloudflareClient = new CloudflareCertificateClient(authConfig, CLOUDFLARE_ZONE_ID);
         
-        // Set AWS profile for SDK
         if (profile) {
             process.env.AWS_PROFILE = profile;
         }
         
         const acmClient = new ACMClient({ region: region || AWS_REGIONS.DEFAULT });
 
-        // Wildcard certificate hostnames
         const hostnames = CERTIFICATE.HOSTNAMES;
         log.info(`Target hostnames: ${hostnames.join(', ')}`);
 
@@ -364,14 +377,12 @@ async function prepareWildcardCertificate(config) {
         let renewalPerformed = false;
 
         if (existingCert) {
-            // Check if renewal is needed
             const renewalCheck = shouldRenewCertificate(existingCert, { forceRenew: forceUpdate });
 
             if (!renewalCheck.shouldRenew) {
                 log.success(`✅ Certificate is valid for ${renewalCheck.daysUntilExpiration} more days`);
                 log.info('⏭️ Skipping certificate renewal');
                 
-                // Return existing certificate info
                 return {
                     success: true,
                     certificateId: existingCert.id,
@@ -381,11 +392,9 @@ async function prepareWildcardCertificate(config) {
                 };
             }
 
-            // Renewal needed
             log.warning(`⚠️ Certificate renewal required: ${renewalCheck.reason}`);
             
             if (!dryRun) {
-                // Create new certificate
                 const newCert = await cloudflareClient.createOriginCertificate(hostnames);
                 certificate = newCert.certificate;
                 privateKey = newCert.private_key;
@@ -394,7 +403,6 @@ async function prepareWildcardCertificate(config) {
                 
                 log.success(`✅ Created new certificate: ${certificateId}`);
                 
-                // Try to revoke old certificate
                 try {
                     await cloudflareClient.revokeOriginCertificate(existingCert.id);
                     log.success(`✅ Revoked old certificate: ${existingCert.id}`);
@@ -408,7 +416,6 @@ async function prepareWildcardCertificate(config) {
                 certificateId = 'dry-run-cert-id';
             }
         } else {
-            // No existing certificate
             log.info('No existing wildcard certificate found');
             
             if (!dryRun) {
@@ -430,20 +437,18 @@ async function prepareWildcardCertificate(config) {
         // Step 2: Import to ACM
         let certificateArn = null;
         
-        // 証明書が更新された場合、または既存証明書でもACMにない場合はインポート
         if (renewalPerformed || !existingCert) {
             displaySection('AWS Certificate Manager');
             certificateArn = await importCertificateToAcm(
                 acmClient,
                 certificate,
                 privateKey,
-                CERTIFICATE.HOSTNAMES[0], // Assuming '*.sankey.trade'
+                CERTIFICATE.HOSTNAMES[0],
                 { dryRun, debug }
             );
         } else {
-            // 既存証明書の場合、ACMに存在するか確認
             displaySection('AWS Certificate Manager Check');
-            const existingAcmCert = await findExistingAcmCertificate(acmClient, CERTIFICATE.HOSTNAMES[0], { debug }); // Assuming '*.sankey.trade'
+            const existingAcmCert = await findExistingAcmCertificate(acmClient, CERTIFICATE.HOSTNAMES[0], { debug });
             
             if (existingAcmCert) {
                 certificateArn = existingAcmCert.CertificateArn;
@@ -512,10 +517,168 @@ async function prepareWildcardCertificate(config) {
     }
 }
 
+// ============================================================
+// DNS管理 (旧 custom-domain-module.js)
+// ============================================================
+
+/**
+ * DNS操作用クライアント
+ */
+class CloudflareDnsClient extends CloudflareClient {
+    /**
+     * List DNS records for a zone
+     */
+    async listDnsRecords(filters = {}) {
+        const params = new URLSearchParams(filters).toString();
+        const endpoint = `${CLOUDFLARE_API.ENDPOINTS.DNS_RECORDS(this.zoneId)}${params ? `?${params}` : ''}`;
+        return await this.makeRequest('GET', endpoint);
+    }
+
+    /**
+     * Create or update DNS record
+     */
+    async updateDnsRecord(recordName, targetDomain, options = {}) {
+        const { proxied = true, ttl = DEFAULT_DNS_TTL, dryRun = false } = options;
+
+        const records = await this.listDnsRecords({ name: recordName, type: DNS_RECORD_TYPES.CNAME });
+        const existingRecord = records.find(record => record.name === recordName);
+
+        const recordData = {
+            type: DNS_RECORD_TYPES.CNAME,
+            name: recordName,
+            content: targetDomain,
+            ttl,
+            proxied
+        };
+
+        if (dryRun) {
+            const action = existingRecord ? 'update' : 'create';
+            log.info(`[DRY-RUN] Would ${action} DNS record: ${recordName} -> ${targetDomain}`);
+            return { action: `dry-run-${action}`, record: recordData };
+        }
+
+        if (existingRecord) {
+            if (existingRecord.content === targetDomain && existingRecord.proxied === proxied) {
+                log.info(`DNS record already up to date: ${recordName} -> ${targetDomain}`);
+                return { action: 'no-change', record: existingRecord };
+            }
+            
+            const updatedRecord = await this.makeRequest(
+                'PUT', 
+                `${CLOUDFLARE_API.ENDPOINTS.DNS_RECORDS(this.zoneId)}/${existingRecord.id}`,
+                recordData
+            );
+            log.success(`✅ Updated DNS record: ${recordName} -> ${targetDomain}`);
+            return { action: 'updated', record: updatedRecord };
+        } else {
+            const newRecord = await this.makeRequest(
+                'POST', 
+                CLOUDFLARE_API.ENDPOINTS.DNS_RECORDS(this.zoneId),
+                recordData
+            );
+            log.success(`✅ Created DNS record: ${recordName} -> ${targetDomain}`);
+            return { action: 'created', record: newRecord };
+        }
+    }
+
+    /**
+     * Delete DNS record
+     */
+    async deleteDnsRecord(recordName, options = {}) {
+        const { dryRun = false } = options;
+
+        const records = await this.listDnsRecords({ name: recordName });
+        const existingRecord = records.find(record => record.name === recordName);
+
+        if (!existingRecord) {
+            log.info(`DNS record not found: ${recordName}`);
+            return { action: 'not-found' };
+        }
+
+        if (dryRun) {
+            log.info(`[DRY-RUN] Would delete DNS record: ${recordName}`);
+            return { action: 'dry-run-delete', record: existingRecord };
+        }
+
+        await this.makeRequest('DELETE', `${CLOUDFLARE_API.ENDPOINTS.DNS_RECORDS(this.zoneId)}/${existingRecord.id}`);
+        log.success(`✅ Deleted DNS record: ${recordName}`);
+        return { action: 'deleted' };
+    }
+}
+
+/**
+ * Setup DNS for custom domain
+ */
+async function setupDnsForCustomDomain(config) {
+    const startTime = Date.now();
+    
+    try {
+        const { 
+            environment, 
+            customDomainName,
+            targetDomain,
+            profile,
+            dryRun = false, 
+            debug = false 
+        } = config;
+
+        if (dryRun) {
+            log.warning('🧪 Running in DRY-RUN mode - no changes will be made');
+        }
+
+        displaySection('DNS Configuration');
+
+        // Validate environment variables
+        const CLOUDFLARE_API_TOKEN = process.env.CLOUDFLARE_API_TOKEN;
+        const CLOUDFLARE_ZONE_ID = process.env.CLOUDFLARE_ZONE_ID;
+
+        if (!CLOUDFLARE_API_TOKEN || !CLOUDFLARE_ZONE_ID) {
+            throw new ConfigurationError('DNS setup requires CLOUDFLARE_API_TOKEN and CLOUDFLARE_ZONE_ID environment variables.');
+        }
+
+        // Initialize Cloudflare client
+        const cloudflareClient = new CloudflareDnsClient({ apiToken: CLOUDFLARE_API_TOKEN }, CLOUDFLARE_ZONE_ID);
+
+        log.info(`Setting up DNS: ${customDomainName} -> ${targetDomain}`);
+
+        // Update DNS record
+        const result = await cloudflareClient.updateDnsRecord(customDomainName, targetDomain, {
+            proxied: true,
+            ttl: DEFAULT_DNS_TTL,
+            dryRun,
+            debug
+        });
+
+        // Summary
+        const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+        
+        if (result.action === 'created' || result.action === 'updated') {
+            log.complete(`✅ DNS setup completed in ${duration}s`);
+            log.info(`API will be accessible at: https://${customDomainName}`);
+        } else if (result.action === 'no-change') {
+            log.info(`DNS already configured correctly (${duration}s)`);
+        }
+
+        return {
+            success: true,
+            hostname: customDomainName,
+            targetDomain,
+            action: result.action,
+            duration
+        };
+
+    } catch (error) {
+        const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+        log.error(`DNS setup failed after ${duration}s: ${error.message}`);
+        throw error;
+    }
+}
+
+// エクスポート
 module.exports = {
+    // 証明書管理
     prepareWildcardCertificate,
-    CloudflareClient,
-    shouldRenewCertificate,
-    findWildcardCertificate,
-    findExistingAcmCertificate
+    
+    // DNS管理
+    setupDnsForCustomDomain
 };

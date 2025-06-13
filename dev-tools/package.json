@@ -5,8 +5,9 @@
   "description": "SanKey project utility scripts",
   "main": "index.js",
   "scripts": {
-    "update-env": "node update-env.js",
-    "generate-data": "node generate-test-data.js"
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
   },
   "dependencies": {
     "@aws-sdk/client-acm": "^3.826.0",
@@ -27,5 +28,9 @@
     "cdk",
     "cognito",
     "sankey"
-  ]
+  ],
+  "devDependencies": {
+    "@jest/globals": "^30.0.0",
+    "jest": "^30.0.0"
+  }
 }

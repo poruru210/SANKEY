@@ -4,9 +4,21 @@ require('dotenv').config();
 const { Command } = require('commander');
 const path = require('path');
 
-// 共通ライブラリ
-const { log, displayTitle, colors } = require('./lib/logger'); // Added colors
-const { validateOptions, Timer } = require('./lib/cli-helpers');
+// コアモジュール
+const { 
+    log, 
+    displayTitle, 
+    colors,
+    validateOptions, 
+    Timer,
+    displayMainMenu,
+    selectEnvironment,
+    confirmExecution,
+    confirmContinue,
+    handleMenuError,
+    showProgress,
+    getBatchMenuItems
+} = require('./core/utils');
 const {
     SSM_PARAMETERS,
     LOCAL_ENV_FILENAME,
@@ -15,27 +27,20 @@ const {
     ENVIRONMENTS,
     VERCEL_ENVIRONMENTS,
     CUSTOM_DOMAINS
-} = require('./lib/constants');
-const { BaseError, ConfigurationError, ApiError, CdkNotDeployedError, ResourceNotFoundError } = require('./lib/errors');
+} = require('./core/constants');
+const { BaseError, ConfigurationError, ApiError, CdkNotDeployedError, ResourceNotFoundError } = require('./core/errors');
 
-// メニューシステム
+// サービスモジュール
+const { getAwsConfiguration, executeTestDataWorkflow } = require('./services/aws');
+const { prepareWildcardCertificate, setupDnsForCustomDomain } = require('./services/cloudflare');
 const { 
-    displayMainMenu, 
-    selectEnvironment, 
-    confirmExecution, 
-    confirmContinue,
-    handleMenuError,
-    showProgress,
-    getBatchMenuItems
-} = require('./modules/interactive-menu-module');
-
-// 機能別モジュール
-const { getAwsConfiguration } = require('./modules/aws-config-module');
-const { updateLocalEnv, readAuthSecretFromEnvLocal } = require('./modules/env-local-module');
-const { updateVercelEnvironmentVariables, getExistingAuthSecret } = require('./modules/vercel-env-module');
-const { triggerDeployment, generateAuthSecret } = require('./lib/vercel-helpers');
-const { setupDnsForCustomDomain } = require('./modules/custom-domain-module');
-const { executeTestDataWorkflow } = require('./modules/test-data-module');
+    updateVercelEnvironmentVariables, 
+    getExistingAuthSecret, 
+    triggerDeployment, 
+    generateAuthSecret,
+    updateLocalEnv,
+    readAuthSecretFromEnvLocal
+} = require('./services/vercel');
 
 // コマンドライン引数の設定
 const program = new Command();
@@ -43,7 +48,7 @@ const program = new Command();
 program
     .name('setup-environment')
     .description('Complete environment setup: AWS + Custom Domain + .env.local + Vercel')
-    .version('1.1.0')
+    .version('2.0.0')
     .requiredOption('-p, --profile <profile>', 'AWS SSO profile name')
     .option('-r, --region <region>', 'AWS region (defaults to profile default)')
     .option('--debug', 'Enable debug output')
@@ -140,8 +145,6 @@ async function executeCertificatePreparation(context) {
     try {
         showProgress('Preparing wildcard certificate for *.sankey.trade');
 
-        // 証明書モジュールが実装されたら以下を有効化
-        const { prepareWildcardCertificate } = require('./modules/certificate-module');
         const result = await prepareWildcardCertificate(context);
         
         if (result.success && !result.renewed) {
@@ -224,13 +227,15 @@ async function executeCustomDomainSetup(context) {
                 await new Promise(resolve => setTimeout(resolve, 3000));
                 
                 try {
-                    const dnsCheck = await verifyDnsConfiguration(result.hostname);
-                    if (dnsCheck.success) {
-                        log.success(`✅ DNS configuration verified: ${result.hostname} -> ${dnsCheck.addresses[0]}`);
-                    } else {
-                        log.warning(`⚠️  DNS propagation may take a few minutes to complete`);
-                        log.info('💡 You can test the API endpoint in a few minutes');
-                    }
+                    const dns = require('dns');
+                    dns.resolve(result.hostname, 'CNAME', (err, addresses) => {
+                        if (!err && addresses) {
+                            log.success(`✅ DNS configuration verified: ${result.hostname} -> ${addresses[0]}`);
+                        } else {
+                            log.warning(`⚠️  DNS propagation may take a few minutes to complete`);
+                            log.info('💡 You can test the API endpoint in a few minutes');
+                        }
+                    });
                 } catch (dnsError) {
                     log.debug(`DNS verification failed: ${dnsError.message}`, { debug: context.debug });
                     log.warning('⚠️  DNS verification failed, but configuration was applied');
@@ -253,22 +258,6 @@ async function executeCustomDomainSetup(context) {
 }
 
 /**
- * DNS設定の確認
- */
-async function verifyDnsConfiguration(hostname) {
-    return new Promise((resolve) => {
-        const dns = require('dns');
-        dns.resolve(hostname, 'CNAME', (err, addresses) => {
-            if (err) {
-                resolve({ success: false, error: err.message });
-            } else {
-                resolve({ success: true, addresses });
-            }
-        });
-    });
-}
-
-/**
  * .env.local生成処理
  */
 async function executeEnvLocalGeneration(context) {
@@ -286,10 +275,6 @@ async function executeEnvLocalGeneration(context) {
                 requireApproval: APPROVAL_MODES.NEVER
             });
         } catch (error) {
-            // CDK未デプロイの場合
-            // TODO: aws-config-moduleが具体的なエラータイプ (例: CdkNotDeployedError) を返すように将来的に改善し、
-            //       ここでエラータイプを判別して、より適切なメッセージを表示することを検討。
-            //       現状は、getAwsConfigurationがエラーをスローするかnullを返した場合のメッセージに依存。
             if (error instanceof CdkNotDeployedError) {
                 log.error(`❌ CDK not deployed for '${error.environment || ENVIRONMENTS.DEV}' environment.`);
                 if (error.missingResources && error.missingResources.length > 0) {
@@ -302,7 +287,6 @@ async function executeEnvLocalGeneration(context) {
                 await confirmContinue();
                 return { success: false, error: error };
             }
-            // For other errors, let handleMenuError deal with them
             throw error;
         }
 
@@ -353,8 +337,6 @@ async function executeVercelSetup(context) {
         showProgress(`Setting up Vercel environment variables for ${environment}`);
 
         // AWS設定取得を試みる（CDKデプロイ確認）
-        // VERCEL_TOKEN と VERCEL_PROJECT_ID のチェックは、VercelClientの初期化や
-        // updateVercelEnvironmentVariables 関数内で行われることを期待。
         let awsConfig = null;
         try {
             awsConfig = await getAwsConfiguration({
@@ -365,10 +347,6 @@ async function executeVercelSetup(context) {
                 requireApproval: APPROVAL_MODES.NEVER
             });
         } catch (error) {
-            // CDK未デプロイの場合
-            // TODO: aws-config-moduleが具体的なエラータイプ (例: CdkNotDeployedError) を返すように将来的に改善し、
-            //       ここでエラータイプを判別して、より適切なメッセージを表示することを検討。
-            //       現状は、getAwsConfigurationがエラーをスローするかnullを返した場合のメッセージに依存。
             if (error instanceof CdkNotDeployedError) {
                 log.error(`❌ CDK not deployed for '${error.environment || environment}' environment.`);
                  if (error.missingResources && error.missingResources.length > 0) {
@@ -381,7 +359,6 @@ async function executeVercelSetup(context) {
                 await confirmContinue();
                 return { success: false, error: error };
             }
-            // For other errors, let handleMenuError deal with them
             throw error;
         }
 
@@ -437,7 +414,6 @@ async function executeVercelDeploy(context) {
         showProgress(`Triggering Vercel deployment for ${environment}`);
 
         // 確認
-        // デプロイフックURLのチェックは vercel-helpers.js の triggerDeployment 関数内で行われます。
         const confirmed = await confirmExecution('Vercel Deployment', {
             Environment: environment
         });
@@ -528,11 +504,15 @@ async function executeAllSteps(context) {
                     results.certificate = await executeCertificatePreparation(context);
                     break;
                     
-                case 'setup-vercel':
+                case 'setup-custom-domain':
                     // 環境を一度だけ選択
                     if (!context.environment) {
                         context.environment = await selectEnvironment(context);
                     }
+                    results.customDomain = await executeCustomDomainSetup(context);
+                    break;
+
+                case 'setup-vercel':
                     results.vercel = await executeVercelSetup(context);
                     // CDK未デプロイエラーの場合は中断
                     if (results.vercel && !results.vercel.success && results.vercel.error === ERROR_TYPES.CDK_NOT_DEPLOYED) {
@@ -708,7 +688,7 @@ async function main() {
             if (error.cause) log.warning(`Cause: ${error.cause}`);
         } else if (error instanceof ResourceNotFoundError) {
             log.error(`❌ Resource Not Found: ${error.message}`);
-        } else if (error instanceof BaseError) { // Catch any other custom errors
+        } else if (error instanceof BaseError) {
             log.error(`❌ An operation failed: ${error.message}`);
             if (error.cause) log.warning(`Cause: ${error.cause}`);
         }
@@ -724,7 +704,7 @@ async function main() {
     }
 }
 
-// グローバルエラーハンドリング (主に予期せぬエラーや非同期処理の漏れをキャッチ)
+// グローバルエラーハンドリング
 process.on('uncaughtException', (error) => {
     log.error(`💥 Uncaught Exception: ${error.message}`);
     if (program.opts()?.debug && error.stack) {
@@ -743,7 +723,7 @@ process.on('unhandledRejection', (reason, promise) => {
     } else {
         log.error(reason);
     }
-    promise.catch(err => { // Attach a catch handler to the promise to avoid further unhandled rejections
+    promise.catch(err => {
         log.error(`  (Promise rejection caught)`);
     });
     process.exit(1);
