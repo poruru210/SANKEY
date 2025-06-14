@@ -124,12 +124,12 @@ export class SankeyDbStack extends cdk.Stack {
         const outputs = [
             // EAアプリケーションテーブル関連
             {
-                id: 'EAApplicationsTableName',
+                id: 'SankeyTableName',
                 value: this.eaApplicationsTable.tableName,
                 description: 'EA Applications DynamoDB Table Name'
             },
             {
-                id: 'EAApplicationsTableArn',
+                id: 'SankeyTableArn',
                 value: this.eaApplicationsTable.tableArn,
                 description: 'EA Applications DynamoDB Table ARN'
             },
