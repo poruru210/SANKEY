@@ -13,13 +13,13 @@ export interface SankeyAuthStackProps extends cdk.StackProps {
     logoutUrls?: string[];
     environment?: string;
     removalPolicy?: cdk.RemovalPolicy;
+    postConfirmationFunctionArn?: string; // Added prop
 }
 
 export class SankeyAuthStack extends cdk.Stack {
     public readonly userPool: cognito.UserPool;
     public readonly userPoolDomain: cognito.UserPoolDomain;
     public readonly userPoolClient: cognito.UserPoolClient;
-    public readonly postConfirmationFn: NodejsFunction;
     private readonly envName: string;
     private readonly config: ReturnType<typeof EnvironmentConfig.get>;
 
@@ -57,55 +57,14 @@ export class SankeyAuthStack extends cdk.Stack {
             useCognitoProvidedValues: true,
         });
 
-        // Lambda: Post Confirmation Trigger
-        this.postConfirmationFn = this.createPostConfirmationFunction();
-        this.setupPostConfirmationPermissions();
-        this.setupTriggers();
+        // Set Lambda trigger if ARN is provided
+        if (props.postConfirmationFunctionArn) {
+          const cfnUserPool = this.userPool.node.defaultChild as cognito.CfnUserPool;
+          // Using addPropertyOverride to avoid issues with spreading potentially tokenized lambdaConfig
+          cfnUserPool.addPropertyOverride('LambdaConfig.PostConfirmation', props.postConfirmationFunctionArn);
+        }
+
         this.createOutputs(props);
-    }
-
-    /**
-     * Post Confirmation Lambda関数の作成
-     */
-    private createPostConfirmationFunction(): NodejsFunction {
-        return CdkHelpers.createNodejsFunction(
-            this,
-            'PostConfirmationFunction',
-            'post-confirmation',
-            this.envName,
-            {
-                entry: path.join(__dirname, '../../lambda/src/handlers/postConfirmation.handler.ts'),
-                environment: {
-                    SSM_USER_PREFIX: CdkHelpers.getSsmUserPrefix(this.envName),
-                    POWERTOOLS_SERVICE_NAME: 'post-confirmation',
-                },
-            }
-        );
-    }
-
-    /**
-     * Post Confirmation Lambda の権限設定
-     */
-    private setupPostConfirmationPermissions() {
-        // SSM権限
-        this.postConfirmationFn.addToRolePolicy(new iam.PolicyStatement({
-            effect: iam.Effect.ALLOW,
-            actions: ['ssm:GetParameter', 'ssm:GetParameters', 'ssm:PutParameter', 'ssm:AddTagsToResource'],
-            resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter${CdkHelpers.getSsmEnvironmentPrefix(this.envName)}/*`],
-        }));
-    }
-
-    /**
-     * Cognitoトリガーの設定
-     */
-    private setupTriggers() {
-        this.userPool.addTrigger(cognito.UserPoolOperation.POST_CONFIRMATION, this.postConfirmationFn);
-
-        this.postConfirmationFn.addPermission('CognitoInvokePermission', {
-            principal: new iam.ServicePrincipal('cognito-idp.amazonaws.com'),
-            action: 'lambda:InvokeFunction',
-            sourceArn: this.userPool.userPoolArn,
-        });
     }
 
     /**

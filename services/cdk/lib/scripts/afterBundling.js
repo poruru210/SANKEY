@@ -9,7 +9,7 @@ if (!inputDir || !outputDir) {
 }
 
 // パス構築（OSに依存しない）
-const src = path.join(inputDir, 'lambda', 'src', 'handlers', 'generators', 'template.gas.mustache');
+const src = path.join(inputDir, '..', 'lambda', 'src', 'handlers', 'generators', 'template.gas.mustache'); // Corrected path
 const dest = path.join(outputDir, 'template.gas.mustache');
 
 console.log(`[afterBundling.js] Copying file from:\n  ${src}\nto:\n  ${dest}`);
