@@ -6,7 +6,7 @@ import { injectLambdaContext } from '@aws-lambda-powertools/logger/middleware';
 import { captureLambdaHandler } from '@aws-lambda-powertools/tracer/middleware';
 import { GetCommand, PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 
-import type { TestGasConnectionHandlerDependencies } from '../../di/types';
+import type { TestGasConnectionHandlerDependencies } from '../../di/dependencies';
 import {
     createSuccessResponse,
     createValidationErrorResponse,

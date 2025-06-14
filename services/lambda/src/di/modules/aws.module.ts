@@ -7,7 +7,7 @@ import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { SQSClient } from '@aws-sdk/client-sqs';
 import { CognitoIdentityProviderClient } from '@aws-sdk/client-cognito-identity-provider';
 import { APIGatewayClient } from '@aws-sdk/client-api-gateway';
-import { DIContainer } from '../../types/dependencies';
+import { DIContainer } from '../../di/dependencies';
 
 /**
  * AWS関連のクライアントを登録するモジュール

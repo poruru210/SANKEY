@@ -7,7 +7,7 @@
 import { DynamoDBDocumentClient, UpdateCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
 import { Logger } from '@aws-lambda-powertools/logger';
 import { UserProfile, IntegrationTest } from '../models/userProfile';
-import { IntegrationTestRepositoryDependencies } from '../di/types';
+import { IntegrationTestRepositoryDependencies } from '../di/dependencies';
 
 /**
  * Repository for integration test related DynamoDB operations

@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import type { AwilixContainer } from 'awilix';
-import type { DIContainer } from '../../src/types/dependencies';
+import { AwilixContainer } from 'awilix';
+import { DIContainer } from '../../src/di/dependencies';
 import { createTestContainer } from '../di/testContainer';
 import { MasterKeyService } from '../../src/services/masterKeyService';
-import type { SSMClient } from '@aws-sdk/client-ssm';
+import { SSMClient } from '@aws-sdk/client-ssm';
 
 describe('MasterKeyService', () => {
     let container: AwilixContainer<DIContainer>;

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import type { AwilixContainer } from 'awilix';
-import type { DIContainer } from '../../../src/types/dependencies';
+import { AwilixContainer } from 'awilix';
+import { DIContainer } from '../../../src/di/dependencies';
 import { createProductionContainer, clearContainer } from '../../../src/di/container';
 import { JWTKeyService } from '../../../src/services/jwtKeyService';
 

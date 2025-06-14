@@ -12,7 +12,7 @@ import { injectLambdaContext } from '@aws-lambda-powertools/logger/middleware';
 import { captureLambdaHandler } from '@aws-lambda-powertools/tracer/middleware';
 import { GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 
-import type { CompleteIntegrationTestHandlerDependencies } from '../../di/types';
+import type { CompleteIntegrationTestHandlerDependencies } from '../../di/dependencies';
 import {
     createSuccessResponse,
     createValidationErrorResponse,

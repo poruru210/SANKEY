@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import type { AwilixContainer } from 'awilix';
-import type { DIContainer } from '../../src/types/dependencies';
+import type { DIContainer } from '../../src/di/dependencies';
 import { createTestContainer } from '../di/testContainer';
 import { JWTKeyService } from '../../src/services/jwtKeyService';
 import type { SSMClient } from '@aws-sdk/client-ssm';

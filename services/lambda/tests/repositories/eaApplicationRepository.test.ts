@@ -5,7 +5,7 @@ import { EAApplicationRepository } from '../../src/repositories/eaApplicationRep
 import { EAApplication, ApplicationStatus, HistoryAction, isTerminalStatus, calculateTTL } from '../../src/models/eaApplication';
 import { PutCommand, UpdateCommand, GetCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import type { AwilixContainer } from 'awilix';
-import type { DIContainer } from '../../src/types/dependencies';
+import type { DIContainer } from '../../src/di/dependencies';
 
 // モッククライアントの型定義
 interface MockCall {

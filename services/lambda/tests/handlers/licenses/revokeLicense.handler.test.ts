@@ -1,10 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { APIGatewayProxyEvent } from 'aws-lambda';
 import type { AwilixContainer } from 'awilix';
-import type { DIContainer } from '../../../src/types/dependencies';
 import { createTestContainer } from '../../di/testContainer';
 import { createHandler } from '../../../src/handlers/licenses/revokeLicense.handler';
-import type { RevokeLicenseHandlerDependencies } from '../../../src/di/types';
+import type { DIContainer, RevokeLicenseHandlerDependencies } from '../../../src/di/dependencies';
 
 describe('revokeLicense.handler', () => {
     let container: AwilixContainer<DIContainer>;

@@ -22,7 +22,7 @@ import {
     isTerminalStatus,
     calculateTTLWithConfig
 } from '../models/eaApplication';
-import { EAApplicationRepositoryDependencies } from '../di/types';
+import { EAApplicationRepositoryDependencies } from '../di/dependencies';
 
 // 承認情報の型定義
 interface ApprovalInfo {

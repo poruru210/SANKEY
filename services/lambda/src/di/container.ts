@@ -1,5 +1,5 @@
 import { createContainer, asValue, AwilixContainer, InjectionMode } from 'awilix';
-import { DIContainer } from '../types/dependencies';
+import { DIContainer } from '../di/dependencies';
 import { registerAWSModule } from './modules/aws.module';
 import { registerServicesModule } from './modules/services.module';
 import { registerRepositoriesModule } from './modules/repositories.module';

@@ -1,11 +1,12 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import type { AwilixContainer } from 'awilix';
-import type { DIContainer } from '../../src/types/dependencies';
+import type { DIContainer } from '../../src/di/dependencies';
 import { createTestContainer } from '../di/testContainer';
 import { IntegrationTestService } from '../../src/services/integrationTestService';
 import type { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import type { IntegrationTestRepository } from '../../src/repositories/integrationTestRepository';
 import type { EAApplicationRepository } from '../../src/repositories/eaApplicationRepository';
+import type { UserProfileRepository } from '../../src/repositories/userProfileRepository';
 
 describe('IntegrationTestService', () => {
     let container: AwilixContainer<DIContainer>;
@@ -13,6 +14,7 @@ describe('IntegrationTestService', () => {
     let mockDocClient: DynamoDBDocumentClient;
     let mockIntegrationTestRepository: IntegrationTestRepository;
     let mockEAApplicationRepository: EAApplicationRepository;
+    let mockUserProfileRepository: UserProfileRepository;
     let mockLogger: any;
 
     beforeEach(() => {
@@ -26,6 +28,7 @@ describe('IntegrationTestService', () => {
         mockDocClient = container.resolve('docClient');
         mockIntegrationTestRepository = container.resolve('integrationTestRepository');
         mockEAApplicationRepository = container.resolve('eaApplicationRepository');
+        mockUserProfileRepository = container.resolve('userProfileRepository');
         mockLogger = container.resolve('logger');
     });
 
@@ -77,7 +80,7 @@ describe('IntegrationTestService', () => {
                 }
             };
 
-            vi.spyOn(mockIntegrationTestRepository, 'getUserProfile').mockResolvedValue(mockUserProfile as any);
+            vi.spyOn(mockUserProfileRepository, 'getUserProfile').mockResolvedValue(mockUserProfile as any);
             vi.spyOn(mockIntegrationTestRepository, 'updateIntegrationTest').mockResolvedValue();
 
             await service.recordTestStarted(userId, testId);
@@ -94,7 +97,7 @@ describe('IntegrationTestService', () => {
             const userId = 'test-user-id';
             const testId = 'test-123';
 
-            vi.spyOn(mockIntegrationTestRepository, 'getUserProfile').mockResolvedValue(null);
+            vi.spyOn(mockUserProfileRepository, 'getUserProfile').mockResolvedValue(null);
 
             await expect(service.recordTestStarted(userId, testId)).rejects.toThrow('Integration test not found');
         });
@@ -111,7 +114,7 @@ describe('IntegrationTestService', () => {
                 }
             };
 
-            vi.spyOn(mockIntegrationTestRepository, 'getUserProfile').mockResolvedValue(mockUserProfile as any);
+            vi.spyOn(mockUserProfileRepository, 'getUserProfile').mockResolvedValue(mockUserProfile as any);
 
             await expect(service.recordTestStarted(userId, testId)).rejects.toThrow('Test ID mismatch');
         });
@@ -134,7 +137,7 @@ describe('IntegrationTestService', () => {
                 }
             };
 
-            vi.spyOn(mockIntegrationTestRepository, 'getUserProfile').mockResolvedValue(mockUserProfile as any);
+            vi.spyOn(mockUserProfileRepository, 'getUserProfile').mockResolvedValue(mockUserProfile as any);
             vi.spyOn(mockIntegrationTestRepository, 'updateIntegrationTest').mockResolvedValue();
 
             await service.recordProgress(userId, 'GAS_WEBHOOK_RECEIVED', true, {
@@ -153,7 +156,7 @@ describe('IntegrationTestService', () => {
         it('アクティブなテストがない場合はエラーをスロー', async () => {
             const userId = 'test-user-id';
 
-            vi.spyOn(mockIntegrationTestRepository, 'getUserProfile').mockResolvedValue(null);
+            vi.spyOn(mockUserProfileRepository, 'getUserProfile').mockResolvedValue(null);
 
             await expect(service.recordProgress(userId, 'GAS_WEBHOOK_RECEIVED', true))
                 .rejects.toThrow('No active integration test found');
@@ -179,7 +182,7 @@ describe('IntegrationTestService', () => {
                 }
             };
 
-            vi.spyOn(mockIntegrationTestRepository, 'getUserProfile').mockResolvedValue(mockUserProfile as any);
+            vi.spyOn(mockUserProfileRepository, 'getUserProfile').mockResolvedValue(mockUserProfile as any);
 
             const status = await service.getIntegrationTestStatus(userId);
 
@@ -195,7 +198,7 @@ describe('IntegrationTestService', () => {
         it('テストがない場合は非アクティブステータスを返す', async () => {
             const userId = 'test-user-id';
 
-            vi.spyOn(mockIntegrationTestRepository, 'getUserProfile').mockResolvedValue(null);
+            vi.spyOn(mockUserProfileRepository, 'getUserProfile').mockResolvedValue(null);
 
             const status = await service.getIntegrationTestStatus(userId);
 

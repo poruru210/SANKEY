@@ -7,7 +7,7 @@ import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { SQSClient } from '@aws-sdk/client-sqs';
 import { CognitoIdentityProviderClient } from '@aws-sdk/client-cognito-identity-provider';
 import { APIGatewayClient } from '@aws-sdk/client-api-gateway';
-import { DIContainer } from '../../src/types/dependencies';
+import { DIContainer } from '../../src/di/dependencies';
 import { Logger } from '@aws-lambda-powertools/logger';
 import { Tracer } from '@aws-lambda-powertools/tracer';
 
@@ -20,6 +20,7 @@ import { IntegrationTestProgressService } from '../../src/services/integrationTe
 // リポジトリクラスをインポート
 import { EAApplicationRepository } from '../../src/repositories/eaApplicationRepository';
 import { IntegrationTestRepository } from '../../src/repositories/integrationTestRepository';
+import {UserProfileRepository} from "../../src/repositories/userProfileRepository";
 
 /**
  * テスト用のDIコンテナを作成
@@ -92,7 +93,6 @@ export function createTestContainer(options?: {
                 })
         ),
 
-        // AWS Clients (aws-sdk-client-mockを使用)
         ssmClient: asValue(new SSMClient({})),
         ddbClient: asValue(new DynamoDBClient({})),
         docClient: asValue(DynamoDBDocumentClient.from(new DynamoDBClient({}))),
@@ -100,7 +100,6 @@ export function createTestContainer(options?: {
         cognitoClient: asValue(new CognitoIdentityProviderClient({})),
         apiGatewayClient: asValue(new APIGatewayClient({})),
 
-        // JWTKeyService - 実際のクラスを使用（デフォルト）
         jwtKeyService: options?.useRealServices !== false
             ? asClass(JWTKeyService)
                 .singleton()
@@ -117,7 +116,6 @@ export function createTestContainer(options?: {
                 validateJwtAccess: vi.fn(),
             } as any),
 
-        // MasterKeyService - 実際のクラスを使用（デフォルト）
         masterKeyService: options?.useRealServices !== false
             ? asClass(MasterKeyService)
                 .singleton()
@@ -134,7 +132,6 @@ export function createTestContainer(options?: {
                 hasMasterKey: vi.fn(),
             } as any),
 
-        // IntegrationTestService
         integrationTestService: options?.useRealServices !== false
             ? asClass(IntegrationTestService)
                 .singleton()
@@ -154,7 +151,6 @@ export function createTestContainer(options?: {
                 findIntegrationTestApplications: vi.fn(),
             } as any),
 
-        // IntegrationTestProgressService - 実際のクラスを使用（デフォルト）
         integrationTestProgressService: options?.useRealServices !== false
             ? asClass(IntegrationTestProgressService)
                 .singleton()
@@ -170,7 +166,6 @@ export function createTestContainer(options?: {
                 isAllStepsCompleted: vi.fn(),
             } as any),
 
-        // EAApplicationRepository - 実際のクラスを使用（デフォルト）
         eaApplicationRepository: options?.useRealServices !== false
             ? asClass(EAApplicationRepository)
                 .singleton()
@@ -198,12 +193,11 @@ export function createTestContainer(options?: {
                 adjustTTL: vi.fn(),
             } as any),
 
-        // IntegrationTestRepository - 実際のクラスを使用（デフォルト）
         integrationTestRepository: options?.useRealServices !== false
             ? asClass(IntegrationTestRepository)
                 .singleton()
                 .inject(() => ({
-                    dynamoClient: container.resolve('docClient'),
+                    docClient: container.resolve('docClient'),  // 修正: dynamoClient → docClient
                     tableName: process.env.USER_PROFILE_TABLE_NAME || 'user-profiles',
                     logger: container.resolve('logger'),
                 }))
@@ -212,6 +206,23 @@ export function createTestContainer(options?: {
                 updateIntegrationTest: vi.fn(),
                 initializeIntegrationTest: vi.fn(),
                 clearIntegrationTest: vi.fn(),
+                updateSetupTest: vi.fn(),  // 追加
+                updateSetupPhase: vi.fn(), // 追加
+            } as any),
+
+        userProfileRepository: options?.useRealServices !== false
+            ? asClass(UserProfileRepository)
+                .singleton()
+                .inject(() => ({
+                    docClient: container.resolve('docClient'),
+                    tableName: process.env.USER_PROFILE_TABLE_NAME || 'user-profiles',
+                    logger: container.resolve('logger'),
+                }))
+            : asValue({
+                getUserProfile: vi.fn(),
+                createUserProfile: vi.fn(),
+                updateUserProfile: vi.fn(),
+                createOrUpdateUserProfile: vi.fn(),
             } as any),
     });
 

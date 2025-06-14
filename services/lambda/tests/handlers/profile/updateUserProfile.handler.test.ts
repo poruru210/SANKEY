@@ -1,16 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { APIGatewayProxyEvent } from 'aws-lambda';
-import type { AwilixContainer } from 'awilix';
-import type { DIContainer } from '../../../src/types/dependencies';
+import { AwilixContainer } from 'awilix';
 import { createTestContainer } from '../../di/testContainer';
 import { createHandler } from '../../../src/handlers/profile/updateUserProfile.handler';
-import type { UpdateUserProfileHandlerDependencies } from '../../../src/di/types';
-import type { UserProfile } from '../../../src/models/userProfile';
-import { GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { DIContainer, UpdateUserProfileHandlerDependencies } from '../../../src/di/dependencies';
+import { UserProfile } from '../../../src/models/userProfile';
 
 describe('updateUserProfile.handler', () => {
     let container: AwilixContainer<DIContainer>;
-    let mockDocClient: any;
+    let mockUserProfileRepository: any;
     let mockLogger: any;
     let mockTracer: any;
     let handler: any;
@@ -22,14 +20,14 @@ describe('updateUserProfile.handler', () => {
         process.env.USER_PROFILE_TABLE_NAME = 'test-user-profiles';
 
         // テストコンテナから依存関係を取得
-        container = createTestContainer();
-        mockDocClient = container.resolve('docClient');
+        container = createTestContainer({ useRealServices: false });
+        mockUserProfileRepository = container.resolve('userProfileRepository');
         mockLogger = container.resolve('logger');
         mockTracer = container.resolve('tracer');
 
         // ハンドラー用の依存関係を構築
         dependencies = {
-            docClient: mockDocClient,
+            userProfileRepository: mockUserProfileRepository,
             logger: mockLogger,
             tracer: mockTracer
         };
@@ -86,10 +84,8 @@ describe('updateUserProfile.handler', () => {
                 setupPhase: 'TEST'
             };
 
-            const mockSend = vi.fn()
-                .mockResolvedValueOnce({ Item: currentProfile }) // GetCommand
-                .mockResolvedValueOnce({ Attributes: updatedProfile }); // UpdateCommand
-            (mockDocClient.send as any) = mockSend;
+            mockUserProfileRepository.getUserProfile.mockResolvedValue(currentProfile);
+            mockUserProfileRepository.updateUserProfile.mockResolvedValue(updatedProfile);
 
             const event = createTestEvent(userId, requestBody);
 
@@ -104,21 +100,12 @@ describe('updateUserProfile.handler', () => {
             expect(responseBody.message).toBe('Profile updated successfully');
             expect(responseBody.data.setupPhase).toBe('TEST');
 
-            // DynamoDB 呼び出しの確認
-            expect(mockSend).toHaveBeenCalledTimes(2);
-
-            // GetCommand の確認
-            const getCommand = mockSend.mock.calls[0][0];
-            expect(getCommand.constructor.name).toBe('GetCommand');
-            expect(getCommand.input.Key).toEqual({ userId });
-
-            // UpdateCommand の確認
-            const updateCommand = mockSend.mock.calls[1][0];
-            expect(updateCommand.constructor.name).toBe('UpdateCommand');
-            expect(updateCommand.input.Key).toEqual({ userId });
-            expect(updateCommand.input.UpdateExpression).toContain('#setupPhase = :setupPhase');
-            expect(updateCommand.input.UpdateExpression).toContain('#updatedAt = :updatedAt');
-            expect(updateCommand.input.ExpressionAttributeValues[':setupPhase']).toBe('TEST');
+            // Repository 呼び出しの確認
+            expect(mockUserProfileRepository.getUserProfile).toHaveBeenCalledWith(userId);
+            expect(mockUserProfileRepository.updateUserProfile).toHaveBeenCalledWith(
+                userId,
+                requestBody
+            );
 
             // ログの確認
             expect(mockLogger.info).toHaveBeenCalledWith('User profile updated successfully', {
@@ -149,10 +136,8 @@ describe('updateUserProfile.handler', () => {
                 notificationEnabled: false
             };
 
-            const mockSend = vi.fn()
-                .mockResolvedValueOnce({ Item: currentProfile })
-                .mockResolvedValueOnce({ Attributes: updatedProfile });
-            (mockDocClient.send as any) = mockSend;
+            mockUserProfileRepository.getUserProfile.mockResolvedValue(currentProfile);
+            mockUserProfileRepository.updateUserProfile.mockResolvedValue(updatedProfile);
 
             const event = createTestEvent(userId, requestBody);
 
@@ -165,10 +150,11 @@ describe('updateUserProfile.handler', () => {
             const responseBody = JSON.parse(result.body);
             expect(responseBody.data.notificationEnabled).toBe(false);
 
-            // UpdateCommand の確認
-            const updateCommand = mockSend.mock.calls[1][0];
-            expect(updateCommand.input.UpdateExpression).toContain('#notificationEnabled = :notificationEnabled');
-            expect(updateCommand.input.ExpressionAttributeValues[':notificationEnabled']).toBe(false);
+            // Repository 呼び出しの確認
+            expect(mockUserProfileRepository.updateUserProfile).toHaveBeenCalledWith(
+                userId,
+                requestBody
+            );
         });
 
         it('複数のフィールドを同時に更新する', async () => {
@@ -194,10 +180,8 @@ describe('updateUserProfile.handler', () => {
                 notificationEnabled: false
             };
 
-            const mockSend = vi.fn()
-                .mockResolvedValueOnce({ Item: currentProfile })
-                .mockResolvedValueOnce({ Attributes: updatedProfile });
-            (mockDocClient.send as any) = mockSend;
+            mockUserProfileRepository.getUserProfile.mockResolvedValue(currentProfile);
+            mockUserProfileRepository.updateUserProfile.mockResolvedValue(updatedProfile);
 
             const event = createTestEvent(userId, requestBody);
 
@@ -211,10 +195,11 @@ describe('updateUserProfile.handler', () => {
             expect(responseBody.data.setupPhase).toBe('PRODUCTION');
             expect(responseBody.data.notificationEnabled).toBe(false);
 
-            // UpdateCommand の確認
-            const updateCommand = mockSend.mock.calls[1][0];
-            expect(updateCommand.input.UpdateExpression).toContain('#setupPhase = :setupPhase');
-            expect(updateCommand.input.UpdateExpression).toContain('#notificationEnabled = :notificationEnabled');
+            // Repository 呼び出しの確認
+            expect(mockUserProfileRepository.updateUserProfile).toHaveBeenCalledWith(
+                userId,
+                requestBody
+            );
         });
     });
 
@@ -223,10 +208,6 @@ describe('updateUserProfile.handler', () => {
             // Arrange
             const requestBody = { setupPhase: 'TEST' };
             const event = createTestEvent(undefined, requestBody);
-
-            // モック関数を設定（呼ばれないことを確認するため）
-            const mockSend = vi.fn();
-            (mockDocClient.send as any) = mockSend;
 
             // Act
             const result = await handler(event);
@@ -237,8 +218,9 @@ describe('updateUserProfile.handler', () => {
             expect(responseBody.success).toBe(false);
             expect(responseBody.message).toBe('Unauthorized');
 
-            // DynamoDB が呼び出されていないことを確認
-            expect(mockSend).not.toHaveBeenCalled();
+            // Repository が呼び出されていないことを確認
+            expect(mockUserProfileRepository.getUserProfile).not.toHaveBeenCalled();
+            expect(mockUserProfileRepository.updateUserProfile).not.toHaveBeenCalled();
         });
 
         it('リクエストボディがない場合は400を返す', async () => {
@@ -276,8 +258,7 @@ describe('updateUserProfile.handler', () => {
             const userId = 'non-existent-user';
             const requestBody = { setupPhase: 'TEST' };
 
-            const mockSend = vi.fn().mockResolvedValueOnce({ Item: null });
-            (mockDocClient.send as any) = mockSend;
+            mockUserProfileRepository.getUserProfile.mockResolvedValue(null);
 
             const event = createTestEvent(userId, requestBody);
 
@@ -305,8 +286,7 @@ describe('updateUserProfile.handler', () => {
                 setupPhase: 'INVALID_PHASE'
             };
 
-            const mockSend = vi.fn().mockResolvedValueOnce({ Item: currentProfile });
-            (mockDocClient.send as any) = mockSend;
+            mockUserProfileRepository.getUserProfile.mockResolvedValue(currentProfile);
 
             const event = createTestEvent(userId, requestBody);
 
@@ -335,8 +315,7 @@ describe('updateUserProfile.handler', () => {
                 setupPhase: 'PRODUCTION' // SETUP → PRODUCTION は許可されない
             };
 
-            const mockSend = vi.fn().mockResolvedValueOnce({ Item: currentProfile });
-            (mockDocClient.send as any) = mockSend;
+            mockUserProfileRepository.getUserProfile.mockResolvedValue(currentProfile);
 
             const event = createTestEvent(userId, requestBody);
 
@@ -366,8 +345,7 @@ describe('updateUserProfile.handler', () => {
                 notificationEnabled: 'true' // 文字列は無効
             };
 
-            const mockSend = vi.fn().mockResolvedValueOnce({ Item: currentProfile });
-            (mockDocClient.send as any) = mockSend;
+            mockUserProfileRepository.getUserProfile.mockResolvedValue(currentProfile);
 
             const event = createTestEvent(userId, requestBody);
 
@@ -380,13 +358,12 @@ describe('updateUserProfile.handler', () => {
             expect(responseBody.data.errors).toContain('notificationEnabled must be a boolean');
         });
 
-        it('DynamoDB GetCommand エラーの場合は500を返す', async () => {
+        it('Repository getUserProfile エラーの場合は500を返す', async () => {
             // Arrange
             const userId = 'test-user-123';
             const requestBody = { setupPhase: 'TEST' };
 
-            const mockSend = vi.fn().mockRejectedValueOnce(new Error('DynamoDB error'));
-            (mockDocClient.send as any) = mockSend;
+            mockUserProfileRepository.getUserProfile.mockRejectedValue(new Error('DynamoDB error'));
 
             const event = createTestEvent(userId, requestBody);
 
@@ -399,7 +376,7 @@ describe('updateUserProfile.handler', () => {
             expect(responseBody.message).toBe('Failed to update user profile');
         });
 
-        it('DynamoDB UpdateCommand エラーの場合は500を返す', async () => {
+        it('Repository updateUserProfile エラーの場合は500を返す', async () => {
             // Arrange
             const userId = 'test-user-123';
             const currentProfile: UserProfile = {
@@ -412,10 +389,8 @@ describe('updateUserProfile.handler', () => {
 
             const requestBody = { setupPhase: 'TEST' };
 
-            const mockSend = vi.fn()
-                .mockResolvedValueOnce({ Item: currentProfile })
-                .mockRejectedValueOnce(new Error('Update failed'));
-            (mockDocClient.send as any) = mockSend;
+            mockUserProfileRepository.getUserProfile.mockResolvedValue(currentProfile);
+            mockUserProfileRepository.updateUserProfile.mockRejectedValue(new Error('Update failed'));
 
             const event = createTestEvent(userId, requestBody);
 
@@ -459,10 +434,10 @@ describe('updateUserProfile.handler', () => {
 
                 const requestBody = { setupPhase: to };
 
-                const mockSend = vi.fn()
-                    .mockResolvedValueOnce({ Item: currentProfile })
-                    .mockResolvedValueOnce({ Attributes: updatedProfile });
-                (mockDocClient.send as any) = mockSend;
+                mockUserProfileRepository.getUserProfile.mockResolvedValue(currentProfile);
+                if (allowed) {
+                    mockUserProfileRepository.updateUserProfile.mockResolvedValue(updatedProfile);
+                }
 
                 const event = createTestEvent(userId, requestBody);
 
@@ -502,10 +477,8 @@ describe('updateUserProfile.handler', () => {
 
             const requestBody = {}; // 空のオブジェクト
 
-            const mockSend = vi.fn()
-                .mockResolvedValueOnce({ Item: currentProfile })
-                .mockResolvedValueOnce({ Attributes: updatedProfile });
-            (mockDocClient.send as any) = mockSend;
+            mockUserProfileRepository.getUserProfile.mockResolvedValue(currentProfile);
+            mockUserProfileRepository.updateUserProfile.mockResolvedValue(updatedProfile);
 
             const event = createTestEvent(userId, requestBody);
 
@@ -515,9 +488,11 @@ describe('updateUserProfile.handler', () => {
             // Assert
             expect(result.statusCode).toBe(200);
 
-            // UpdateCommand の確認（updatedAtのみ更新される）
-            const updateCommand = mockSend.mock.calls[1][0];
-            expect(updateCommand.input.UpdateExpression).toBe('SET #updatedAt = :updatedAt');
+            // Repository 呼び出しの確認
+            expect(mockUserProfileRepository.updateUserProfile).toHaveBeenCalledWith(
+                userId,
+                requestBody
+            );
         });
     });
 });

@@ -1,12 +1,11 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { injectLambdaContext } from '@aws-lambda-powertools/logger/middleware';
 import { captureLambdaHandler } from '@aws-lambda-powertools/tracer/middleware';
-import { GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import middy from '@middy/core';
 import httpCors from '@middy/http-cors';
 
 import { createProductionContainer } from '../../di/container';
-import { UpdateUserProfileHandlerDependencies } from '../../di/types';
+import { UpdateUserProfileHandlerDependencies } from '../../di/dependencies';
 import {
     createSuccessResponse,
     createValidationErrorResponse,
@@ -20,76 +19,6 @@ import { UserProfile, SetupPhase, isValidSetupPhase, canProgressToPhase } from '
 interface UpdateProfileRequest {
     setupPhase?: SetupPhase;
     notificationEnabled?: boolean;
-}
-
-// UserProfile取得
-async function getUserProfile(
-    userId: string,
-    dependencies: UpdateUserProfileHandlerDependencies
-): Promise<UserProfile | null> {
-    try {
-        const command = new GetCommand({
-            TableName: process.env.USER_PROFILE_TABLE_NAME!,
-            Key: { userId }
-        });
-
-        const result = await dependencies.docClient.send(command);
-        return result.Item as UserProfile || null;
-    } catch (error) {
-        dependencies.logger.error('Failed to get user profile', { error, userId });
-        throw error;
-    }
-}
-
-// UserProfile更新
-async function updateUserProfile(
-    userId: string,
-    updates: UpdateProfileRequest,
-    currentProfile: UserProfile,
-    dependencies: UpdateUserProfileHandlerDependencies
-): Promise<UserProfile> {
-    try {
-        const timestamp = new Date().toISOString();
-
-        // 更新するフィールドを構築
-        const updateExpressions: string[] = [];
-        const expressionAttributeNames: Record<string, string> = {};
-        const expressionAttributeValues: Record<string, any> = {};
-
-        // setupPhase の更新
-        if (updates.setupPhase) {
-            updateExpressions.push('#setupPhase = :setupPhase');
-            expressionAttributeNames['#setupPhase'] = 'setupPhase';
-            expressionAttributeValues[':setupPhase'] = updates.setupPhase;
-        }
-
-        // notificationEnabled の更新
-        if (typeof updates.notificationEnabled === 'boolean') {
-            updateExpressions.push('#notificationEnabled = :notificationEnabled');
-            expressionAttributeNames['#notificationEnabled'] = 'notificationEnabled';
-            expressionAttributeValues[':notificationEnabled'] = updates.notificationEnabled;
-        }
-
-        // updatedAt は常に更新
-        updateExpressions.push('#updatedAt = :updatedAt');
-        expressionAttributeNames['#updatedAt'] = 'updatedAt';
-        expressionAttributeValues[':updatedAt'] = timestamp;
-
-        const command = new UpdateCommand({
-            TableName: process.env.USER_PROFILE_TABLE_NAME!,
-            Key: { userId },
-            UpdateExpression: `SET ${updateExpressions.join(', ')}`,
-            ExpressionAttributeNames: expressionAttributeNames,
-            ExpressionAttributeValues: expressionAttributeValues,
-            ReturnValues: 'ALL_NEW'
-        });
-
-        const result = await dependencies.docClient.send(command);
-        return result.Attributes as UserProfile;
-    } catch (error) {
-        dependencies.logger.error('Failed to update user profile', { error, userId, updates });
-        throw error;
-    }
 }
 
 // バリデーション関数
@@ -106,7 +35,7 @@ function validateUpdateRequest(requestBody: UpdateProfileRequest, currentProfile
     }
 
     // notificationEnabled のバリデーション
-    if (!(requestBody.notificationEnabled === undefined) && typeof requestBody.notificationEnabled !== 'boolean') {
+    if (requestBody.notificationEnabled !== undefined && typeof requestBody.notificationEnabled !== 'boolean') {
         errors.push('notificationEnabled must be a boolean');
     }
 
@@ -149,7 +78,7 @@ export const createHandler = (dependencies: UpdateUserProfileHandlerDependencies
         });
 
         // 現在のプロファイルを取得
-        const currentProfile = await getUserProfile(userId, dependencies);
+        const currentProfile = await dependencies.userProfileRepository.getUserProfile(userId);
         if (!currentProfile) {
             return createNotFoundResponse('User profile not found');
         }
@@ -164,7 +93,10 @@ export const createHandler = (dependencies: UpdateUserProfileHandlerDependencies
         }
 
         // プロファイル更新
-        const updatedProfile = await updateUserProfile(userId, requestBody, currentProfile, dependencies);
+        const updatedProfile = await dependencies.userProfileRepository.updateUserProfile(
+            userId,
+            requestBody
+        );
 
         dependencies.logger.info('User profile updated successfully', {
             userId,
@@ -183,7 +115,7 @@ export const createHandler = (dependencies: UpdateUserProfileHandlerDependencies
 // Production configuration
 const container = createProductionContainer();
 const dependencies: UpdateUserProfileHandlerDependencies = {
-    docClient: container.resolve('docClient'),
+    userProfileRepository: container.resolve('userProfileRepository'),
     logger: container.resolve('logger'),
     tracer: container.resolve('tracer')
 };

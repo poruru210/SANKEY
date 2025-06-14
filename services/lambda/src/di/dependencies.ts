@@ -1,15 +1,60 @@
 import { AwilixContainer } from 'awilix';
-import { DIContainer } from '../types/dependencies';
 import { Logger } from '@aws-lambda-powertools/logger';
+import { Tracer } from '@aws-lambda-powertools/tracer';
 import { SSMClient } from '@aws-sdk/client-ssm';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
-import { IntegrationTestRepository } from '../repositories/integrationTestRepository';
+import { SQSClient } from '@aws-sdk/client-sqs';
+import { CognitoIdentityProviderClient } from '@aws-sdk/client-cognito-identity-provider';
+import { APIGatewayClient } from '@aws-sdk/client-api-gateway';
+
+// Services
+import { IntegrationTestService } from '../services/integrationTestService';
+import { IntegrationTestProgressService } from '../services/integrationTestProgressService';
+import { MasterKeyService } from '../services/masterKeyService';
+import { JWTKeyService } from '../services/jwtKeyService';
+
+// Repositories
 import { EAApplicationRepository } from '../repositories/eaApplicationRepository';
-import {MasterKeyService} from "@lambda/services/masterKeyService";
-import {JWTKeyService} from "@lambda/services/jwtKeyService";
-import {Tracer} from "@aws-lambda-powertools/tracer";
-import {IntegrationTestService} from "@lambda/services/integrationTestService";
-import {SQSClient} from "@aws-sdk/client-sqs";
+import { IntegrationTestRepository } from '../repositories/integrationTestRepository';
+import { UserProfileRepository } from '../repositories/userProfileRepository';
+
+// ========================================
+// DIコンテナの型定義
+// ========================================
+
+/**
+ * DIコンテナの型定義
+ * すべての依存関係を定義
+ */
+export interface DIContainer {
+    // AWS Clients
+    logger: Logger;
+    tracer: Tracer;
+    ssmClient: SSMClient;
+    ddbClient: DynamoDBClient;
+    docClient: DynamoDBDocumentClient;
+    sqsClient: SQSClient;
+    cognitoClient: CognitoIdentityProviderClient;
+    apiGatewayClient: APIGatewayClient;
+
+    // Services
+    integrationTestService: IntegrationTestService;
+    integrationTestProgressService: IntegrationTestProgressService;
+    masterKeyService: MasterKeyService;
+    jwtKeyService: JWTKeyService;
+
+    // Repositories
+    eaApplicationRepository: EAApplicationRepository;
+    integrationTestRepository: IntegrationTestRepository;
+    userProfileRepository: UserProfileRepository;
+
+    // Config
+    environment: string;
+    region: string;
+    tableName: string;
+    integrationTestTableName: string;
+}
 
 /**
  * Awilixのインジェクション用型定義
@@ -20,6 +65,10 @@ export type Cradle = DIContainer;
  * コンテナ型のエイリアス
  */
 export type Container = AwilixContainer<Cradle>;
+
+// ========================================
+// 基本依存関係インターフェース
+// ========================================
 
 /**
  * 基本サービスの依存関係
@@ -63,6 +112,7 @@ export interface IntegrationTestServiceDependencies {
     docClient: DynamoDBDocumentClient;
     integrationTestRepository: IntegrationTestRepository;
     eaApplicationRepository: EAApplicationRepository;
+    userProfileRepository: UserProfileRepository;
     logger: Logger;
 }
 
@@ -76,7 +126,7 @@ export interface IntegrationTestServiceDependencies {
 export interface PostConfirmationHandlerDependencies {
     masterKeyService: MasterKeyService;
     jwtKeyService: JWTKeyService;
-    docClient: DynamoDBDocumentClient;
+    userProfileRepository: UserProfileRepository;
     logger: Logger;
     tracer: Tracer;
 }
@@ -151,7 +201,7 @@ export interface WebhookHandlerDependencies {
  * GetUserProfileHandler の依存関係
  */
 export interface GetUserProfileHandlerDependencies {
-    docClient: DynamoDBDocumentClient;
+    userProfileRepository: UserProfileRepository;
     logger: Logger;
     tracer: Tracer;
 }
@@ -160,31 +210,9 @@ export interface GetUserProfileHandlerDependencies {
  * UpdateUserProfileHandler の依存関係
  */
 export interface UpdateUserProfileHandlerDependencies {
-    docClient: DynamoDBDocumentClient;
+    userProfileRepository: UserProfileRepository;
     logger: Logger;
     tracer: Tracer;
-}
-
-// ========================================
-// リポジトリ固有の依存関係インターフェース
-// ========================================
-
-/**
- * IntegrationTestRepository の依存関係
- */
-export interface IntegrationTestRepositoryDependencies {
-    docClient: DynamoDBDocumentClient;
-    logger: Logger;
-    tableName: string;
-}
-
-/**
- * EAApplicationRepository の依存関係
- */
-export interface EAApplicationRepositoryDependencies {
-    docClient: DynamoDBDocumentClient;
-    logger: Logger;
-    tableName: string;
 }
 
 /**
@@ -236,22 +264,57 @@ export interface TestGasConnectionHandlerDependencies {
     tracer: Tracer;
 }
 
-// renderGasTemplate.handler.ts用の依存関係
+/**
+ * RenderGasTemplateHandler の依存関係
+ */
 export interface RenderGasTemplateHandlerDependencies {
     jwtKeyService: JWTKeyService;
     logger: Logger;
     tracer: Tracer;
 }
 
-// emailNotification.handler.ts用の依存関係
+/**
+ * EmailNotificationHandler の依存関係
+ */
 export interface EmailNotificationHandlerDependencies {
     eaApplicationRepository: EAApplicationRepository;
     masterKeyService: MasterKeyService;
     integrationTestService: IntegrationTestService;
-    docClient: DynamoDBDocumentClient;
+    userProfileRepository: UserProfileRepository;
     ssmClient: SSMClient;
     logger: Logger;
     tracer: Tracer;
+}
+
+// ========================================
+// リポジトリ固有の依存関係インターフェース
+// ========================================
+
+/**
+ * IntegrationTestRepository の依存関係
+ */
+export interface IntegrationTestRepositoryDependencies {
+    docClient: DynamoDBDocumentClient;
+    logger: Logger;
+    tableName: string;
+}
+
+/**
+ * EAApplicationRepository の依存関係
+ */
+export interface EAApplicationRepositoryDependencies {
+    docClient: DynamoDBDocumentClient;
+    logger: Logger;
+    tableName: string;
+}
+
+/**
+ * UserProfileRepository の依存関係
+ */
+export interface UserProfileRepositoryDependencies {
+    docClient: DynamoDBDocumentClient;
+    logger: Logger;
+    tableName: string;
 }
 
 // ========================================

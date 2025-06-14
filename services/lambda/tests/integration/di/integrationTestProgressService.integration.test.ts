@@ -1,10 +1,8 @@
-// tests/integration/di/integrationTestProgressService.integration.test.ts
-
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createProductionContainer, clearContainer } from '../../../src/di/container';
 import { IntegrationTestProgressService } from '../../../src/services/integrationTestProgressService';
 import type { AwilixContainer } from 'awilix';
-import type { DIContainer } from '../../../src/types/dependencies';
+import type { DIContainer } from '../../../src/di/dependencies';
 
 describe('IntegrationTestProgressService 統合テスト', () => {
     let container: AwilixContainer<DIContainer>;

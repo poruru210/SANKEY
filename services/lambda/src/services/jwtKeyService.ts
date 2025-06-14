@@ -3,11 +3,7 @@ import { createHmac, timingSafeEqual } from 'crypto';
 import { Logger } from '@aws-lambda-powertools/logger';
 import { SSMClient, GetParameterCommand, PutParameterCommand } from '@aws-sdk/client-ssm';
 import { webcrypto } from 'crypto';
-
-export interface JWTKeyServiceDependencies {
-    ssmClient: SSMClient;
-    logger: Logger;
-}
+import {JWTKeyServiceDependencies} from "@lambda/di/dependencies";
 
 export interface JWTPayload {
     data: any;

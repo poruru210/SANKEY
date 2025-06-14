@@ -1,11 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { SQSEvent, SQSRecord } from 'aws-lambda';
-import type { AwilixContainer } from 'awilix';
-import type { DIContainer } from '../../../src/types/dependencies';
+import { AwilixContainer } from 'awilix';
 import { createTestContainer } from '../../di/testContainer';
 import { createHandler } from '../../../src/handlers/notifications/emailNotification.handler';
-import type { EmailNotificationHandlerDependencies } from '../../../src/di/types';
-import type { NotificationMessage } from '../../../src/models/eaApplication';
+import { DIContainer, EmailNotificationHandlerDependencies } from '../../../src/di/dependencies';
+import { NotificationMessage } from '../../../src/models/eaApplication';
 
 // Resendのモック
 vi.mock('resend', () => ({
@@ -31,7 +30,7 @@ describe('emailNotification.handler', () => {
     let mockEaApplicationRepository: any;
     let mockMasterKeyService: any;
     let mockIntegrationTestService: any;
-    let mockDocClient: any;
+    let mockUserProfileRepository: any;
     let mockSsmClient: any;
     let mockLogger: any;
     let mockTracer: any;
@@ -51,15 +50,10 @@ describe('emailNotification.handler', () => {
         mockEaApplicationRepository = container.resolve('eaApplicationRepository');
         mockMasterKeyService = container.resolve('masterKeyService');
         mockIntegrationTestService = container.resolve('integrationTestService');
-        mockDocClient = container.resolve('docClient');
+        mockUserProfileRepository = container.resolve('userProfileRepository');
         mockSsmClient = container.resolve('ssmClient');
         mockLogger = container.resolve('logger');
         mockTracer = container.resolve('tracer');
-
-        // mockDocClientのsendメソッドを明示的にモック関数にする
-        if (!mockDocClient.send || typeof mockDocClient.send.mockResolvedValue !== 'function') {
-            mockDocClient.send = vi.fn();
-        }
 
         // mockSsmClientのsendメソッドを明示的にモック関数にする
         if (!mockSsmClient.send || typeof mockSsmClient.send.mockResolvedValue !== 'function') {
@@ -71,7 +65,7 @@ describe('emailNotification.handler', () => {
             eaApplicationRepository: mockEaApplicationRepository,
             masterKeyService: mockMasterKeyService,
             integrationTestService: mockIntegrationTestService,
-            docClient: mockDocClient,
+            userProfileRepository: mockUserProfileRepository,
             ssmClient: mockSsmClient,
             logger: mockLogger,
             tracer: mockTracer
@@ -126,13 +120,10 @@ describe('emailNotification.handler', () => {
             };
 
             const mockUserProfile = {
-                Item: {
-                    PK: 'USER#test-user-id',
-                    SK: 'PROFILE',
-                    testResults: {
-                        integration: {
-                            gasWebappUrl: 'https://script.google.com/test'
-                        }
+                userId: 'test-user-id',
+                testResults: {
+                    integration: {
+                        gasWebappUrl: 'https://script.google.com/test'
                     }
                 }
             };
@@ -159,7 +150,7 @@ describe('emailNotification.handler', () => {
             const { encryptLicense } = await import('../../../src/services/encryption');
             (encryptLicense as any).mockResolvedValue(mockEncryptedLicense);
 
-            mockDocClient.send.mockResolvedValue(mockUserProfile); // getUserProfile
+            mockUserProfileRepository.getUserProfile.mockResolvedValue(mockUserProfile);
 
             // Resend API keyの取得
             mockSsmClient.send.mockResolvedValue({
@@ -281,13 +272,10 @@ describe('emailNotification.handler', () => {
             };
 
             const mockUserProfile = {
-                Item: {
-                    PK: 'USER#test-user-id',
-                    SK: 'PROFILE',
-                    testResults: {
-                        integration: {
-                            gasWebappUrl: 'https://script.google.com/test'
-                        }
+                userId: 'test-user-id',
+                testResults: {
+                    integration: {
+                        gasWebappUrl: 'https://script.google.com/test'
                     }
                 }
             };
@@ -314,7 +302,7 @@ describe('emailNotification.handler', () => {
             const { encryptLicense } = await import('../../../src/services/encryption');
             (encryptLicense as any).mockResolvedValue(mockEncryptedLicense);
 
-            mockDocClient.send.mockResolvedValue(mockUserProfile);
+            mockUserProfileRepository.getUserProfile.mockResolvedValue(mockUserProfile);
 
             mockEaApplicationRepository.activateApplicationWithLicense.mockResolvedValue({
                 ...mockApplication,
@@ -440,7 +428,7 @@ describe('emailNotification.handler', () => {
             (encryptLicense as any).mockResolvedValue('license');
 
             // ユーザープロファイルが見つからない
-            mockDocClient.send.mockResolvedValue({ Item: null });
+            mockUserProfileRepository.getUserProfile.mockResolvedValue(null);
 
             mockSsmClient.send.mockResolvedValue({
                 Parameter: { Value: 'test-api-key' }
@@ -455,7 +443,8 @@ describe('emailNotification.handler', () => {
             mockEaApplicationRepository.activateApplicationWithLicense.mockResolvedValue({
                 ...mockApplication,
                 status: 'Active',
-                licenseKey: 'license'
+                licenseKey: 'license',
+                updatedAt: '2025-01-15T00:00:00Z'
             });
 
             const event = createTestEvent([message]);
@@ -481,17 +470,15 @@ describe('emailNotification.handler', () => {
                 email: 'user@example.com',
                 eaName: 'TestEA',
                 accountNumber: '123456',
-                expiryDate: '2025-12-31T23:59:59Z'
+                expiryDate: '2025-12-31T23:59:59Z',
+                updatedAt: '2025-01-15T00:00:00Z'
             };
 
             const mockUserProfile = {
-                Item: {
-                    PK: 'USER#test-user-id',
-                    SK: 'PROFILE',
-                    testResults: {
-                        integration: {
-                            gasWebappUrl: 'https://script.google.com/test'
-                        }
+                userId: 'test-user-id',
+                testResults: {
+                    integration: {
+                        gasWebappUrl: 'https://script.google.com/test'
                     }
                 }
             };
@@ -506,7 +493,7 @@ describe('emailNotification.handler', () => {
             const { encryptLicense } = await import('../../../src/services/encryption');
             (encryptLicense as any).mockResolvedValue('license');
 
-            mockDocClient.send.mockResolvedValue(mockUserProfile);
+            mockUserProfileRepository.getUserProfile.mockResolvedValue(mockUserProfile);
             mockSsmClient.send.mockResolvedValue({
                 Parameter: { Value: 'test-api-key' }
             });

@@ -1,8 +1,6 @@
-// tests/integration/applicationWorkflow.integration.test.ts
-
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { EAApplicationRepository } from '../../src/repositories/eaApplicationRepository';
-import type { EAApplicationRepositoryDependencies } from '../../src/di/types';
+import type { EAApplicationRepositoryDependencies } from '../../src/di/dependencies';
 import { EAApplication, ApplicationStatus, isTerminalStatus, calculateTTL } from '../../src/models/eaApplication';
 
 describe('Application Workflow Integration Tests with TTL', () => {

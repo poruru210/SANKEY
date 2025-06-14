@@ -5,7 +5,7 @@ import httpCors from '@middy/http-cors';
 import { injectLambdaContext } from '@aws-lambda-powertools/logger/middleware';
 import { captureLambdaHandler } from '@aws-lambda-powertools/tracer/middleware';
 
-import type { RevokeLicenseHandlerDependencies } from '../../di/types';
+import type { RevokeLicenseHandlerDependencies } from '../../di/dependencies';
 import {
     createSuccessResponse,
     createValidationErrorResponse,

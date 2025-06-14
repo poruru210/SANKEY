@@ -7,7 +7,7 @@ import { captureLambdaHandler } from '@aws-lambda-powertools/tracer/middleware';
 
 import { decryptLicense } from '../../services/encryption';
 import { LicensePayloadV1 } from '../../models/licensePayload';
-import type { DecryptLicenseHandlerDependencies } from '../../di/types';
+import type { DecryptLicenseHandlerDependencies } from '../../di/dependencies';
 import {
     createSuccessResponse,
     createValidationErrorResponse,

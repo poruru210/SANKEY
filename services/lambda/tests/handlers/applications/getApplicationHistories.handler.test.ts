@@ -1,10 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { APIGatewayProxyEvent } from 'aws-lambda';
 import type { AwilixContainer } from 'awilix';
-import type { DIContainer } from '../../../src/types/dependencies';
 import { createTestContainer } from '../../di/testContainer';
 import { createHandler } from '../../../src/handlers/applications/getApplicationHistories.handler';
-import type { GetApplicationHistoriesHandlerDependencies } from '../../../src/di/types';
+import type { DIContainer, GetApplicationHistoriesHandlerDependencies } from '../../../src/di/dependencies';
 import type { EAApplicationHistory } from '../../../src/models/eaApplication';
 
 describe('getApplicationHistories.handler', () => {

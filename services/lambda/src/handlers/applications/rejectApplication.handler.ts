@@ -5,7 +5,7 @@ import middy from '@middy/core';
 import httpCors from '@middy/http-cors';
 
 import { createProductionContainer } from '../../di/container';
-import { RejectApplicationHandlerDependencies } from '../../di/types';
+import { RejectApplicationHandlerDependencies } from '../../di/dependencies';
 import {
     createSuccessResponse,
     createValidationErrorResponse,

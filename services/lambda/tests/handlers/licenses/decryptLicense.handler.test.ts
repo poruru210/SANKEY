@@ -1,10 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { APIGatewayProxyEvent } from 'aws-lambda';
-import type { AwilixContainer } from 'awilix';
-import type { DIContainer } from '../../../src/types/dependencies';
+import { AwilixContainer } from 'awilix';
 import { createTestContainer } from '../../di/testContainer';
 import { createHandler } from '../../../src/handlers/licenses/decryptLicense.handler';
-import type { DecryptLicenseHandlerDependencies } from '../../../src/di/types';
+import { DIContainer, DecryptLicenseHandlerDependencies } from '../../../src/di/dependencies';
 import { LicensePayloadV1 } from '../../../src/models/licensePayload';
 
 // decryptLicense関数のモック

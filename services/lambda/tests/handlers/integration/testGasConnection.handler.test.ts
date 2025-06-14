@@ -1,10 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { APIGatewayProxyEvent } from 'aws-lambda';
-import type { AwilixContainer } from 'awilix';
-import type { DIContainer } from '../../../src/types/dependencies';
+import { AwilixContainer } from 'awilix';
 import { createTestContainer } from '../../di/testContainer';
 import { createHandler } from '../../../src/handlers/integration/testGasConnection.handler';
-import type { TestGasConnectionHandlerDependencies } from '../../../src/di/types';
+import { DIContainer, TestGasConnectionHandlerDependencies } from '../../../src/di/dependencies';
 
 describe('testGasConnection.handler', () => {
     let container: AwilixContainer<DIContainer>;

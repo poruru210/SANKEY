@@ -5,7 +5,7 @@ import middy from '@middy/core';
 import httpCors from '@middy/http-cors';
 
 import { createProductionContainer } from '../../di/container';
-import { GetApplicationHistoriesHandlerDependencies } from '../../di/types';
+import { GetApplicationHistoriesHandlerDependencies } from '../../di/dependencies';
 import {
     createSuccessResponse,
     createUnauthorizedResponse,

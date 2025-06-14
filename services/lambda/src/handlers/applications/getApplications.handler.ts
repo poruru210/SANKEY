@@ -5,7 +5,7 @@ import middy from '@middy/core';
 import httpCors from '@middy/http-cors';
 
 import { createProductionContainer } from '../../di/container';
-import { GetApplicationsHandlerDependencies } from '../../di/types';
+import { GetApplicationsHandlerDependencies } from '../../di/dependencies';
 import { EAApplication } from '../../models/eaApplication';
 import {
     createSuccessResponse,

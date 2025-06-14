@@ -1,9 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { APIGatewayProxyEvent } from 'aws-lambda';
 import type { AwilixContainer } from 'awilix';
-import type { DIContainer } from '../../../src/types/dependencies';
 import { createTestContainer } from '../../di/testContainer';
-import type { RenderGasTemplateHandlerDependencies } from '../../../src/di/types';
+import type { DIContainer, RenderGasTemplateHandlerDependencies } from '../../../src/di/dependencies';
 
 // Mustacheのモック
 vi.mock('mustache', () => ({

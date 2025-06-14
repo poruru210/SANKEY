@@ -18,16 +18,8 @@ import {
 import { EAApplication } from '../models/eaApplication';
 import { IntegrationTestRepository } from '../repositories/integrationTestRepository';
 import { EAApplicationRepository } from '../repositories/eaApplicationRepository';
-
-/**
- * DI用の依存関係インターフェース
- */
-export interface IntegrationTestServiceDependencies {
-    docClient: DynamoDBDocumentClient;
-    integrationTestRepository: IntegrationTestRepository;
-    eaApplicationRepository: EAApplicationRepository;
-    logger: Logger;
-}
+import { UserProfileRepository } from '../repositories/userProfileRepository';
+import {IntegrationTestServiceDependencies} from "@lambda/di/dependencies";
 
 /**
  * Service for managing integration tests
@@ -36,6 +28,7 @@ export class IntegrationTestService {
     private readonly docClient: DynamoDBDocumentClient;
     private readonly integrationTestRepository: IntegrationTestRepository;
     private readonly eaApplicationRepository: EAApplicationRepository;
+    private readonly userProfileRepository: UserProfileRepository;
     private readonly logger: Logger;
     private readonly applicationsTableName: string;
 
@@ -46,6 +39,7 @@ export class IntegrationTestService {
         this.docClient = dependencies.docClient;
         this.integrationTestRepository = dependencies.integrationTestRepository;
         this.eaApplicationRepository = dependencies.eaApplicationRepository;
+        this.userProfileRepository = dependencies.userProfileRepository;
         this.logger = dependencies.logger;
         this.applicationsTableName = process.env.TABLE_NAME || 'ea-applications-licenseservicedbstack';
     }
@@ -77,7 +71,7 @@ export class IntegrationTestService {
     async recordTestStarted(userId: string, testId: string): Promise<void> {
         this.logger.info('Recording test started:', { userId, testId });
 
-        const userProfile = await this.integrationTestRepository.getUserProfile(userId);
+        const userProfile = await this.userProfileRepository.getUserProfile(userId);
         if (!userProfile?.testResults?.integration) {
             throw new Error('Integration test not found');
         }
@@ -112,7 +106,7 @@ export class IntegrationTestService {
     ): Promise<void> {
         this.logger.info('Recording progress:', { userId, step, success });
 
-        const userProfile = await this.integrationTestRepository.getUserProfile(userId);
+        const userProfile = await this.userProfileRepository.getUserProfile(userId);
         if (!userProfile?.testResults?.integration) {
             throw new Error('No active integration test found');
         }
@@ -172,7 +166,7 @@ export class IntegrationTestService {
         nextStep?: IntegrationTestStep;
         progress: number;
     }> {
-        const userProfile = await this.integrationTestRepository.getUserProfile(userId);
+        const userProfile = await this.userProfileRepository.getUserProfile(userId);
         const integrationTest = userProfile?.testResults?.integration;
 
         if (!integrationTest) {

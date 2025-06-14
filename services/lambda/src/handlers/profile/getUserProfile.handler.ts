@@ -1,71 +1,17 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { injectLambdaContext } from '@aws-lambda-powertools/logger/middleware';
 import { captureLambdaHandler } from '@aws-lambda-powertools/tracer/middleware';
-import { GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
 import middy from '@middy/core';
 import httpCors from '@middy/http-cors';
 
 import { createProductionContainer } from '../../di/container';
-import { GetUserProfileHandlerDependencies } from '../../di/types';
+import { GetUserProfileHandlerDependencies } from '../../di/dependencies';
 import {
     createSuccessResponse,
     createUnauthorizedResponse,
     createInternalErrorResponse
 } from '../../utils/apiResponse';
-import { UserProfile, createDefaultUserProfile } from '../../models/userProfile';
-
-// UserProfile取得
-async function getUserProfile(
-    userId: string,
-    dependencies: GetUserProfileHandlerDependencies
-): Promise<UserProfile | null> {
-    try {
-        const command = new GetCommand({
-            TableName: process.env.USER_PROFILE_TABLE_NAME!,
-            Key: { userId }
-        });
-
-        const result = await dependencies.docClient.send(command);
-        return result.Item as UserProfile || null;
-    } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        dependencies.logger.error('Failed to get user profile', { error: errorMessage, userId });
-        throw error;
-    }
-}
-
-// 初期UserProfile作成
-async function createInitialUserProfile(
-    userId: string,
-    dependencies: GetUserProfileHandlerDependencies
-): Promise<UserProfile> {
-    try {
-        const defaultProfile = createDefaultUserProfile(userId);
-
-        const command = new PutCommand({
-            TableName: process.env.USER_PROFILE_TABLE_NAME!,
-            Item: defaultProfile,
-            ConditionExpression: 'attribute_not_exists(userId)'
-        });
-
-        await dependencies.docClient.send(command);
-
-        dependencies.logger.info('Default user profile created', { userId });
-        return defaultProfile;
-    } catch (error) {
-        // 既に存在する場合は再取得
-        if (error instanceof Error && error.name === 'ConditionalCheckFailedException') {
-            dependencies.logger.info('User profile already exists, retrieving existing profile', { userId });
-            const existingProfile = await getUserProfile(userId, dependencies);
-            if (existingProfile) {
-                return existingProfile;
-            }
-        }
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        dependencies.logger.error('Failed to create default user profile', { error: errorMessage, userId });
-        throw error;
-    }
-}
+import { createDefaultUserProfile } from '../../models/userProfile';
 
 // ハンドラー作成関数
 export const createHandler = (dependencies: GetUserProfileHandlerDependencies) => async (
@@ -84,12 +30,28 @@ export const createHandler = (dependencies: GetUserProfileHandlerDependencies) =
         dependencies.logger.info('Processing get user profile request', { userId });
 
         // UserProfile取得
-        let userProfile = await getUserProfile(userId, dependencies);
+        let userProfile = await dependencies.userProfileRepository.getUserProfile(userId);
 
         // プロファイルが存在しない場合は初期作成
         if (!userProfile) {
             dependencies.logger.info('User profile not found, creating default profile', { userId });
-            userProfile = await createInitialUserProfile(userId, dependencies);
+            const defaultProfile = createDefaultUserProfile(userId);
+
+            try {
+                await dependencies.userProfileRepository.createUserProfile(defaultProfile);
+                userProfile = defaultProfile;
+            } catch (error) {
+                // 既に存在する場合（競合状態）は再取得
+                if (error instanceof Error && error.message === 'User profile already exists') {
+                    dependencies.logger.info('User profile already exists, retrieving existing profile', { userId });
+                    userProfile = await dependencies.userProfileRepository.getUserProfile(userId);
+                    if (!userProfile) {
+                        throw new Error('Failed to retrieve user profile after creation conflict');
+                    }
+                } else {
+                    throw error;
+                }
+            }
         }
 
         dependencies.logger.info('User profile retrieved successfully', {
@@ -109,7 +71,7 @@ export const createHandler = (dependencies: GetUserProfileHandlerDependencies) =
 // Production configuration
 const container = createProductionContainer();
 const dependencies: GetUserProfileHandlerDependencies = {
-    docClient: container.resolve('docClient'),
+    userProfileRepository: container.resolve('userProfileRepository'),
     logger: container.resolve('logger'),
     tracer: container.resolve('tracer')
 };

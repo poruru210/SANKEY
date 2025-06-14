@@ -11,7 +11,7 @@ import middy from '@middy/core';
 import httpCors from '@middy/http-cors';
 
 import { createProductionContainer } from '../../di/container';
-import { WebhookHandlerDependencies } from '../../di/types';
+import { WebhookHandlerDependencies } from '../../di/dependencies';
 import {
     createSuccessResponse,
     createValidationErrorResponse,

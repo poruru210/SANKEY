@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { APIGatewayProxyEvent } from 'aws-lambda';
-import type { AwilixContainer } from 'awilix';
-import type { DIContainer } from '../../../src/types/dependencies';
+import { AwilixContainer } from 'awilix';
 import { createTestContainer } from '../../di/testContainer';
 import { createHandler } from '../../../src/handlers/licenses/encryptLicense.handler';
-import type { EncryptLicenseHandlerDependencies } from '../../../src/di/types';
-import { LicensePayloadV1, PAYLOAD_VERSIONS } from '../../../src/models/licensePayload';
+import { DIContainer, EncryptLicenseHandlerDependencies } from '../../../src/di/dependencies';
+import { encryptLicense } from '../../../src/services/encryption';
+import { createLicensePayloadV1 } from '../../../src/models/licensePayload';
 
 // encryptLicense関数のモック
 vi.mock('../../../src/services/encryption', () => ({
@@ -23,9 +23,6 @@ vi.mock('../../../src/models/licensePayload', async () => {
         }))
     };
 });
-
-import { encryptLicense } from '../../../src/services/encryption';
-import { createLicensePayloadV1 } from '../../../src/models/licensePayload';
 
 describe('encryptLicense.handler', () => {
     let container: AwilixContainer<DIContainer>;

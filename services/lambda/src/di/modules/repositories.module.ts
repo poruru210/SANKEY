@@ -1,10 +1,11 @@
 // src/di/modules/repositories.module.ts
 import { asClass, AwilixContainer } from 'awilix';
-import { DIContainer } from '../../types/dependencies';
+import { DIContainer } from '../../di/dependencies';
 
 // Repositories
 import { EAApplicationRepository } from '../../repositories/eaApplicationRepository';
 import { IntegrationTestRepository } from '../../repositories/integrationTestRepository';
+import { UserProfileRepository } from '../../repositories/userProfileRepository';
 
 /**
  * リポジトリを登録するモジュール
@@ -24,7 +25,16 @@ export function registerRepositoriesModule(container: AwilixContainer<DIContaine
         integrationTestRepository: asClass(IntegrationTestRepository)
             .singleton()
             .inject(() => ({
-                dynamoClient: container.resolve('docClient'),
+                docClient: container.resolve('docClient'),
+                tableName: process.env.USER_PROFILE_TABLE_NAME || 'user-profiles',
+                logger: container.resolve('logger'),
+            })),
+
+        // UserProfileRepository
+        userProfileRepository: asClass(UserProfileRepository)
+            .singleton()
+            .inject(() => ({
+                docClient: container.resolve('docClient'),
                 tableName: process.env.USER_PROFILE_TABLE_NAME || 'user-profiles',
                 logger: container.resolve('logger'),
             })),

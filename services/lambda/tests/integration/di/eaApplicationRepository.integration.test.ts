@@ -4,7 +4,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createProductionContainer, clearContainer } from '../../../src/di/container';
 import { EAApplicationRepository } from '../../../src/repositories/eaApplicationRepository';
 import type { AwilixContainer } from 'awilix';
-import type { DIContainer } from '../../../src/types/dependencies';
+import type { DIContainer } from '../../../src/di/dependencies';
 
 describe('EAApplicationRepository 統合テスト', () => {
     let container: AwilixContainer<DIContainer>;

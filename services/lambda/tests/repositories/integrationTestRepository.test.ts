@@ -8,7 +8,7 @@ import {
     createDefaultUserProfile,
     createIntegrationTest
 } from '../../src/models/userProfile';
-import type { IntegrationTestRepositoryDependencies } from '../../src/di/types';
+import type { IntegrationTestRepositoryDependencies } from '../../src/di/dependencies';
 
 // Mock DynamoDB
 const dynamoMock = mockClient(DynamoDBDocumentClient);

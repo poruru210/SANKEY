@@ -1,5 +1,5 @@
 import { asClass, AwilixContainer } from 'awilix';
-import { DIContainer } from '../../types/dependencies';
+import { DIContainer } from '../../di/dependencies';
 
 // Services
 import { IntegrationTestService } from '../../services/integrationTestService';
@@ -19,6 +19,7 @@ export function registerServicesModule(container: AwilixContainer<DIContainer>):
                 docClient: container.resolve('docClient'),
                 integrationTestRepository: container.resolve('integrationTestRepository'),
                 eaApplicationRepository: container.resolve('eaApplicationRepository'),
+                userProfileRepository: container.resolve('userProfileRepository'),
                 logger: container.resolve('logger'),
             })),
 

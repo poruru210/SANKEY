@@ -1,16 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { APIGatewayProxyEvent } from 'aws-lambda';
-import type { AwilixContainer } from 'awilix';
-import type { DIContainer } from '../../../src/types/dependencies';
+import { AwilixContainer } from 'awilix';
 import { createTestContainer } from '../../di/testContainer';
 import { createHandler } from '../../../src/handlers/profile/getUserProfile.handler';
-import type { GetUserProfileHandlerDependencies } from '../../../src/di/types';
-import type { UserProfile } from '../../../src/models/userProfile';
-import { GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
+import { DIContainer, GetUserProfileHandlerDependencies } from '../../../src/di/dependencies';
+import { UserProfile } from '../../../src/models/userProfile';
 
 describe('getUserProfile.handler', () => {
     let container: AwilixContainer<DIContainer>;
-    let mockDocClient: any;
+    let mockUserProfileRepository: any;
     let mockLogger: any;
     let mockTracer: any;
     let handler: any;
@@ -22,14 +20,14 @@ describe('getUserProfile.handler', () => {
         process.env.USER_PROFILE_TABLE_NAME = 'test-user-profiles';
 
         // テストコンテナから依存関係を取得
-        container = createTestContainer();
-        mockDocClient = container.resolve('docClient');
+        container = createTestContainer({ useRealServices: false });
+        mockUserProfileRepository = container.resolve('userProfileRepository');
         mockLogger = container.resolve('logger');
         mockTracer = container.resolve('tracer');
 
         // ハンドラー用の依存関係を構築
         dependencies = {
-            docClient: mockDocClient,
+            userProfileRepository: mockUserProfileRepository,
             logger: mockLogger,
             tracer: mockTracer
         };
@@ -82,10 +80,7 @@ describe('getUserProfile.handler', () => {
                 }
             };
 
-            const mockSend = vi.fn().mockResolvedValueOnce({
-                Item: existingProfile
-            });
-            (mockDocClient.send as any) = mockSend;
+            mockUserProfileRepository.getUserProfile.mockResolvedValue(existingProfile);
 
             const event = createTestEvent(userId);
 
@@ -100,20 +95,8 @@ describe('getUserProfile.handler', () => {
             expect(responseBody.message).toBe('Profile retrieved successfully');
             expect(responseBody.data).toEqual(existingProfile);
 
-            // DynamoDB 呼び出しの確認
-            expect(mockSend).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    constructor: expect.objectContaining({
-                        name: 'GetCommand'
-                    })
-                })
-            );
-
-            const getCommand = mockSend.mock.calls[0][0];
-            expect(getCommand.input).toEqual({
-                TableName: 'test-user-profiles',
-                Key: { userId }
-            });
+            // Repository 呼び出しの確認
+            expect(mockUserProfileRepository.getUserProfile).toHaveBeenCalledWith(userId);
 
             // ログの確認
             expect(mockLogger.info).toHaveBeenCalledWith('User profile retrieved successfully', {
@@ -126,12 +109,8 @@ describe('getUserProfile.handler', () => {
             // Arrange
             const userId = 'new-user-456';
 
-            // GetCommand: プロファイルが存在しない
-            // PutCommand: 新規作成成功
-            const mockSend = vi.fn()
-                .mockResolvedValueOnce({ Item: null }) // GetCommand
-                .mockResolvedValueOnce({}); // PutCommand
-            (mockDocClient.send as any) = mockSend;
+            mockUserProfileRepository.getUserProfile.mockResolvedValue(null);
+            mockUserProfileRepository.createUserProfile.mockResolvedValue(undefined);
 
             const event = createTestEvent(userId);
 
@@ -151,27 +130,18 @@ describe('getUserProfile.handler', () => {
                 updatedAt: expect.any(String)
             });
 
-            // DynamoDB 呼び出しの確認
-            expect(mockSend).toHaveBeenCalledTimes(2);
-
-            // GetCommand の確認
-            const getCommand = mockSend.mock.calls[0][0];
-            expect(getCommand.constructor.name).toBe('GetCommand');
-            expect(getCommand.input.Key).toEqual({ userId });
-
-            // PutCommand の確認
-            const putCommand = mockSend.mock.calls[1][0];
-            expect(putCommand.constructor.name).toBe('PutCommand');
-            expect(putCommand.input.TableName).toBe('test-user-profiles');
-            expect(putCommand.input.Item).toMatchObject({
-                userId,
-                setupPhase: 'SETUP',
-                notificationEnabled: true
-            });
-            expect(putCommand.input.ConditionExpression).toBe('attribute_not_exists(userId)');
+            // Repository 呼び出しの確認
+            expect(mockUserProfileRepository.getUserProfile).toHaveBeenCalledWith(userId);
+            expect(mockUserProfileRepository.createUserProfile).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    userId,
+                    setupPhase: 'SETUP',
+                    notificationEnabled: true
+                })
+            );
 
             // ログの確認
-            expect(mockLogger.info).toHaveBeenCalledWith('Default user profile created', { userId });
+            expect(mockLogger.info).toHaveBeenCalledWith('User profile not found, creating default profile', { userId });
         });
 
         it('プロファイル作成時に競合状態が発生した場合は既存のプロファイルを取得する', async () => {
@@ -185,20 +155,13 @@ describe('getUserProfile.handler', () => {
                 updatedAt: '2025-01-01T00:00:00Z'
             };
 
-            // ConditionalCheckFailedException エラーの作成
-            const conditionalCheckError = Object.assign(
-                new Error('The conditional request failed'),
-                { name: 'ConditionalCheckFailedException' }
-            );
+            mockUserProfileRepository.getUserProfile
+                .mockResolvedValueOnce(null) // 最初の取得
+                .mockResolvedValueOnce(existingProfile); // 競合後の再取得
 
-            // GetCommand: プロファイルが存在しない
-            // PutCommand: 競合エラー
-            // GetCommand: 既存プロファイルを取得
-            const mockSend = vi.fn()
-                .mockResolvedValueOnce({ Item: null }) // 最初のGetCommand
-                .mockRejectedValueOnce(conditionalCheckError) // PutCommand
-                .mockResolvedValueOnce({ Item: existingProfile }); // 2回目のGetCommand
-            (mockDocClient.send as any) = mockSend;
+            mockUserProfileRepository.createUserProfile.mockRejectedValue(
+                new Error('User profile already exists')
+            );
 
             const event = createTestEvent(userId);
 
@@ -212,8 +175,9 @@ describe('getUserProfile.handler', () => {
             expect(responseBody.success).toBe(true);
             expect(responseBody.data).toEqual(existingProfile);
 
-            // DynamoDB 呼び出しの確認
-            expect(mockSend).toHaveBeenCalledTimes(3);
+            // Repository 呼び出しの確認
+            expect(mockUserProfileRepository.getUserProfile).toHaveBeenCalledTimes(2);
+            expect(mockUserProfileRepository.createUserProfile).toHaveBeenCalledTimes(1);
 
             // ログの確認
             expect(mockLogger.info).toHaveBeenCalledWith(
@@ -228,10 +192,6 @@ describe('getUserProfile.handler', () => {
             // Arrange
             const event = createTestEvent(); // userIdなし
 
-            // モック関数を設定（呼ばれないことを確認するため）
-            const mockSend = vi.fn();
-            (mockDocClient.send as any) = mockSend;
-
             // Act
             const result = await handler(event);
 
@@ -241,8 +201,8 @@ describe('getUserProfile.handler', () => {
             expect(responseBody.success).toBe(false);
             expect(responseBody.message).toBe('Unauthorized');
 
-            // DynamoDB が呼び出されていないことを確認
-            expect(mockSend).not.toHaveBeenCalled();
+            // Repository が呼び出されていないことを確認
+            expect(mockUserProfileRepository.getUserProfile).not.toHaveBeenCalled();
         });
 
         it('DynamoDB GetCommand エラーの場合は500を返す', async () => {
@@ -250,8 +210,7 @@ describe('getUserProfile.handler', () => {
             const userId = 'test-user-123';
             const dbError = new Error('DynamoDB connection failed');
 
-            const mockSend = vi.fn().mockRejectedValueOnce(dbError);
-            (mockDocClient.send as any) = mockSend;
+            mockUserProfileRepository.getUserProfile.mockRejectedValue(dbError);
 
             const event = createTestEvent(userId);
 
@@ -266,8 +225,8 @@ describe('getUserProfile.handler', () => {
 
             // エラーログの確認
             expect(mockLogger.error).toHaveBeenCalledWith(
-                'Failed to get user profile',
-                { error: 'DynamoDB connection failed', userId }
+                'Error getting user profile',
+                { error: 'DynamoDB connection failed' }
             );
         });
 
@@ -276,10 +235,8 @@ describe('getUserProfile.handler', () => {
             const userId = 'new-user-456';
             const putError = new Error('Failed to put item');
 
-            const mockSend = vi.fn()
-                .mockResolvedValueOnce({ Item: null }) // GetCommand
-                .mockRejectedValueOnce(putError); // PutCommand
-            (mockDocClient.send as any) = mockSend;
+            mockUserProfileRepository.getUserProfile.mockResolvedValue(null);
+            mockUserProfileRepository.createUserProfile.mockRejectedValue(putError);
 
             const event = createTestEvent(userId);
 
@@ -294,26 +251,24 @@ describe('getUserProfile.handler', () => {
 
             // エラーログの確認
             expect(mockLogger.error).toHaveBeenCalledWith(
-                'Failed to create default user profile',
-                { error: 'Failed to put item', userId }
+                'Error getting user profile',
+                { error: 'Failed to put item' }
             );
         });
 
-        it('環境変数USER_PROFILE_TABLE_NAMEが設定されていない場合でもundefinedでエラーにならない', async () => {
+        it('環境変数USER_PROFILE_TABLE_NAMEが設定されていない場合でもエラーにならない', async () => {
             // Arrange
             delete process.env.USER_PROFILE_TABLE_NAME;
             const userId = 'test-user-123';
+            const profile: UserProfile = {
+                userId,
+                setupPhase: 'SETUP',
+                notificationEnabled: true,
+                createdAt: '2025-01-01T00:00:00Z',
+                updatedAt: '2025-01-01T00:00:00Z'
+            };
 
-            const mockSend = vi.fn().mockResolvedValueOnce({
-                Item: {
-                    userId,
-                    setupPhase: 'SETUP',
-                    notificationEnabled: true,
-                    createdAt: '2025-01-01T00:00:00Z',
-                    updatedAt: '2025-01-01T00:00:00Z'
-                }
-            });
-            (mockDocClient.send as any) = mockSend;
+            mockUserProfileRepository.getUserProfile.mockResolvedValue(profile);
 
             const event = createTestEvent(userId);
 
@@ -323,25 +278,21 @@ describe('getUserProfile.handler', () => {
             // Assert
             expect(result.statusCode).toBe(200);
 
-            // TableName が undefined で呼び出されることを確認
-            const getCommand = mockSend.mock.calls[0][0];
-            expect(getCommand.input.TableName).toBeUndefined();
+            const responseBody = JSON.parse(result.body);
+            expect(responseBody.data).toEqual(profile);
         });
 
         it('競合解決時に既存プロファイルも取得できない場合は500を返す', async () => {
             // Arrange
             const userId = 'concurrent-user-error';
 
-            const conditionalCheckError = Object.assign(
-                new Error('The conditional request failed'),
-                { name: 'ConditionalCheckFailedException' }
-            );
+            mockUserProfileRepository.getUserProfile
+                .mockResolvedValueOnce(null) // 最初の取得
+                .mockResolvedValueOnce(null); // 競合後の再取得も失敗
 
-            const mockSend = vi.fn()
-                .mockResolvedValueOnce({ Item: null }) // 最初のGetCommand
-                .mockRejectedValueOnce(conditionalCheckError) // PutCommand
-                .mockResolvedValueOnce({ Item: null }); // 2回目のGetCommand（nullを返す）
-            (mockDocClient.send as any) = mockSend;
+            mockUserProfileRepository.createUserProfile.mockRejectedValue(
+                new Error('User profile already exists')
+            );
 
             const event = createTestEvent(userId);
 
@@ -353,6 +304,9 @@ describe('getUserProfile.handler', () => {
             const responseBody = JSON.parse(result.body);
             expect(responseBody.success).toBe(false);
             expect(responseBody.message).toBe('Failed to get user profile');
+            // エラーデータは data フィールドの中にある
+            expect(responseBody.data).toBeDefined();
+            expect(responseBody.data.error).toContain('Failed to retrieve user profile after creation conflict');
         });
     });
 
@@ -390,10 +344,7 @@ describe('getUserProfile.handler', () => {
                 }
             };
 
-            const mockSend = vi.fn().mockResolvedValueOnce({
-                Item: profileWithTests
-            });
-            (mockDocClient.send as any) = mockSend;
+            mockUserProfileRepository.getUserProfile.mockResolvedValue(profileWithTests);
 
             const event = createTestEvent(userId);
 

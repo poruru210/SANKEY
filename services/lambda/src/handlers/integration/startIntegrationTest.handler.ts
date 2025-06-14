@@ -11,7 +11,7 @@ import middy from '@middy/core';
 import httpCors from '@middy/http-cors';
 
 import { createProductionContainer } from '../../di/container';
-import { StartIntegrationTestHandlerDependencies } from '../../di/types';
+import { StartIntegrationTestHandlerDependencies } from '../../di/dependencies';
 import {
     createSuccessResponse,
     createValidationErrorResponse,

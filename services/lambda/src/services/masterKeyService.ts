@@ -1,14 +1,7 @@
 import { SSMClient, GetParameterCommand, PutParameterCommand } from '@aws-sdk/client-ssm';
 import { webcrypto } from 'crypto';
 import { Logger } from '@aws-lambda-powertools/logger';
-
-/**
- * DI用の依存関係インターフェース
- */
-export interface MasterKeyServiceDependencies {
-    ssmClient: SSMClient;
-    logger: Logger;
-}
+import {MasterKeyServiceDependencies} from "@lambda/di/dependencies";
 
 export class MasterKeyService {
     private readonly ssmClient: SSMClient;

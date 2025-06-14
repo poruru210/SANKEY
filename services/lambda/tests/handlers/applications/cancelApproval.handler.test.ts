@@ -1,10 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { APIGatewayProxyEvent } from 'aws-lambda';
 import type { AwilixContainer } from 'awilix';
-import type { DIContainer } from '../../../src/types/dependencies';
 import { createTestContainer } from '../../di/testContainer';
 import { createHandler } from '../../../src/handlers/applications/cancelApproval.handler';
-import type { CancelApprovalHandlerDependencies } from '../../../src/di/types';
+import type { DIContainer, CancelApprovalHandlerDependencies } from '../../../src/di/dependencies';
 import type { EAApplication } from '../../../src/models/eaApplication';
 
 describe('cancelApproval.handler', () => {

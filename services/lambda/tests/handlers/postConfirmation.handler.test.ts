@@ -1,10 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { PostConfirmationTriggerEvent } from 'aws-lambda';
-import type { AwilixContainer } from 'awilix';
-import type { DIContainer } from '../../src/types/dependencies';
+import { AwilixContainer } from 'awilix';
 import { createTestContainer } from '../di/testContainer';
 import { createHandler } from '../../src/handlers/postConfirmation.handler';
-import type { PostConfirmationHandlerDependencies } from '../../src/di/types';
+import { DIContainer, PostConfirmationHandlerDependencies } from '../../src/di/dependencies';
 
 // Mock event data
 const mockEvent: PostConfirmationTriggerEvent = {
@@ -30,7 +29,7 @@ describe('postConfirmation.handler', () => {
   let container: AwilixContainer<DIContainer>;
   let mockMasterKeyService: any;
   let mockJWTKeyService: any;
-  let mockDocClient: any;
+  let mockUserProfileRepository: any;
   let mockLogger: any;
   let mockTracer: any;
   let handler: any;
@@ -47,7 +46,7 @@ describe('postConfirmation.handler', () => {
     container = createTestContainer({ useRealServices: false });
     mockMasterKeyService = container.resolve('masterKeyService');
     mockJWTKeyService = container.resolve('jwtKeyService');
-    mockDocClient = container.resolve('docClient');
+    mockUserProfileRepository = container.resolve('userProfileRepository');
     mockLogger = container.resolve('logger');
     mockTracer = container.resolve('tracer');
 
@@ -55,7 +54,7 @@ describe('postConfirmation.handler', () => {
     dependencies = {
       masterKeyService: mockMasterKeyService,
       jwtKeyService: mockJWTKeyService,
-      docClient: mockDocClient,
+      userProfileRepository: mockUserProfileRepository,
       logger: mockLogger,
       tracer: mockTracer
     };
@@ -71,23 +70,20 @@ describe('postConfirmation.handler', () => {
   });
 
   it('creates master key, jwt secret and user profile successfully', async () => {
-    // AWS SDKクライアントのモック
-    const mockSend = vi.fn().mockResolvedValue(undefined);
-    (mockDocClient.send as any) = mockSend;
+    // UserProfileRepositoryのモック
+    mockUserProfileRepository.createUserProfile.mockResolvedValue(undefined);
 
     const result = await handler(mockEvent);
 
     expect(mockMasterKeyService.ensureMasterKeyExists).toHaveBeenCalledWith('user-123', 'test@example.com');
     expect(mockJWTKeyService.ensureJwtSecretExists).toHaveBeenCalledWith('user-123', 'test@example.com');
-    expect(mockSend).toHaveBeenCalledWith(
+    expect(mockUserProfileRepository.createUserProfile).toHaveBeenCalledWith(
         expect.objectContaining({
-          input: expect.objectContaining({
-            TableName: 'test-user-profile-table',
-            Item: expect.objectContaining({
-              userId: 'user-123',
-              setupPhase: 'SETUP'
-            })
-          })
+          userId: 'user-123',
+          setupPhase: 'SETUP',
+          notificationEnabled: true,
+          createdAt: expect.any(String),
+          updatedAt: expect.any(String)
         })
     );
 
@@ -95,18 +91,19 @@ describe('postConfirmation.handler', () => {
   });
 
   it('handles existing user profile gracefully', async () => {
-    // ConditionalCheckFailedExceptionのモック
-    const conditionalError = Object.assign(
-        new Error('The conditional request failed'),
-        { name: 'ConditionalCheckFailedException' }
+    // User profile already existsエラーのモック
+    mockUserProfileRepository.createUserProfile.mockRejectedValue(
+        new Error('User profile already exists')
     );
-    const mockSend = vi.fn().mockRejectedValue(conditionalError);
-    (mockDocClient.send as any) = mockSend;
 
     const result = await handler(mockEvent);
 
     expect(mockMasterKeyService.ensureMasterKeyExists).toHaveBeenCalled();
     expect(mockJWTKeyService.ensureJwtSecretExists).toHaveBeenCalled();
+    expect(mockLogger.info).toHaveBeenCalledWith(
+        'UserProfile already exists, skipping creation',
+        { userId: 'user-123', email: 'test@example.com' }
+    );
     expect(result).toEqual(mockEvent);
   });
 
@@ -120,9 +117,7 @@ describe('postConfirmation.handler', () => {
 
     expect(mockMasterKeyService.ensureMasterKeyExists).toHaveBeenCalled();
     expect(mockJWTKeyService.ensureJwtSecretExists).toHaveBeenCalled();
-    // mockDocClientのsendメソッドをモック化
-    expect(mockDocClient.send).toBeDefined();
-    // sendが呼ばれていないことを別の方法で確認
+    expect(mockUserProfileRepository.createUserProfile).not.toHaveBeenCalled();
     expect(mockLogger.debug).toHaveBeenCalledWith(
         'USER_PROFILE_TABLE_NAME not configured, skipping UserProfile creation'
     );
@@ -145,8 +140,7 @@ describe('postConfirmation.handler', () => {
 
   it('logs user profile creation error but does not throw for non-conditional errors', async () => {
     const dbError = new Error('DynamoDB error');
-    const mockSend = vi.fn().mockRejectedValue(dbError);
-    (mockDocClient.send as any) = mockSend;
+    mockUserProfileRepository.createUserProfile.mockRejectedValue(dbError);
 
     // エラーが発生してもハンドラーは正常終了する
     const result = await handler(mockEvent);

@@ -1,12 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { APIGatewayProxyEvent } from 'aws-lambda';
 import type { AwilixContainer } from 'awilix';
-import type { DIContainer } from '../../../src/types/dependencies';
 import { createTestContainer } from '../../di/testContainer';
 import { createHandler } from '../../../src/handlers/applications/approveApplication.handler';
-import type { ApproveApplicationHandlerDependencies } from '../../../src/di/types';
+import type { DIContainer, ApproveApplicationHandlerDependencies } from '../../../src/di/dependencies';
 import type { EAApplication } from '../../../src/models/eaApplication';
-import { SendMessageCommand } from '@aws-sdk/client-sqs';
 
 describe('approveApplication.handler', () => {
     let container: AwilixContainer<DIContainer>;

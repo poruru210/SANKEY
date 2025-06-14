@@ -1,10 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi, MockedFunction } from 'vitest';
 import { APIGatewayProxyEvent, Context } from 'aws-lambda';
 import type { AwilixContainer } from 'awilix';
-import type { DIContainer } from '../../../src/types/dependencies';
 import { createTestContainer } from '../../di/testContainer';
 import { createHandler } from '../../../src/handlers/integration/startIntegrationTest.handler';
-import type { StartIntegrationTestHandlerDependencies } from '../../../src/di/types';
+import type { DIContainer, StartIntegrationTestHandlerDependencies } from '../../../src/di/dependencies';
 
 // グローバルfetchのモック
 global.fetch = vi.fn();

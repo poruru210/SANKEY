@@ -10,30 +10,14 @@ import { Tracer } from '@aws-lambda-powertools/tracer';
 import { injectLambdaContext } from '@aws-lambda-powertools/logger/middleware';
 import { captureLambdaHandler } from '@aws-lambda-powertools/tracer/middleware';
 import { GetParameterCommand } from '@aws-sdk/client-ssm';
-import { GetCommand } from '@aws-sdk/lib-dynamodb';
 import { Resend } from 'resend';
 import middy from '@middy/core';
 
 import { encryptLicense } from '../../services/encryption';
 import { createLicensePayloadV1, LicensePayloadV1 } from '../../models/licensePayload';
 import { createProductionContainer } from '../../di/container';
-import type { EmailNotificationHandlerDependencies } from '../../di/types';
+import type { EmailNotificationHandlerDependencies } from '../../di/dependencies';
 import type { EAApplication, NotificationMessage } from '../../models/eaApplication';
-import type { UserProfile } from '../../models/userProfile';
-import type { EAApplicationRepository } from '../../repositories/eaApplicationRepository';
-import type { MasterKeyService } from '../../services/masterKeyService';
-import type { IntegrationTestService } from '../../services/integrationTestService';
-import type { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
-import type { SSMClient } from '@aws-sdk/client-ssm';
-
-// ========================================
-// Configuration
-// ========================================
-
-// Environment variables
-const USER_PROFILE_TABLE_NAME = process.env.USER_PROFILE_TABLE_NAME;
-const EMAIL_FROM_ADDRESS = process.env.EMAIL_FROM_ADDRESS || 'noreply@sankey.niraikanai.trade';
-const RESEND_API_KEY_PARAM = process.env.RESEND_API_KEY_PARAM;
 
 // ========================================
 // Types
@@ -59,43 +43,11 @@ export const createHandler = (deps: EmailNotificationHandlerDependencies) => {
         eaApplicationRepository,
         masterKeyService,
         integrationTestService,
-        docClient,
+        userProfileRepository,  // 追加
         ssmClient,
         logger,
         tracer
     } = deps;
-
-    // ========================================
-    // User Profile Access
-    // ========================================
-
-    /**
-     * Retrieves user profile from DynamoDB
-     */
-    async function getUserProfile(userId: string): Promise<UserProfile | null> {
-        const USER_PROFILE_TABLE_NAME = process.env.USER_PROFILE_TABLE_NAME;
-
-        if (!USER_PROFILE_TABLE_NAME) {
-            logger.debug('USER_PROFILE_TABLE_NAME not configured');
-            return null;
-        }
-
-        try {
-            const command = new GetCommand({
-                TableName: USER_PROFILE_TABLE_NAME,
-                Key: {
-                    PK: `USER#${userId}`,
-                    SK: 'PROFILE'
-                }
-            });
-
-            const result = await docClient.send(command);
-            return result.Item as UserProfile || null;
-        } catch (error) {
-            logger.error('Failed to get user profile', { error, userId });
-            return null;
-        }
-    }
 
     // ========================================
     // GAS Notification
@@ -166,8 +118,8 @@ export const createHandler = (deps: EmailNotificationHandlerDependencies) => {
                 testId
             });
 
-            // Get user profile for webhook URL
-            const userProfile = await getUserProfile(application.userId);
+            // Get user profile for webhook URL using repository
+            const userProfile = await userProfileRepository.getUserProfile(application.userId);
             if (!userProfile) {
                 logger.debug('UserProfile not found', { userId: application.userId });
                 return;
@@ -506,7 +458,7 @@ const dependencies: EmailNotificationHandlerDependencies = {
     eaApplicationRepository: container.resolve('eaApplicationRepository'),
     masterKeyService: container.resolve('masterKeyService'),
     integrationTestService: container.resolve('integrationTestService'),
-    docClient: container.resolve('docClient'),
+    userProfileRepository: container.resolve('userProfileRepository'),  // 追加
     ssmClient: container.resolve('ssmClient'),
     logger: container.resolve('logger') as Logger,
     tracer: container.resolve('tracer') as Tracer

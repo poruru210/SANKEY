@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { AwilixContainer } from 'awilix';
-import { DIContainer } from '../../../src/types/dependencies';
+import { DIContainer } from '../../../src/di/dependencies';
 import { createProductionContainer, clearContainer } from '../../../src/di/container';
 import { MasterKeyService } from '../../../src/services/masterKeyService';
 

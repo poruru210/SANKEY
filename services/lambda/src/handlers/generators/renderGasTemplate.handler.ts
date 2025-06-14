@@ -12,7 +12,7 @@ import { injectLambdaContext } from '@aws-lambda-powertools/logger/middleware';
 import { captureLambdaHandler } from '@aws-lambda-powertools/tracer/middleware';
 
 import { createProductionContainer } from '../../di/container';
-import type { RenderGasTemplateHandlerDependencies } from '../../di/types';
+import type { RenderGasTemplateHandlerDependencies } from '../../di/dependencies';
 
 // テンプレートファイルの読み込みを関数内に移動
 const loadTemplate = (): string => {
