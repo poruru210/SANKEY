@@ -3,14 +3,11 @@
  * TDDアプローチ: まずテストを作成し、実装が期待通りに動作することを確認
  */
 
-const { describe, test, expect, beforeEach, afterEach } = require('@jest/globals');
-const readline = require('readline');
-
-// jestオブジェクトはグローバルで利用可能なので、個別にインポートする必要はありません
-// const { jest } = require('@jest/globals'); // この行を削除
+import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest';
+import readline from 'readline';
 
 // テスト対象のモジュール（まだ実装されていないものも含む）
-const {
+import {
     // ログ機能
     log,
     colors,
@@ -37,10 +34,10 @@ const {
     handleMenuError,
     showProgress,
     getBatchMenuItems
-}  = require('../../core/utils');
+} from '../../core/utils.js';
 
 // モック設定
-jest.mock('readline');
+vi.mock('readline');
 
 describe('ログ機能', () => {
     let consoleLogSpy;
@@ -48,13 +45,13 @@ describe('ログ機能', () => {
     let stdoutWriteSpy;
 
     beforeEach(() => {
-        consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
-        consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
-        stdoutWriteSpy = jest.spyOn(process.stdout, 'write').mockImplementation();
+        consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+        consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        stdoutWriteSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => {});
     });
 
     afterEach(() => {
-        jest.restoreAllMocks();
+        vi.restoreAllMocks();
     });
 
     describe('log オブジェクト', () => {
@@ -179,29 +176,29 @@ describe('CLIヘルパー機能', () => {
 
     beforeEach(() => {
         mockInterface = {
-            question: jest.fn(),
-            close: jest.fn()
+            question: vi.fn(),
+            close: vi.fn()
         };
         readline.createInterface.mockReturnValue(mockInterface);
     });
 
     afterEach(() => {
-        jest.clearAllMocks();
+        vi.clearAllMocks();
     });
 
     describe('Timer クラス', () => {
         beforeEach(() => {
-            jest.useFakeTimers();
+            vi.useFakeTimers();
         });
 
         afterEach(() => {
-            jest.useRealTimers();
+            vi.useRealTimers();
         });
 
         test('経過時間を正しく計測する', () => {
             const timer = new Timer();
             
-            jest.advanceTimersByTime(1500);
+            vi.advanceTimersByTime(1500);
             expect(timer.elapsed()).toBe(1500);
         });
 
@@ -209,22 +206,22 @@ describe('CLIヘルパー機能', () => {
             const timer = new Timer();
             
             // ミリ秒表示
-            jest.advanceTimersByTime(500);
+            vi.advanceTimersByTime(500);
             expect(timer.elapsedFormatted()).toBe('500ms');
             
             // 秒表示
-            jest.advanceTimersByTime(1500); // 合計2000ms
+            vi.advanceTimersByTime(1500); // 合計2000ms
             expect(timer.elapsedFormatted()).toBe('2.0s');
             
             // 分秒表示
-            jest.advanceTimersByTime(58000); // 合計60000ms = 1分
+            vi.advanceTimersByTime(58000); // 合計60000ms = 1分
             expect(timer.elapsedFormatted()).toBe('1m 0s');
         });
     });
 
     describe('validateOptions()', () => {
         test('必須オプションが存在する場合は正常に動作する', () => {
-            const mockExit = jest.spyOn(process, 'exit').mockImplementation();
+            const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {});
             
             const options = { profile: 'test-profile', region: 'us-west-2' };
             validateOptions(options, ['profile']);
@@ -234,8 +231,8 @@ describe('CLIヘルパー機能', () => {
         });
 
         test('必須オプションが欠けている場合はエラーを出力してexitする', () => {
-            const mockExit = jest.spyOn(process, 'exit').mockImplementation();
-            const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+            const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {});
+            const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
             
             const options = { region: 'us-west-2' };
             validateOptions(options, ['profile']);
@@ -313,7 +310,7 @@ describe('CLIヘルパー機能', () => {
         });
 
         test('範囲外の数値の場合、再度プロンプトを表示する', async () => {
-            const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+            const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
             
             mockInterface.question
                 .mockImplementationOnce((query, callback) => callback('150'))
@@ -349,12 +346,12 @@ describe('メニュー機能', () => {
         let consoleClearSpy;
 
         beforeEach(() => {
-            consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
-            consoleClearSpy = jest.spyOn(console, 'clear').mockImplementation();
+            consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+            consoleClearSpy = vi.spyOn(console, 'clear').mockImplementation(() => {});
         });
 
         afterEach(() => {
-            jest.restoreAllMocks();
+            vi.restoreAllMocks();
         });
 
         test('進捗メッセージを表示する', () => {
@@ -384,21 +381,21 @@ describe('エラーハンドリング', () => {
     let consoleErrorSpy;
 
     beforeEach(() => {
-        consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
-        consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+        consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+        consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     });
 
     afterEach(() => {
-        jest.restoreAllMocks();
+        vi.restoreAllMocks();
     });
 
     describe('handleMenuError()', () => {
         test('基本的なエラーを適切に表示する', async () => {
             const mockInterface = {
-                question: jest.fn((query, callback) => callback('')),
-                close: jest.fn()
+                question: vi.fn((query, callback) => callback('')),
+                close: vi.fn()
             };
-            readline.createInterface = jest.fn().mockReturnValue(mockInterface);
+            readline.createInterface = vi.fn().mockReturnValue(mockInterface);
 
             const error = new Error('Test error');
             await handleMenuError(error);
@@ -410,10 +407,10 @@ describe('エラーハンドリング', () => {
 
         test('showStackオプションがtrueの場合、スタックトレースを表示する', async () => {
             const mockInterface = {
-                question: jest.fn((query, callback) => callback('')),
-                close: jest.fn()
+                question: vi.fn((query, callback) => callback('')),
+                close: vi.fn()
             };
-            readline.createInterface = jest.fn().mockReturnValue(mockInterface);
+            readline.createInterface = vi.fn().mockReturnValue(mockInterface);
 
             const error = new Error('Test error');
             await handleMenuError(error, { showStack: true });

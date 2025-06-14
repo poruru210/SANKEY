@@ -2,7 +2,7 @@
  * カスタムエラークラス定義
  */
 
-class BaseError extends Error {
+export class BaseError extends Error {
     constructor(message, cause = null) {
         super(message);
         this.name = this.constructor.name;
@@ -15,13 +15,13 @@ class BaseError extends Error {
     }
 }
 
-class ConfigurationError extends BaseError {
+export class ConfigurationError extends BaseError {
     constructor(message, cause = null) {
         super(message, cause);
     }
 }
 
-class ApiError extends BaseError {
+export class ApiError extends BaseError {
     constructor(message, serviceName = 'API', statusCode = null, cause = null) {
         super(message, cause);
         this.serviceName = serviceName;
@@ -29,7 +29,7 @@ class ApiError extends BaseError {
     }
 }
 
-class ResourceNotFoundError extends BaseError {
+export class ResourceNotFoundError extends BaseError {
     constructor(resourceType, resourceIdentifier, cause = null) {
         super(`${resourceType} '${resourceIdentifier}' not found.`, cause);
         this.resourceType = resourceType;
@@ -37,7 +37,7 @@ class ResourceNotFoundError extends BaseError {
     }
 }
 
-class CdkNotDeployedError extends ConfigurationError {
+export class CdkNotDeployedError extends ConfigurationError {
     constructor(missingResources = [], environment = null, cause = null) {
         const envMessage = environment ? ` for environment '${environment}'` : '';
         let message = `Required CDK resources are not deployed${envMessage}.`;
@@ -49,11 +49,3 @@ class CdkNotDeployedError extends ConfigurationError {
         this.environment = environment;
     }
 }
-
-module.exports = {
-    BaseError,
-    ConfigurationError,
-    ApiError,
-    ResourceNotFoundError,
-    CdkNotDeployedError
-};

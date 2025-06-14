@@ -3,18 +3,18 @@
  * vercel-helpers + vercel-env-module + env-local-module を統合
  */
 
-const crypto = require('crypto');
-const fs = require('fs').promises;
-const { log } = require('../core/utils');
-const { 
+import crypto from 'crypto';
+import { promises as fs } from 'fs';
+import { log } from '../core/utils.js';
+import { 
     CUSTOM_DOMAINS, 
     APP_URLS, 
     ENVIRONMENTS, 
     VERCEL_ENVIRONMENTS, 
     VERCEL_API,
     VERCEL_ENV_VAR_KEYS 
-} = require('../core/constants');
-const { ConfigurationError, ApiError } = require('../core/errors');
+} from '../core/constants.js';
+import { ConfigurationError, ApiError } from '../core/errors.js';
 
 // ============================================================
 // Vercel API Client (旧 vercel-helpers.js)
@@ -23,7 +23,7 @@ const { ConfigurationError, ApiError } = require('../core/errors');
 /**
  * Vercel API クライアント
  */
-class VercelClient {
+export class VercelClient {
     constructor(apiToken, projectId) {
         this.apiToken = apiToken;
         this.projectId = projectId;
@@ -164,7 +164,7 @@ class VercelClient {
 /**
  * Vercelデプロイを実行（Deploy Hook使用）
  */
-async function triggerDeployment(environment, options = {}) {
+export async function triggerDeployment(environment, options = {}) {
     try {
         const { debug = false } = options;
 
@@ -229,7 +229,7 @@ async function triggerDeployment(environment, options = {}) {
 /**
  * 環境名をVercel環境にマッピング
  */
-function mapEnvironmentToVercel(environment) {
+export function mapEnvironmentToVercel(environment) {
     const mapping = {
         [ENVIRONMENTS.DEV]: VERCEL_ENVIRONMENTS.PREVIEW,
         [ENVIRONMENTS.DEVELOPMENT]: VERCEL_ENVIRONMENTS.PREVIEW,
@@ -243,7 +243,7 @@ function mapEnvironmentToVercel(environment) {
 /**
  * AUTH_SECRETを生成
  */
-function generateAuthSecret() {
+export function generateAuthSecret() {
     return crypto.randomBytes(32).toString('base64');
 }
 
@@ -254,7 +254,7 @@ function generateAuthSecret() {
 /**
  * Vercel環境変数を生成
  */
-function generateVercelEnvironmentVariables(awsConfig, environment, options = {}) {
+export function generateVercelEnvironmentVariables(awsConfig, environment, options = {}) {
     const { authSecret } = options;
     
     // カスタムドメインのAPI_ENDPOINTを生成
@@ -290,7 +290,7 @@ function generateVercelEnvironmentVariables(awsConfig, environment, options = {}
 /**
  * Vercel環境変数を更新
  */
-async function updateVercelEnvironmentVariables(config) {
+export async function updateVercelEnvironmentVariables(config) {
     try {
         const {
             awsConfig,
@@ -438,7 +438,7 @@ function generateUpdateSummary(results) {
 /**
  * 共通AUTH_SECRETの取得
  */
-async function getExistingAuthSecret(apiToken, projectId) {
+export async function getExistingAuthSecret(apiToken, projectId) {
     try {
         const vercelClient = new VercelClient(apiToken, projectId);
         
@@ -474,7 +474,7 @@ async function getExistingAuthSecret(apiToken, projectId) {
 /**
  * .env.local生成処理
  */
-async function updateLocalEnv(config) {
+export async function updateLocalEnv(config) {
     try {
         const { awsConfig, authSecret, envFilePath, debug = false } = config;
 
@@ -613,7 +613,7 @@ async function updateLocalEnv(config) {
 /**
  * .env.localからAUTH_SECRETを読み取り
  */
-async function readAuthSecretFromEnvLocal(envFilePath) {
+export async function readAuthSecretFromEnvLocal(envFilePath) {
     try {
         const envContent = await fs.readFile(envFilePath, 'utf8');
         const authSecretMatch = envContent.match(/^AUTH_SECRET=["']?(.+?)["']?$/m);
@@ -633,25 +633,3 @@ async function readAuthSecretFromEnvLocal(envFilePath) {
         return null;
     }
 }
-
-// エクスポート
-module.exports = {
-    // Vercel API クライアント
-    VercelClient,
-    
-    // デプロイメント
-    triggerDeployment,
-    mapEnvironmentToVercel,
-    
-    // 環境変数管理
-    generateVercelEnvironmentVariables,
-    updateVercelEnvironmentVariables,
-    getExistingAuthSecret,
-    
-    // ユーティリティ
-    generateAuthSecret,
-    
-    // .env.local 管理
-    updateLocalEnv,
-    readAuthSecretFromEnvLocal
-};

@@ -3,12 +3,12 @@
  * certificate-module + custom-domain-module を統合
  */
 
-const https = require('https');
-const forge = require('node-forge');
-const { ACMClient, ImportCertificateCommand, ListCertificatesCommand, DescribeCertificateCommand } = require('@aws-sdk/client-acm');
-const { log, displaySection } = require('../core/utils');
-const { saveCertificateArn, getCertificateArn } = require('./aws');
-const { 
+import https from 'https';
+import forge from 'node-forge';
+import { ACMClient, ImportCertificateCommand, ListCertificatesCommand, DescribeCertificateCommand } from '@aws-sdk/client-acm';
+import { log, displaySection } from '../core/utils.js';
+import { saveCertificateArn, getCertificateArn } from './aws.js';
+import { 
     SSM_PARAMETERS, 
     CERTIFICATE, 
     CUSTOM_DOMAINS, 
@@ -16,8 +16,8 @@ const {
     CLOUDFLARE_API,
     DNS_RECORD_TYPES,
     DEFAULT_DNS_TTL
-} = require('../core/constants');
-const { ConfigurationError, ApiError } = require('../core/errors');
+} from '../core/constants.js';
+import { ConfigurationError, ApiError } from '../core/errors.js';
 
 // ============================================================
 // Cloudflare API Client 基底クラス
@@ -321,7 +321,7 @@ async function importCertificateToAcm(acmClient, certificate, privateKey, hostna
 /**
  * Prepare wildcard certificate (main function)
  */
-async function prepareWildcardCertificate(config) {
+export async function prepareWildcardCertificate(config) {
     const startTime = Date.now();
     
     try {
@@ -609,7 +609,7 @@ class CloudflareDnsClient extends CloudflareClient {
 /**
  * Setup DNS for custom domain
  */
-async function setupDnsForCustomDomain(config) {
+export async function setupDnsForCustomDomain(config) {
     const startTime = Date.now();
     
     try {
@@ -673,12 +673,3 @@ async function setupDnsForCustomDomain(config) {
         throw error;
     }
 }
-
-// エクスポート
-module.exports = {
-    // 証明書管理
-    prepareWildcardCertificate,
-    
-    // DNS管理
-    setupDnsForCustomDomain
-};

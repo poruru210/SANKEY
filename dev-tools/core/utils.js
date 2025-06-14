@@ -3,16 +3,16 @@
  * logger + cli-helpers + interactive-menu を統合
  */
 
-const readline = require('readline');
-const { ENVIRONMENTS, APPROVAL_MODES } = require('./constants');
-const { BaseError, ConfigurationError, ApiError, CdkNotDeployedError, ResourceNotFoundError } = require('./errors');
+import readline from 'readline';
+import { ENVIRONMENTS, APPROVAL_MODES } from './constants.js';
+import { BaseError, ConfigurationError, ApiError, CdkNotDeployedError, ResourceNotFoundError } from './errors.js';
 
 // ============================================================
 // ログ機能 (旧 logger.js)
 // ============================================================
 
 // 色定義
-const colors = {
+export const colors = {
     reset: '\x1b[0m',
     bright: '\x1b[1m',
     red: '\x1b[31m',
@@ -27,7 +27,7 @@ const colors = {
 /**
  * ログオブジェクト
  */
-const log = {
+export const log = {
     info: (msg) => console.log(`${colors.cyan}ℹ${colors.reset} ${msg}`),
     success: (msg) => console.log(`${colors.green}✅${colors.reset} ${msg}`),
     warning: (msg) => console.log(`${colors.yellow}⚠️${colors.reset} ${msg}`),
@@ -49,7 +49,7 @@ const log = {
 /**
  * タイトル表示関数
  */
-function displayTitle(title, color = 'green') {
+export function displayTitle(title, color = 'green') {
     const colorCode = colors[color] || colors.green;
     console.log(`${colorCode}=== ${title} ===${colors.reset}`);
 }
@@ -57,7 +57,7 @@ function displayTitle(title, color = 'green') {
 /**
  * セクション表示関数
  */
-function displaySection(section, color = 'cyan') {
+export function displaySection(section, color = 'cyan') {
     const colorCode = colors[color] || colors.cyan;
     console.log(`\n${colorCode}📋 ${section}:${colors.reset}`);
 }
@@ -65,7 +65,7 @@ function displaySection(section, color = 'cyan') {
 /**
  * ユーザー一覧表示関数
  */
-function displayUserList(users) {
+export function displayUserList(users) {
     displaySection('Available Users');
     users.forEach((user, index) => {
         const statusColor = user.userStatus === 'CONFIRMED' ? colors.green : colors.yellow;
@@ -76,7 +76,7 @@ function displayUserList(users) {
 /**
  * プログレスバー表示関数
  */
-function displayProgress(current, total, label = '') {
+export function displayProgress(current, total, label = '') {
     const percentage = Math.floor((current / total) * 100);
     const barLength = 20;
     const filledLength = Math.floor((current / total) * barLength);
@@ -96,7 +96,7 @@ function displayProgress(current, total, label = '') {
 /**
  * ユーザー選択関数（スタック組み合わせ用）
  */
-async function selectStackCombination(stackCombinations, options) {
+export async function selectStackCombination(stackCombinations, options) {
     // 自動承認の場合
     if (options.requireApproval === APPROVAL_MODES.NEVER && stackCombinations.length === 1) {
         log.info(`🚀 Auto-selecting: ${stackCombinations[0].environment.toUpperCase()} Environment`);
@@ -134,7 +134,7 @@ async function selectStackCombination(stackCombinations, options) {
 /**
  * ユーザー選択関数（Cognitoユーザー用）
  */
-async function selectUser(users, options) {
+export async function selectUser(users, options) {
     // 自動承認またはユーザーが1人の場合
     if ((options.requireApproval === APPROVAL_MODES.NEVER && users.length === 1) || users.length === 1) {
         log.info(`🚀 Auto-selecting user: ${users[0].email}`);
@@ -172,7 +172,7 @@ async function selectUser(users, options) {
 /**
  * 確認プロンプト関数
  */
-async function confirm(message, defaultValue = false) {
+export async function confirm(message, defaultValue = false) {
     const rl = readline.createInterface({
         input: process.stdin,
         output: process.stdout
@@ -200,7 +200,7 @@ async function confirm(message, defaultValue = false) {
 /**
  * 入力プロンプト関数
  */
-async function prompt(message, defaultValue = '') {
+export async function prompt(message, defaultValue = '') {
     const rl = readline.createInterface({
         input: process.stdin,
         output: process.stdout
@@ -222,7 +222,7 @@ async function prompt(message, defaultValue = '') {
 /**
  * 数値入力プロンプト関数
  */
-async function promptNumber(message, defaultValue = 0, min = 0, max = Infinity) {
+export async function promptNumber(message, defaultValue = 0, min = 0, max = Infinity) {
     const rl = readline.createInterface({
         input: process.stdin,
         output: process.stdout
@@ -264,7 +264,7 @@ async function promptNumber(message, defaultValue = 0, min = 0, max = Infinity) 
 /**
  * 選択肢プロンプト関数
  */
-async function promptChoice(message, choices, defaultValue = null) {
+export async function promptChoice(message, choices, defaultValue = null) {
     const rl = readline.createInterface({
         input: process.stdin,
         output: process.stdout
@@ -304,7 +304,7 @@ async function promptChoice(message, choices, defaultValue = null) {
 /**
  * コマンドライン引数の検証
  */
-function validateOptions(options, requiredOptions = []) {
+export function validateOptions(options, requiredOptions = []) {
     const missing = [];
 
     for (const required of requiredOptions) {
@@ -322,7 +322,7 @@ function validateOptions(options, requiredOptions = []) {
 /**
  * 実行時間測定ユーティリティ
  */
-class Timer {
+export class Timer {
     constructor() {
         this.startTime = Date.now();
     }
@@ -510,7 +510,7 @@ class InteractiveMenu {
 /**
  * メインメニュー表示
  */
-async function displayMainMenu(context) {
+export async function displayMainMenu(context) {
     try {
         if (!process.stdin.isTTY) {
             log.info('Non-interactive environment detected. Using number selection.');
@@ -586,7 +586,7 @@ async function displayMainMenuFallback(context) {
 /**
  * 環境選択メニュー
  */
-async function selectEnvironment(context) {
+export async function selectEnvironment(context) {
     const environments = [
         { id: ENVIRONMENTS.DEV, label: `Development (${ENVIRONMENTS.DEV})`, description: 'For testing and development' },
         { id: ENVIRONMENTS.PROD, label: `Production (${ENVIRONMENTS.PROD})`, description: 'Live production environment' }
@@ -650,7 +650,7 @@ async function selectEnvironmentFallback(context) {
 /**
  * 実行確認プロンプト
  */
-async function confirmExecution(action, details = {}) {
+export async function confirmExecution(action, details = {}) {
     const rl = readline.createInterface({
         input: process.stdin,
         output: process.stdout
@@ -681,7 +681,7 @@ async function confirmExecution(action, details = {}) {
 /**
  * 処理完了後の継続確認
  */
-async function confirmContinue() {
+export async function confirmContinue() {
     const rl = readline.createInterface({
         input: process.stdin,
         output: process.stdout
@@ -702,7 +702,7 @@ async function confirmContinue() {
 /**
  * エラー表示と継続確認
  */
-async function handleMenuError(error, options = {}) {
+export async function handleMenuError(error, options = {}) {
     if (error instanceof CdkNotDeployedError) {
         log.error(`❌ CDK Setup Incomplete: ${error.message}`);
         log.warning(`Environment: ${error.environment || 'N/A'}`);
@@ -737,7 +737,7 @@ async function handleMenuError(error, options = {}) {
 /**
  * 進捗表示ヘルパー
  */
-function showProgress(message, options = {}) {
+export function showProgress(message, options = {}) {
     if (options.clear) {
         console.clear();
         displayTitle('Sankey Environment Setup', 'cyan');
@@ -750,7 +750,7 @@ function showProgress(message, options = {}) {
 /**
  * バッチ実行用のメニューID配列取得
  */
-function getBatchMenuItems() {
+export function getBatchMenuItems() {
     return [
         'prepare-certificate',
         'setup-custom-domain',
@@ -758,33 +758,3 @@ function getBatchMenuItems() {
         'trigger-deploy'
     ];
 }
-
-// エクスポート
-module.exports = {
-    // ログ機能
-    log,
-    colors,
-    displayTitle,
-    displaySection,
-    displayUserList,
-    displayProgress,
-    
-    // CLIヘルパー機能
-    selectStackCombination,
-    selectUser,
-    confirm,
-    prompt,
-    promptNumber,
-    promptChoice,
-    validateOptions,
-    Timer,
-    
-    // メニュー機能
-    displayMainMenu,
-    selectEnvironment,
-    confirmExecution,
-    confirmContinue,
-    handleMenuError,
-    showProgress,
-    getBatchMenuItems
-};

@@ -3,16 +3,16 @@
  * カスタムエラークラスの動作確認
  */
 
-const { describe, test, expect } = require('@jest/globals');
+import { describe, test, expect } from 'vitest';
 
 // テスト対象のモジュール
-const {
+import {
     BaseError,
     ConfigurationError,
     ApiError,
     ResourceNotFoundError,
     CdkNotDeployedError
-} = require('../../core/errors');
+} from '../../core/errors.js';
 
 describe('カスタムエラークラス', () => {
     describe('BaseError', () => {

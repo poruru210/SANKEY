@@ -3,11 +3,11 @@
  * aws-helpers + aws-config-module + ssm-module + test-data-module を統合
  */
 
-const { CloudFormationClient, DescribeStacksCommand } = require('@aws-sdk/client-cloudformation');
-const { CognitoIdentityProviderClient, DescribeUserPoolClientCommand, ListUsersCommand } = require('@aws-sdk/client-cognito-identity-provider');
-const { DynamoDBClient, BatchWriteItemCommand, QueryCommand } = require('@aws-sdk/client-dynamodb');
-const { SSMClient, PutParameterCommand, GetParameterCommand } = require('@aws-sdk/client-ssm');
-const { 
+import { CloudFormationClient, DescribeStacksCommand } from '@aws-sdk/client-cloudformation';
+import { CognitoIdentityProviderClient, DescribeUserPoolClientCommand, ListUsersCommand } from '@aws-sdk/client-cognito-identity-provider';
+import { DynamoDBClient, BatchWriteItemCommand, QueryCommand } from '@aws-sdk/client-dynamodb';
+import { SSMClient, PutParameterCommand, GetParameterCommand } from '@aws-sdk/client-ssm';
+import { 
     log, 
     displayProgress, 
     displayUserList,
@@ -18,8 +18,8 @@ const {
     promptNumber,
     promptChoice,
     Timer
-} = require('../core/utils');
-const { 
+} from '../core/utils.js';
+import { 
     CLOUDFORMATION_OUTPUT_KEYS, 
     AWS_REGIONS, 
     COGNITO, 
@@ -28,8 +28,8 @@ const {
     SAMPLE_DATA,
     WEIGHTED_STATUSES,
     APPROVAL_MODES
-} = require('../core/constants');
-const { ConfigurationError, ApiError, ResourceNotFoundError, CdkNotDeployedError } = require('../core/errors');
+} from '../core/constants.js';
+import { ConfigurationError, ApiError, ResourceNotFoundError, CdkNotDeployedError } from '../core/errors.js';
 
 // ============================================================
 // AWS クライアント管理
@@ -194,7 +194,7 @@ async function getStackOutputs(cloudFormationClient, stackName, outputKeys, opti
 /**
  * AWS設定を取得
  */
-async function getAwsConfiguration(options) {
+export async function getAwsConfiguration(options) {
     try {
         log.debug('Initializing AWS clients...', options);
         
@@ -550,7 +550,7 @@ async function getParameter(ssmClient, parameterName, options = {}) {
 /**
  * 証明書ARNの保存（高レベルAPI）
  */
-async function saveCertificateArn(config) {
+export async function saveCertificateArn(config) {
     const { certificateArn, profile, region, dryRun = false, forceUpdate = false, debug = false } = config;
 
     try {
@@ -605,7 +605,7 @@ async function saveCertificateArn(config) {
 /**
  * 証明書ARNの取得（高レベルAPI）
  */
-async function getCertificateArn(config) {
+export async function getCertificateArn(config) {
     const { profile, region, debug = false } = config;
 
     try {
@@ -636,7 +636,7 @@ async function getCertificateArn(config) {
 /**
  * テストデータ生成のメインワークフロー
  */
-async function executeTestDataWorkflow(config) {
+export async function executeTestDataWorkflow(config) {
     const timer = new Timer();
     
     try {
@@ -1196,7 +1196,7 @@ function generateDummyEmail() {
 }
 
 // エクスポート
-module.exports = {
+export {
     // AWS クライアント管理
     createAwsClients,
     
@@ -1204,18 +1204,8 @@ module.exports = {
     findSankeyStacks,
     getStackOutputs,
     
-    // AWS設定取得
-    getAwsConfiguration,
-    
     // Cognito 管理
     getCognitoDetails,
     findUserByEmail,
-    listAllUsers,
-    
-    // SSM Parameter Store
-    saveCertificateArn,
-    getCertificateArn,
-    
-    // テストデータ生成
-    executeTestDataWorkflow
+    listAllUsers
 };

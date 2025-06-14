@@ -1,11 +1,20 @@
 #!/usr/bin/env node
 
-require('dotenv').config();
-const { Command } = require('commander');
-const path = require('path');
+import dotenv from 'dotenv';
+import { Command } from 'commander';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import dns from 'dns';
+
+// ESモジュールでの__dirnameの代替
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// 環境変数の読み込み
+dotenv.config();
 
 // コアモジュール
-const { 
+import { 
     log, 
     displayTitle, 
     colors,
@@ -18,8 +27,8 @@ const {
     handleMenuError,
     showProgress,
     getBatchMenuItems
-} = require('./core/utils');
-const {
+} from './core/utils.js';
+import {
     SSM_PARAMETERS,
     LOCAL_ENV_FILENAME,
     ERROR_TYPES,
@@ -27,20 +36,20 @@ const {
     ENVIRONMENTS,
     VERCEL_ENVIRONMENTS,
     CUSTOM_DOMAINS
-} = require('./core/constants');
-const { BaseError, ConfigurationError, ApiError, CdkNotDeployedError, ResourceNotFoundError } = require('./core/errors');
+} from './core/constants.js';
+import { BaseError, ConfigurationError, ApiError, CdkNotDeployedError, ResourceNotFoundError } from './core/errors.js';
 
 // サービスモジュール
-const { getAwsConfiguration, executeTestDataWorkflow } = require('./services/aws');
-const { prepareWildcardCertificate, setupDnsForCustomDomain } = require('./services/cloudflare');
-const { 
+import { getAwsConfiguration, executeTestDataWorkflow } from './services/aws.js';
+import { prepareWildcardCertificate, setupDnsForCustomDomain } from './services/cloudflare.js';
+import { 
     updateVercelEnvironmentVariables, 
     getExistingAuthSecret, 
     triggerDeployment, 
     generateAuthSecret,
     updateLocalEnv,
     readAuthSecretFromEnvLocal
-} = require('./services/vercel');
+} from './services/vercel.js';
 
 // コマンドライン引数の設定
 const program = new Command();
@@ -227,7 +236,6 @@ async function executeCustomDomainSetup(context) {
                 await new Promise(resolve => setTimeout(resolve, 3000));
                 
                 try {
-                    const dns = require('dns');
                     dns.resolve(result.hostname, 'CNAME', (err, addresses) => {
                         if (!err && addresses) {
                             log.success(`✅ DNS configuration verified: ${result.hostname} -> ${addresses[0]}`);
@@ -730,6 +738,4 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 // 実行
-if (require.main === module) {
-    main();
-}
+main();

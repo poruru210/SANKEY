@@ -1,3 +1,5 @@
+import { vi } from 'vitest';
+
 /**
  * テスト用のヘルパー関数
  * モックの作成と管理を簡単にするユーティリティ
@@ -6,7 +8,7 @@
 /**
  * fetchのモックレスポンスを作成
  */
-function createFetchResponse(data, options = {}) {
+export function createFetchResponse(data, options = {}) {
     const { ok = true, status = 200, statusText = 'OK' } = options;
     
     return {
@@ -26,7 +28,7 @@ function createFetchResponse(data, options = {}) {
 /**
  * fetchのエラーレスポンスを作成
  */
-function createFetchError(message, status = 500) {
+export function createFetchError(message, status = 500) {
     return createFetchResponse(
         { error: { message } },
         { ok: false, status, statusText: message }
@@ -36,23 +38,23 @@ function createFetchError(message, status = 500) {
 /**
  * fs.promisesのモックを作成
  */
-function createFsMock() {
+export function createFsMock() {
     return {
-        readFile: jest.fn(),
-        writeFile: jest.fn(),
-        access: jest.fn(),
-        mkdir: jest.fn(),
-        unlink: jest.fn()
+        readFile: vi.fn(),
+        writeFile: vi.fn(),
+        access: vi.fn(),
+        mkdir: vi.fn(),
+        unlink: vi.fn()
     };
 }
 
 /**
  * cryptoのモックを作成
  */
-function createCryptoMock() {
+export function createCryptoMock() {
     return {
-        randomBytes: jest.fn((size) => ({
-            toString: jest.fn((encoding) => {
+        randomBytes: vi.fn((size) => ({
+            toString: vi.fn((encoding) => {
                 if (encoding === 'base64') {
                     return Buffer.from('test-random-bytes').toString('base64');
                 }
@@ -65,27 +67,27 @@ function createCryptoMock() {
 /**
  * logモジュールのモックを作成
  */
-function createLogMock() {
+export function createLogMock() {
     return {
-        info: jest.fn(),
-        success: jest.fn(),
-        warning: jest.fn(),
-        error: jest.fn(),
-        debug: jest.fn(),
-        progress: jest.fn(),
-        search: jest.fn(),
-        generate: jest.fn(),
-        database: jest.fn(),
-        complete: jest.fn(),
-        user: jest.fn(),
-        email: jest.fn()
+        info: vi.fn(),
+        success: vi.fn(),
+        warning: vi.fn(),
+        error: vi.fn(),
+        debug: vi.fn(),
+        progress: vi.fn(),
+        search: vi.fn(),
+        generate: vi.fn(),
+        database: vi.fn(),
+        complete: vi.fn(),
+        user: vi.fn(),
+        email: vi.fn()
     };
 }
 
 /**
  * 環境変数のセットアップ
  */
-function setupEnv(envVars = {}) {
+export function setupEnv(envVars = {}) {
     const originalEnv = process.env;
     process.env = { ...originalEnv, ...envVars };
     
@@ -97,7 +99,7 @@ function setupEnv(envVars = {}) {
 /**
  * モックのクリーンアップ
  */
-function cleanupMocks(...mocks) {
+export function cleanupMocks(...mocks) {
     mocks.forEach(mock => {
         if (mock && typeof mock === 'object') {
             Object.values(mock).forEach(fn => {
@@ -108,13 +110,3 @@ function cleanupMocks(...mocks) {
         }
     });
 }
-
-module.exports = {
-    createFetchResponse,
-    createFetchError,
-    createFsMock,
-    createCryptoMock,
-    createLogMock,
-    setupEnv,
-    cleanupMocks
-};

@@ -3,8 +3,8 @@
  * Vercel API操作、環境変数管理、デプロイメント機能のテスト
  */
 
-const { describe, test, expect, beforeEach, afterEach, beforeAll, afterAll } = require('@jest/globals');
-const {
+import { describe, test, expect, beforeEach, afterEach, beforeAll, afterAll, vi } from 'vitest';
+import {
     createFetchResponse,
     createFetchError,
     createFsMock,
@@ -12,38 +12,46 @@ const {
     createLogMock,
     setupEnv,
     cleanupMocks
-} = require('../test-helpers');
+} from '../test-helpers.js';
+
+// モジュールのモック設定
+vi.mock('fs', () => {
+    const { createFsMock } = require('../test-helpers.js');
+    return {
+        promises: createFsMock()
+    };
+});
+
+vi.mock('crypto', () => {
+    const { createCryptoMock } = require('../test-helpers.js');
+    const mock = createCryptoMock();
+    return {
+        default: mock,
+        ...mock
+    };
+});
+
+vi.mock('../../core/utils.js', () => {
+    const { createLogMock } = require('../test-helpers.js');
+    return {
+        log: createLogMock()
+    };
+});
 
 // console.logをモック（テスト出力をクリーンに保つ）
 const originalConsoleLog = console.log;
 beforeAll(() => {
-    console.log = jest.fn();
+    console.log = vi.fn();
 });
 afterAll(() => {
     console.log = originalConsoleLog;
 });
 
 // グローバルfetchのモック
-global.fetch = jest.fn();
-
-// モジュールモックの作成
-const mockFs = createFsMock();
-const mockCrypto = createCryptoMock();
-const mockLog = createLogMock();
-
-// モジュールのモック設定
-jest.mock('fs', () => ({
-    promises: mockFs
-}));
-
-jest.mock('crypto', () => mockCrypto);
-
-jest.mock('../../core/utils', () => ({
-    log: mockLog
-}));
+global.fetch = vi.fn();
 
 // テスト対象のモジュール
-const {
+import {
     VercelClient,
     triggerDeployment,
     mapEnvironmentToVercel,
@@ -53,18 +61,32 @@ const {
     generateAuthSecret,
     updateLocalEnv,
     readAuthSecretFromEnvLocal
-} = require('../../services/vercel');
+} from '../../services/vercel.js';
+
+// モックへの参照を取得
+let mockFs, mockCrypto, mockLog;
+
+beforeAll(async () => {
+    const fs = await import('fs');
+    mockFs = fs.promises;
+    
+    const crypto = await import('crypto');
+    mockCrypto = crypto.default || crypto;
+    
+    const utils = await import('../../core/utils.js');
+    mockLog = utils.log;
+});
 
 describe('Vercel サービスモジュール', () => {
     beforeEach(() => {
-        jest.clearAllMocks();
+        vi.clearAllMocks();
         
         // fetchのデフォルトレスポンス
         global.fetch.mockResolvedValue(createFetchResponse({ success: true }));
         
         // cryptoのデフォルト動作をリセット
         mockCrypto.randomBytes.mockReturnValue({
-            toString: jest.fn().mockReturnValue('test-random-string')
+            toString: vi.fn().mockReturnValue('test-random-string')
         });
     });
 
@@ -340,7 +362,7 @@ describe('Vercel サービスモジュール', () => {
     describe('AUTH_SECRET 管理', () => {
         describe('generateAuthSecret', () => {
             test('32バイトのランダムな文字列を生成する', () => {
-                const mockToString = jest.fn().mockReturnValue('dGVzdC1yYW5kb20tYnl0ZXMtMzItY2hhcnMtbG9uZyEh');
+                const mockToString = vi.fn().mockReturnValue('dGVzdC1yYW5kb20tYnl0ZXMtMzItY2hhcnMtbG9uZyEh');
                 mockCrypto.randomBytes.mockReturnValueOnce({
                     toString: mockToString
                 });
@@ -590,7 +612,7 @@ OTHER_SETTING=keep-this
 
         test('authSecretが指定されていない場合に生成される', () => {
             mockCrypto.randomBytes.mockReturnValueOnce({
-                toString: jest.fn().mockReturnValue('generated-secret')
+                toString: vi.fn().mockReturnValue('generated-secret')
             });
 
             const awsConfig = {
