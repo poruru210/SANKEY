@@ -243,6 +243,17 @@ export interface RenderGasTemplateHandlerDependencies {
     tracer: Tracer;
 }
 
+// emailNotification.handler.ts用の依存関係
+export interface EmailNotificationHandlerDependencies {
+    eaApplicationRepository: EAApplicationRepository;
+    masterKeyService: MasterKeyService;
+    integrationTestService: IntegrationTestService;
+    docClient: DynamoDBDocumentClient;
+    ssmClient: SSMClient;
+    logger: Logger;
+    tracer: Tracer;
+}
+
 // ========================================
 // その他の型定義
 // ========================================
