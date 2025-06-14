@@ -76,7 +76,7 @@ program
 /**
  * AUTH_SECRETを取得または新規作成
  */
-async function getOrCreateAuthSecret(environment, envFilePath, vercelConfig) {
+export async function getOrCreateAuthSecret(environment, envFilePath, vercelConfig) {
     let authSecret = null;
 
     // 1. .env.localから取得を試行 (environment が 'dev' の場合のみ考慮)
@@ -113,7 +113,7 @@ async function getOrCreateAuthSecret(environment, envFilePath, vercelConfig) {
 /**
  * 環境変数の検証
  */
-function validateEnvironmentVariables() {
+export function validateEnvironmentVariables() {
     const warnings = [];
 
     // 証明書準備に必要な環境変数
