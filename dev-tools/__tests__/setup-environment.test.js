@@ -1,32 +1,12 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
 // Import functions to be tested from setup-environment.js if needed directly
-import { validateEnvironmentVariables, getOrCreateAuthSecret } from '../setup-environment.js';
+import { validateEnvironmentVariables, getOrCreateAuthSecret } from '../setup-environment-logic.js';
 // For example:
 // import { validateEnvironmentVariables, getOrCreateAuthSecret } from '../setup-environment.js';
 import { log } from '../core/utils.js'; // Ensure log is imported for spying on its methods
 import { ENVIRONMENTS } from '../core/constants.js'; // For ENVIRONMENTS.DEV / ENVIRONMENTS.PROD
 // Import mocks from services/vercel.js (already mocked in the boilerplate)
 import { readAuthSecretFromEnvLocal, getExistingAuthSecret, generateAuthSecret } from '../services/vercel.js';
-
-// Mock commander to prevent process.exit calls during tests
-vi.mock('commander', () => {
-  const originalCommander = vi.importActual('commander');
-  const programMock = {
-    name: vi.fn().mockReturnThis(),
-    description: vi.fn().mockReturnThis(),
-    version: vi.fn().mockReturnThis(),
-    requiredOption: vi.fn().mockReturnThis(),
-    option: vi.fn().mockReturnThis(),
-    parse: vi.fn().mockReturnThis(),
-    opts: vi.fn().mockReturnValue({ profile: 'test-profile' }), // Provide default opts
-    on: vi.fn().mockReturnThis(), // For event listeners if any
-  };
-  return {
-    ...originalCommander, // Spread original exports if any are used directly (e.g., Option class)
-    Command: vi.fn(() => programMock), // Mock the Command class constructor
-    program: programMock, // Also mock the global program instance if it's exported and used
-  };
-});
 
 // Mocking core/utils.js as it's heavily used and contains console logs / prompts
 vi.mock('../core/utils.js', async (importOriginal) => {
