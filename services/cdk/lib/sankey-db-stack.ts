@@ -1,18 +1,17 @@
 import * as cdk from 'aws-cdk-lib';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
-import * as cognito from 'aws-cdk-lib/aws-cognito';
 import { Construct } from 'constructs';
 import { EnvironmentConfig, CdkHelpers } from './config';
+import { TableNames } from './config/table-names';
 
 export interface SankeyDbStackProps extends cdk.StackProps {
-    userPool: cognito.UserPool;
     environment?: string;
     removalPolicy?: cdk.RemovalPolicy;
 }
 
 export class SankeyDbStack extends cdk.Stack {
-    public readonly eaApplicationsTable: dynamodb.Table;  // 既存（リネーム）
-    public readonly userProfileTable: dynamodb.Table;     // 新規追加
+    public readonly eaApplicationsTable: dynamodb.Table;
+    public readonly userProfileTable: dynamodb.Table;
     public readonly ttlMonths: number;
     private readonly envName: string;
     private readonly config: ReturnType<typeof EnvironmentConfig.get>;
@@ -42,7 +41,7 @@ export class SankeyDbStack extends cdk.Stack {
         this.eaApplicationsTable = CdkHelpers.createDynamoTable(
             this,
             'EAApplicationsTable',
-            'applications',
+            TableNames.eaApplicationsBase,  // 一元管理された定数を使用
             this.envName,
             {
                 partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
@@ -75,7 +74,7 @@ export class SankeyDbStack extends cdk.Stack {
         this.userProfileTable = CdkHelpers.createDynamoTable(
             this,
             'UserProfileTable',
-            'user-profiles',
+            TableNames.userProfileBase,  // 一元管理された定数を使用
             this.envName,
             {
                 partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },

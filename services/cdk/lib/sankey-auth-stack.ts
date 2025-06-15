@@ -4,8 +4,8 @@ import * as path from 'path';
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as iam from 'aws-cdk-lib/aws-iam';
-import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import { EnvironmentConfig, CdkHelpers } from './config';
+import { TableNames } from './config/table-names';
 
 export interface SankeyAuthStackProps extends cdk.StackProps {
     domainPrefix: string;
@@ -77,6 +77,7 @@ export class SankeyAuthStack extends cdk.Stack {
                 entry: path.join(__dirname, '../../lambda/src/handlers/postConfirmation.handler.ts'),
                 environment: {
                     SSM_USER_PREFIX: CdkHelpers.getSsmUserPrefix(this.envName),
+                    USER_PROFILE_TABLE_NAME: TableNames.getUserProfileTableName(this.envName),  // 一元管理された関数を使用
                     POWERTOOLS_SERVICE_NAME: 'post-confirmation',
                 },
             }
@@ -92,6 +93,14 @@ export class SankeyAuthStack extends cdk.Stack {
             effect: iam.Effect.ALLOW,
             actions: ['ssm:GetParameter', 'ssm:GetParameters', 'ssm:PutParameter', 'ssm:AddTagsToResource'],
             resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter${CdkHelpers.getSsmEnvironmentPrefix(this.envName)}/*`],
+        }));
+
+        // DynamoDB権限（テーブル名を直接指定）
+        const userProfileTableArn = `arn:aws:dynamodb:${this.region}:${this.account}:table/${TableNames.getUserProfileTableName(this.envName)}`;
+        this.postConfirmationFn.addToRolePolicy(new iam.PolicyStatement({
+            effect: iam.Effect.ALLOW,
+            actions: ['dynamodb:PutItem', 'dynamodb:UpdateItem', 'dynamodb:GetItem'],
+            resources: [userProfileTableArn],
         }));
     }
 

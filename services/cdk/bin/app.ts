@@ -55,16 +55,9 @@ const authStack = new SankeyAuthStack(app, `${stackPrefix}AuthStack`, {
 // 2. データベーススタック
 const dbStack = new SankeyDbStack(app, `${stackPrefix}DbStack`, {
   environment,
-  userPool: authStack.userPool,
   removalPolicy: config.removalPolicy,
   tags: commonTags,
 });
-
-// AuthStackのpostConfirmationFnにUserProfileTableの権限を追加
-dbStack.userProfileTable.grantWriteData(authStack.postConfirmationFn);
-
-// postConfirmationFnに環境変数を追加
-authStack.postConfirmationFn.addEnvironment('USER_PROFILE_TABLE_NAME', dbStack.userProfileTable.tableName);
 
 // 3. 通知スタック（UserProfileTableを追加）
 const notificationStack = new SankeyNotificationStack(app, `${stackPrefix}NotificationStack`, {
