@@ -1,4 +1,4 @@
-import { FormData, WebhookResponse, TestResult } from './config';
+import { FormData, WebhookResponse, TestResult } from './types';
 import { getConfig } from './config-manager';
 import { createJWT } from './jwt';
 
@@ -12,23 +12,23 @@ export function sendWebhook(formData: FormData): WebhookResponse {
 
     console.log('JWT署名済みリクエストデータ準備完了', {
       jwtLength: jwt.length,
-      userId: config.USER_ID
+      userId: config.USER_ID,
     });
 
     const response = UrlFetchApp.fetch(config.WEBHOOK_URL, {
       method: 'post',
       headers: {
         'Content-Type': 'application/json',
-        'Accept': 'application/json'
+        'Accept': 'application/json',
       },
       payload: JSON.stringify({
         userId: config.USER_ID,
         data: jwt,
-        iv: "",
-        hmac: "jwt-signed",
-        method: "JWT"
+        iv: '',
+        hmac: 'jwt-signed',
+        method: 'JWT',
       }),
-      muteHttpExceptions: true
+      muteHttpExceptions: true,
     });
 
     const responseCode = response.getResponseCode();
@@ -36,19 +36,19 @@ export function sendWebhook(formData: FormData): WebhookResponse {
 
     console.log('レスポンス:', {
       code: responseCode,
-      body: responseText
+      body: responseText,
     });
 
     if (responseCode === 200) {
       try {
         return {
           success: true,
-          response: JSON.parse(responseText)
+          response: JSON.parse(responseText),
         };
       } catch (parseError) {
         return {
           success: true,
-          response: { message: responseText }
+          response: { message: responseText },
         };
       }
     } else if (responseCode === 503) {
@@ -58,15 +58,14 @@ export function sendWebhook(formData: FormData): WebhookResponse {
     } else {
       return {
         success: false,
-        error: 'HTTP ' + responseCode + ': ' + responseText
+        error: 'HTTP ' + responseCode + ': ' + responseText,
       };
     }
-
   } catch (error) {
     console.error('sendWebhook エラー:', error);
     return {
       success: false,
-      error: error instanceof Error ? error.toString() : String(error)
+      error: error instanceof Error ? error.toString() : String(error),
     };
   }
 }
@@ -85,22 +84,22 @@ export function notifyTestSuccess(testResult: TestResult): WebhookResponse {
 
     const notificationData = {
       userId: config.USER_ID,
-      testResult: testResult
+      testResult: testResult,
     };
 
     console.log('テスト結果通知を送信中...', {
       testSuccess: testResult.success,
-      userId: config.USER_ID
+      userId: config.USER_ID,
     });
 
     const response = UrlFetchApp.fetch(config.TEST_NOTIFICATION_URL, {
       method: 'post',
       headers: {
         'Content-Type': 'application/json',
-        'Accept': 'application/json'
+        'Accept': 'application/json',
       },
       payload: JSON.stringify(notificationData),
-      muteHttpExceptions: true
+      muteHttpExceptions: true,
     });
 
     const responseCode = response.getResponseCode();
@@ -108,33 +107,32 @@ export function notifyTestSuccess(testResult: TestResult): WebhookResponse {
 
     console.log('テスト結果通知レスポンス:', {
       code: responseCode,
-      body: responseText
+      body: responseText,
     });
 
     if (responseCode === 200) {
       try {
         return {
           success: true,
-          response: JSON.parse(responseText)
+          response: JSON.parse(responseText),
         };
       } catch (parseError) {
         return {
           success: true,
-          response: { message: responseText }
+          response: { message: responseText },
         };
       }
     } else {
       return {
         success: false,
-        error: 'HTTP ' + responseCode + ': ' + responseText
+        error: 'HTTP ' + responseCode + ': ' + responseText,
       };
     }
-
   } catch (error) {
     console.error('テスト結果通知エラー:', error);
     return {
       success: false,
-      error: error instanceof Error ? error.toString() : String(error)
+      error: error instanceof Error ? error.toString() : String(error),
     };
   }
 }
@@ -153,8 +151,13 @@ export function notifyIntegrationTestCompletion(completionData: {
 }): WebhookResponse {
   try {
     const config = getConfig();
-    const completionUrl = config.RESULT_NOTIFICATION_URL.includes('/result/notification')
-      ? config.RESULT_NOTIFICATION_URL.replace('/result/notification', '/test/complete')
+    const completionUrl = config.RESULT_NOTIFICATION_URL.includes(
+      '/result/notification'
+    )
+      ? config.RESULT_NOTIFICATION_URL.replace(
+          '/result/notification',
+          '/test/complete'
+        )
       : config.RESULT_NOTIFICATION_URL.includes('/result')
         ? config.RESULT_NOTIFICATION_URL.replace('/result', '/test/complete')
         : config.RESULT_NOTIFICATION_URL + '/test/complete';
@@ -167,23 +170,23 @@ export function notifyIntegrationTestCompletion(completionData: {
       testResult: {
         success: completionData.success,
         timestamp: completionData.timestamp,
-        details: completionData.details
-      }
+        details: completionData.details,
+      },
     };
 
     console.log('統合テスト完了通知を送信中...', {
       url: completionUrl,
-      testId: completionData.testId
+      testId: completionData.testId,
     });
 
     const response = UrlFetchApp.fetch(completionUrl, {
       method: 'post',
       headers: {
         'Content-Type': 'application/json',
-        'Accept': 'application/json'
+        'Accept': 'application/json',
       },
       payload: JSON.stringify(notificationPayload),
-      muteHttpExceptions: true
+      muteHttpExceptions: true,
     });
 
     const responseCode = response.getResponseCode();
@@ -191,33 +194,32 @@ export function notifyIntegrationTestCompletion(completionData: {
 
     console.log('統合テスト完了通知レスポンス:', {
       code: responseCode,
-      body: responseText
+      body: responseText,
     });
 
     if (responseCode === 200) {
       try {
         return {
           success: true,
-          response: JSON.parse(responseText)
+          response: JSON.parse(responseText),
         };
       } catch (parseError) {
         return {
           success: true,
-          response: { message: responseText }
+          response: { message: responseText },
         };
       }
     } else {
       return {
         success: false,
-        error: 'HTTP ' + responseCode + ': ' + responseText
+        error: 'HTTP ' + responseCode + ': ' + responseText,
       };
     }
-
   } catch (error) {
     console.error('統合テスト完了通知エラー:', error);
     return {
       success: false,
-      error: error instanceof Error ? error.toString() : String(error)
+      error: error instanceof Error ? error.toString() : String(error),
     };
   }
 }

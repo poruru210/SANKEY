@@ -1,8 +1,14 @@
-import { Config } from '../src/config';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { validateConfig, getConfig } from '../src/config-manager';
+import type { Config } from '../src/types';
 
-// テスト環境では実際の値を持つ設定を使用
-jest.mock('../src/config-values', () => ({
+// モックされた設定の型
+interface MockedConfigModule {
+  CONFIG: Config;
+}
+
+// vi.mockは巻き上げられるため、ファイルのトップレベルで定義
+vi.mock('../src/config-values', () => ({
   CONFIG: {
     WEBHOOK_URL: 'https://example.com/webhook',
     TEST_NOTIFICATION_URL: 'https://example.com/test',
@@ -11,107 +17,103 @@ jest.mock('../src/config-values', () => ({
     JWT_SECRET: 'test-jwt-secret',
     FORM_FIELDS: {
       EA_NAME: {
-        label: "EA",
-        type: "select",
+        label: 'EA',
+        type: 'select',
         required: true,
-        options: ["EA1", "EA2", "EA3"]
+        options: ['EA1', 'EA2', 'EA3'],
       },
       ACCOUNT_NUMBER: {
-        label: "口座番号",
-        type: "text",
+        label: '口座番号',
+        type: 'text',
         required: true,
-        validation: "number"
+        validation: 'number',
       },
       BROKER: {
-        label: "ブローカー",
-        type: "select",
+        label: 'ブローカー',
+        type: 'select',
         required: true,
-        options: ["BrokerA", "BrokerB", "BrokerC"]
+        options: ['BrokerA', 'BrokerB', 'BrokerC'],
       },
       EMAIL: {
-        label: "メールアドレス",
-        type: "text",
+        label: 'メールアドレス',
+        type: 'text',
         required: true,
-        validation: "email"
+        validation: 'email',
       },
       X_ACCOUNT: {
-        label: "ユーザー名",
-        type: "text",
-        required: true
-      }
-    }
-  }
+        label: 'ユーザー名',
+        type: 'text',
+        required: true,
+      },
+    },
+  },
 }));
 
-const mockConfigValues = require('../src/config-values');
-
-describe('Config Validation', () => {
-  let originalConfig: Config;
-
-  beforeEach(() => {
-    // 元の設定を保存
-    originalConfig = { ...mockConfigValues.CONFIG };
+describe('設定の検証', () => {
+  beforeEach(async () => {
+    const mod = await vi.importMock<MockedConfigModule>('../src/config-values');
+    // originalConfigを保存（各テストで元の値を参照するため）
+    JSON.parse(JSON.stringify(mod.CONFIG));
   });
 
   afterEach(() => {
-    // 設定を元に戻す
-    mockConfigValues.CONFIG = originalConfig;
+    vi.clearAllMocks();
   });
 
-  test('should return true for valid config', () => {
+  it('有効な設定の場合はtrueを返す', () => {
     expect(validateConfig()).toBe(true);
   });
 
-  test('should return false for invalid WEBHOOK_URL', () => {
-    mockConfigValues.CONFIG = {
-      ...originalConfig,
-      WEBHOOK_URL: 'your-api-endpoint'
-    };
+  it('無効なWEBHOOK_URLの場合はfalseを返す', async () => {
+    const mod = await vi.importMock<MockedConfigModule>('../src/config-values');
+    mod.CONFIG.WEBHOOK_URL = 'your-api-endpoint';
 
-    expect(validateConfig()).toBe(false);
+    vi.resetModules();
+    const { validateConfig: validate } = await import('../src/config-manager');
+    expect(validate()).toBe(false);
   });
 
-  test('should return false for empty WEBHOOK_URL', () => {
-    mockConfigValues.CONFIG = {
-      ...originalConfig,
-      WEBHOOK_URL: ''
-    };
+  it('空のWEBHOOK_URLの場合はfalseを返す', async () => {
+    const mod = await vi.importMock<MockedConfigModule>('../src/config-values');
+    mod.CONFIG.WEBHOOK_URL = '';
 
-    expect(validateConfig()).toBe(false);
+    vi.resetModules();
+    const { validateConfig: validate } = await import('../src/config-manager');
+    expect(validate()).toBe(false);
   });
 
-  test('should return false for invalid USER_ID', () => {
-    mockConfigValues.CONFIG = {
-      ...originalConfig,
-      USER_ID: 'xxxx-xxxx-xxxx'
-    };
+  it('無効なUSER_IDの場合はfalseを返す', async () => {
+    const mod = await vi.importMock<MockedConfigModule>('../src/config-values');
+    mod.CONFIG.USER_ID = 'xxxx-xxxx-xxxx';
 
-    expect(validateConfig()).toBe(false);
+    vi.resetModules();
+    const { validateConfig: validate } = await import('../src/config-manager');
+    expect(validate()).toBe(false);
   });
 
-  test('should return false for invalid JWT_SECRET', () => {
-    mockConfigValues.CONFIG = {
-      ...originalConfig,
-      JWT_SECRET: 'your-jwt-secret'
-    };
+  it('無効なJWT_SECRETの場合はfalseを返す', async () => {
+    const mod = await vi.importMock<MockedConfigModule>('../src/config-values');
+    mod.CONFIG.JWT_SECRET = 'your-jwt-secret';
 
-    expect(validateConfig()).toBe(false);
+    vi.resetModules();
+    const { validateConfig: validate } = await import('../src/config-manager');
+    expect(validate()).toBe(false);
   });
 
-  test('should return false for multiple invalid fields', () => {
-    mockConfigValues.CONFIG = {
-      ...originalConfig,
-      WEBHOOK_URL: '',
-      USER_ID: 'xxxx',
-      JWT_SECRET: 'your-secret'
-    };
+  it('複数の無効なフィールドがある場合はfalseを返す', async () => {
+    const mod = await vi.importMock<MockedConfigModule>('../src/config-values');
+    mod.CONFIG.WEBHOOK_URL = '';
+    mod.CONFIG.USER_ID = 'xxxx';
+    mod.CONFIG.JWT_SECRET = 'your-secret';
 
-    expect(validateConfig()).toBe(false);
+    vi.resetModules();
+    const { validateConfig: validate } = await import('../src/config-manager');
+    expect(validate()).toBe(false);
   });
 });
 
-describe('Config Manager', () => {
-  test('should return config object', () => {
+describe('設定マネージャー', () => {
+  it('設定オブジェクトを返す', () => {
     const config = getConfig();
     expect(config).toBeDefined();
     expect(config).toHaveProperty('WEBHOOK_URL');
@@ -120,7 +122,7 @@ describe('Config Manager', () => {
     expect(config).toHaveProperty('FORM_FIELDS');
   });
 
-  test('should have correct form field structure', () => {
+  it('正しいフォームフィールド構造を持つ', () => {
     const config = getConfig();
     expect(config.FORM_FIELDS).toHaveProperty('EA_NAME');
     expect(config.FORM_FIELDS).toHaveProperty('ACCOUNT_NUMBER');
@@ -129,7 +131,7 @@ describe('Config Manager', () => {
     expect(config.FORM_FIELDS).toHaveProperty('X_ACCOUNT');
   });
 
-  test('should have correct form field properties', () => {
+  it('正しいフォームフィールドプロパティを持つ', () => {
     const config = getConfig();
 
     // EA_NAMEフィールドの検証

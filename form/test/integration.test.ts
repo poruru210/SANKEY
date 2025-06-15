@@ -1,36 +1,43 @@
-import { triggerIntegrationTest, testConnection, onSankeyNotification } from '../src/integration';
-import { NotificationData } from '../src/config';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import {
+  triggerIntegrationTest,
+  testConnection,
+  onSankeyNotification,
+} from '../src/integration';
+import { NotificationData } from '../src/types';
 
 // モック
-const mockValidateConfig = jest.fn();
-const mockSendWebhook = jest.fn();
-const mockNotifyTestSuccess = jest.fn();
-const mockNotifyIntegrationTestCompletion = jest.fn();
-const mockRecordLicenseToSpreadsheet = jest.fn();
+const mockValidateConfig = vi.fn();
+const mockSendWebhook = vi.fn();
+const mockNotifyTestSuccess = vi.fn();
+const mockNotifyIntegrationTestCompletion = vi.fn();
+const mockRecordLicenseToSpreadsheet = vi.fn();
 
-jest.mock('../src/config-manager', () => ({
+vi.mock('../src/config-manager', () => ({
   validateConfig: (...args: any[]) => mockValidateConfig(...args),
-  getGasProjectId: () => 'script-123'
+  getGasProjectId: () => 'script-123',
 }));
 
-jest.mock('../src/webhook', () => ({
+vi.mock('../src/webhook', () => ({
   sendWebhook: (...args: any[]) => mockSendWebhook(...args),
   notifyTestSuccess: (...args: any[]) => mockNotifyTestSuccess(...args),
-  notifyIntegrationTestCompletion: (...args: any[]) => mockNotifyIntegrationTestCompletion(...args)
+  notifyIntegrationTestCompletion: (...args: any[]) =>
+    mockNotifyIntegrationTestCompletion(...args),
 }));
 
-jest.mock('../src/spreadsheet', () => ({
-  recordLicenseToSpreadsheet: (...args: any[]) => mockRecordLicenseToSpreadsheet(...args)
+vi.mock('../src/spreadsheet', () => ({
+  recordLicenseToSpreadsheet: (...args: any[]) =>
+    mockRecordLicenseToSpreadsheet(...args),
 }));
 
 // createJWTのモック
-jest.mock('../src/jwt', () => ({
-  createJWT: jest.fn(() => 'mock-jwt-token')
+vi.mock('../src/jwt', () => ({
+  createJWT: vi.fn(() => 'mock-jwt-token'),
 }));
 
 // ScriptAppのモック
 global.ScriptApp = {
-  getScriptId: jest.fn(() => 'script-123')
+  getScriptId: vi.fn(() => 'script-123'),
 } as any;
 
 // グローバル設定
@@ -42,64 +49,65 @@ global.ScriptApp = {
   JWT_SECRET: 'dGVzdC1zZWNyZXQ=',
   FORM_FIELDS: {
     EA_NAME: {
-      label: "EA",
-      type: "select",
+      label: 'EA',
+      type: 'select',
       required: true,
-      options: ["EA1", "EA2", "EA3"]
+      options: ['EA1', 'EA2', 'EA3'],
     },
     ACCOUNT_NUMBER: {
-      label: "口座番号",
-      type: "text",
+      label: '口座番号',
+      type: 'text',
       required: true,
-      validation: "number"
+      validation: 'number',
     },
     BROKER: {
-      label: "ブローカー",
-      type: "select",
+      label: 'ブローカー',
+      type: 'select',
       required: true,
-      options: ["BrokerA", "BrokerB", "BrokerC"]
+      options: ['BrokerA', 'BrokerB', 'BrokerC'],
     },
     EMAIL: {
-      label: "メールアドレス",
-      type: "text",
+      label: 'メールアドレス',
+      type: 'text',
       required: true,
-      validation: "email"
+      validation: 'email',
     },
     X_ACCOUNT: {
-      label: "ユーザー名",
-      type: "text",
-      required: true
-    }
-  }
+      label: 'ユーザー名',
+      type: 'text',
+      required: true,
+    },
+  },
 };
 
-describe('Integration Functions', () => {
-  let mockCreateJWT: jest.Mock;
+describe('統合機能', () => {
+  let mockCreateJWT: any;
 
-  beforeEach(() => {
-    jest.clearAllMocks();
-    jest.spyOn(console, 'log').mockImplementation();
-    jest.spyOn(console, 'error').mockImplementation();
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
     // JWTモックを取得
-    mockCreateJWT = require('../src/jwt').createJWT;
+    const jwtModule = await import('../src/jwt');
+    mockCreateJWT = jwtModule.createJWT as any;
     // デフォルトでJWT作成が成功するように設定
     mockCreateJWT.mockReturnValue('mock-jwt-token');
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   describe('triggerIntegrationTest', () => {
-    test('should trigger integration test with testId', async () => {
+    it('testIdを使用して統合テストをトリガーする', async () => {
       mockValidateConfig.mockReturnValue(true);
       mockSendWebhook.mockReturnValue({
         success: true,
         response: {
           data: {
-            applicationId: 'app-test-123'
-          }
-        }
+            applicationId: 'app-test-123',
+          },
+        },
       });
 
       const result = await triggerIntegrationTest('test-id-123');
@@ -114,11 +122,11 @@ describe('Integration Functions', () => {
         broker: 'Test Broker',
         email: 'integration-test@sankey.trade',
         xAccount: '@integration_test',
-        integrationTestId: 'test-id-123'
+        integrationTestId: 'test-id-123',
       });
     });
 
-    test('should fail without testId', async () => {
+    it('testIdなしで失敗する', async () => {
       mockValidateConfig.mockReturnValue(true);
 
       const result = await triggerIntegrationTest('');
@@ -128,7 +136,7 @@ describe('Integration Functions', () => {
       expect(mockSendWebhook).not.toHaveBeenCalled();
     });
 
-    test('should fail with invalid config', async () => {
+    it('無効な設定で失敗する', async () => {
       mockValidateConfig.mockReturnValue(false);
 
       const result = await triggerIntegrationTest('test-id-123');
@@ -138,20 +146,22 @@ describe('Integration Functions', () => {
       expect(mockSendWebhook).not.toHaveBeenCalled();
     });
 
-    test('should handle webhook failure', async () => {
+    it('Webhook送信失敗を処理する', async () => {
       mockValidateConfig.mockReturnValue(true);
       mockSendWebhook.mockReturnValue({
         success: false,
-        error: 'Network error'
+        error: 'Network error',
       });
 
       const result = await triggerIntegrationTest('test-id-123');
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe('Integration test webhook failed: Network error');
+      expect(result.error).toBe(
+        'Integration test webhook failed: Network error'
+      );
     });
 
-    test('should handle exception', async () => {
+    it('例外を処理する', async () => {
       mockValidateConfig.mockImplementation(() => {
         throw new Error('Config error');
       });
@@ -164,28 +174,33 @@ describe('Integration Functions', () => {
   });
 
   describe('testConnection', () => {
-    test('should test connection successfully', async () => {
+    it('接続テストが成功する', async () => {
       mockValidateConfig.mockReturnValue(true);
       mockNotifyTestSuccess.mockReturnValue({
         success: true,
-        response: { message: 'Test notification received' }
+        response: { message: 'Test notification received' },
       });
 
       const result = await testConnection();
 
       expect(result.success).toBe(true);
-      expect(result.message).toBe('Connection test completed - SANKEY configuration verified');
-      expect(result.notificationResult).toEqual({ message: 'Test notification received' });
+      expect(result.message).toBe(
+        'Connection test completed - SANKEY configuration verified'
+      );
+      expect(result.notificationResult).toEqual({
+        message: 'Test notification received',
+      });
 
       expect(mockNotifyTestSuccess).toHaveBeenCalledWith({
         success: true,
         timestamp: expect.any(String),
-        details: 'GAS connection test completed - SANKEY configuration verified',
-        gasProjectId: 'script-123'
+        details:
+          'GAS connection test completed - SANKEY configuration verified',
+        gasProjectId: 'script-123',
       });
     });
 
-    test('should handle invalid config', async () => {
+    it('無効な設定を処理する', async () => {
       mockValidateConfig.mockReturnValue(false);
 
       const result = await testConnection();
@@ -195,7 +210,7 @@ describe('Integration Functions', () => {
       expect(mockNotifyTestSuccess).not.toHaveBeenCalled();
     });
 
-    test('should handle JWT creation error', async () => {
+    it('JWT作成エラーを処理する', async () => {
       mockValidateConfig.mockReturnValue(true);
       mockCreateJWT.mockImplementation(() => {
         throw new Error('JWT creation failed');
@@ -204,25 +219,29 @@ describe('Integration Functions', () => {
       const result = await testConnection();
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe('JWT creation failed: Error: JWT creation failed');
+      expect(result.error).toBe(
+        'JWT creation failed: Error: JWT creation failed'
+      );
       expect(mockNotifyTestSuccess).toHaveBeenCalledWith({
         success: false,
         timestamp: expect.any(String),
-        details: 'JWT creation failed: Error: JWT creation failed'
+        details: 'JWT creation failed: Error: JWT creation failed',
       });
     });
 
-    test('should handle notification failure', async () => {
+    it('通知送信失敗を処理する', async () => {
       mockValidateConfig.mockReturnValue(true);
       mockNotifyTestSuccess.mockReturnValue({
         success: false,
-        error: 'Notification failed'
+        error: 'Notification failed',
       });
 
       const result = await testConnection();
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe('SANKEY notification failed: Notification failed');
+      expect(result.error).toBe(
+        'SANKEY notification failed: Notification failed'
+      );
     });
   });
 
@@ -231,10 +250,10 @@ describe('Integration Functions', () => {
       userId: 'test-user-id',
       applicationId: 'app-123',
       licenseId: 'license-456',
-      licenseValue: 'LICENSE_VALUE_789'
+      licenseValue: 'LICENSE_VALUE_789',
     };
 
-    test('should process license notification', async () => {
+    it('ライセンス通知を処理する', async () => {
       const result = await onSankeyNotification(notificationData);
 
       expect(result.success).toBe(true);
@@ -246,26 +265,30 @@ describe('Integration Functions', () => {
         licenseId: 'license-456',
         licenseValue: 'LICENSE_VALUE_789',
         testId: undefined,
-        receivedAt: expect.any(Date)
+        receivedAt: expect.any(Date),
       });
     });
 
-    test('should process integration test notification', async () => {
+    it('統合テスト通知を処理する', async () => {
       const testNotificationData: NotificationData = {
         ...notificationData,
-        testId: 'test-123'
+        testId: 'test-123',
       };
 
       mockNotifyIntegrationTestCompletion.mockReturnValue({
         success: true,
-        response: { message: 'Test completed' }
+        response: { message: 'Test completed' },
       });
 
       const result = await onSankeyNotification(testNotificationData);
 
       expect(result.success).toBe(true);
-      expect(result.message).toBe('License notification received and integration test completed');
-      expect(result.integrationTestResult).toEqual({ message: 'Test completed' });
+      expect(result.message).toBe(
+        'License notification received and integration test completed'
+      );
+      expect(result.integrationTestResult).toEqual({
+        message: 'Test completed',
+      });
 
       expect(mockNotifyIntegrationTestCompletion).toHaveBeenCalledWith({
         userId: 'test-user-id',
@@ -274,23 +297,26 @@ describe('Integration Functions', () => {
         applicationId: 'app-123',
         success: true,
         timestamp: expect.any(String),
-        details: 'Integration test completed successfully - License received via GAS webhook'
+        details:
+          'Integration test completed successfully - License received via GAS webhook',
       });
     });
 
-    test('should handle missing required parameters', async () => {
+    it('必須パラメータが欠落している場合を処理する', async () => {
       const invalidData = {
-        userId: 'test-user-id'
+        userId: 'test-user-id',
         // applicationIdとlicenseIdが欠落
       } as NotificationData;
 
       const result = await onSankeyNotification(invalidData);
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe('Missing required parameters: userId, applicationId, licenseId');
+      expect(result.error).toBe(
+        'Missing required parameters: userId, applicationId, licenseId'
+      );
     });
 
-    test('should continue even if spreadsheet recording fails', async () => {
+    it('スプレッドシート記録が失敗しても処理を継続する', async () => {
       mockRecordLicenseToSpreadsheet.mockImplementation(() => {
         throw new Error('Spreadsheet error');
       });
@@ -304,21 +330,23 @@ describe('Integration Functions', () => {
       );
     });
 
-    test('should handle integration test completion failure', async () => {
+    it('統合テスト完了通知の失敗を処理する', async () => {
       const testNotificationData: NotificationData = {
         ...notificationData,
-        testId: 'test-123'
+        testId: 'test-123',
       };
 
       mockNotifyIntegrationTestCompletion.mockReturnValue({
         success: false,
-        error: 'Completion notification failed'
+        error: 'Completion notification failed',
       });
 
       const result = await onSankeyNotification(testNotificationData);
 
       expect(result.success).toBe(true);
-      expect(result.message).toBe('License notification received but integration test completion failed');
+      expect(result.message).toBe(
+        'License notification received but integration test completion failed'
+      );
       expect(result.warning).toBe('Completion notification failed');
     });
   });

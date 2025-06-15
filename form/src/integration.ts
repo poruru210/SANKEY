@@ -1,6 +1,10 @@
-import { FormData, NotificationData } from './config';
+import { FormData, NotificationData } from './types';
 import { validateConfig, getGasProjectId } from './config-manager';
-import { sendWebhook, notifyTestSuccess, notifyIntegrationTestCompletion } from './webhook';
+import {
+  sendWebhook,
+  notifyTestSuccess,
+  notifyIntegrationTestCompletion,
+} from './webhook';
 import { recordLicenseToSpreadsheet } from './spreadsheet';
 import { createJWT } from './jwt';
 
@@ -8,7 +12,14 @@ import { createJWT } from './jwt';
  * 統合テスト用のダミー申請送信
  * 🔧 修正: testIdは必須パラメータ（冪等性保証）
  */
-export function triggerIntegrationTest(testId: string): any {
+export function triggerIntegrationTest(testId: string): {
+  success: boolean;
+  message?: string;
+  applicationId?: string;
+  testId?: string;
+  nextStep?: string;
+  error?: string;
+} {
   try {
     console.log('統合テストを開始します...', { testId: testId });
 
@@ -19,7 +30,9 @@ export function triggerIntegrationTest(testId: string): any {
 
     // 🔧 修正: testIdは必須（サーバー側から提供される）
     if (!testId) {
-      console.error('❌ testIdが必要です（サーバー側から提供される必要があります）');
+      console.error(
+        '❌ testIdが必要です（サーバー側から提供される必要があります）'
+      );
       return { success: false, error: 'testId parameter is required' };
     }
 
@@ -28,16 +41,16 @@ export function triggerIntegrationTest(testId: string): any {
 
     // 統合テスト用ダミーデータ（サーバー側と完全一致）
     const integrationTestData: FormData = {
-      eaName: "Integration Test EA",
-      accountNumber: "INTEGRATION_TEST_123456",
-      broker: "Test Broker",
-      email: "integration-test@sankey.trade",
-      xAccount: "@integration_test",
-      integrationTestId: integrationTestId
+      eaName: 'Integration Test EA',
+      accountNumber: 'INTEGRATION_TEST_123456',
+      broker: 'Test Broker',
+      email: 'integration-test@sankey.trade',
+      xAccount: '@integration_test',
+      integrationTestId: integrationTestId,
     };
 
     console.log('統合テスト用ダミーデータでWebhook送信を実行します...', {
-      integrationTestId: integrationTestId
+      integrationTestId: integrationTestId,
     });
 
     const result = sendWebhook(integrationTestData);
@@ -48,28 +61,37 @@ export function triggerIntegrationTest(testId: string): any {
       return {
         success: true,
         message: 'Integration test application submitted successfully',
-        applicationId: result.response.data ? result.response.data.applicationId : 'N/A',
+        applicationId: result.response?.data
+          ? result.response.data.applicationId
+          : 'N/A',
         testId: integrationTestId,
-        nextStep: 'Integration test will be automatically approved'
+        nextStep: 'Integration test will be automatically approved',
       };
     } else {
       console.log('❌ 統合テスト用Webhook送信失敗');
       return {
         success: false,
-        error: 'Integration test webhook failed: ' + result.error
+        error: 'Integration test webhook failed: ' + result.error,
       };
     }
-
   } catch (error) {
     console.error('❌ 統合テスト中にエラー:', error);
-    return { success: false, error: error instanceof Error ? error.toString() : String(error) };
+    return {
+      success: false,
+      error: error instanceof Error ? error.toString() : String(error),
+    };
   }
 }
 
 /**
  * 接続テスト（SANKEY連携テスト）
  */
-export function testConnection(): any {
+export function testConnection(): {
+  success: boolean;
+  message?: string;
+  notificationResult?: unknown;
+  error?: string;
+} {
   try {
     console.log('接続テストを開始します...');
 
@@ -87,10 +109,10 @@ export function testConnection(): any {
         accountNumber: 'TEST_CONNECTION',
         broker: 'Test',
         email: 'test@example.com',
-        xAccount: '@test'
+        xAccount: '@test',
       };
       const testJwt = createJWT(testPayload);
-      console.log('✅ JWT作成成功');
+      console.log('✅ JWT作成成功', { jwtLength: testJwt.length });
     } catch (jwtError) {
       console.error('❌ JWT作成失敗:', jwtError);
 
@@ -98,12 +120,16 @@ export function testConnection(): any {
       notifyTestSuccess({
         success: false,
         timestamp: new Date().toISOString(),
-        details: 'JWT creation failed: ' + (jwtError instanceof Error ? jwtError.toString() : String(jwtError))
+        details:
+          'JWT creation failed: ' +
+          (jwtError instanceof Error ? jwtError.toString() : String(jwtError)),
       });
 
       return {
         success: false,
-        error: 'JWT creation failed: ' + (jwtError instanceof Error ? jwtError.toString() : String(jwtError))
+        error:
+          'JWT creation failed: ' +
+          (jwtError instanceof Error ? jwtError.toString() : String(jwtError)),
       };
     }
 
@@ -114,7 +140,7 @@ export function testConnection(): any {
       success: true,
       timestamp: new Date().toISOString(),
       details: 'GAS connection test completed - SANKEY configuration verified',
-      gasProjectId: getGasProjectId()
+      gasProjectId: getGasProjectId(),
     });
 
     if (notificationResult.success) {
@@ -122,16 +148,15 @@ export function testConnection(): any {
       return {
         success: true,
         message: 'Connection test completed - SANKEY configuration verified',
-        notificationResult: notificationResult.response
+        notificationResult: notificationResult.response,
       };
     } else {
       console.log('❌ SANKEY通知送信失敗');
       return {
         success: false,
-        error: 'SANKEY notification failed: ' + notificationResult.error
+        error: 'SANKEY notification failed: ' + notificationResult.error,
       };
     }
-
   } catch (error) {
     console.error('❌ テスト中にエラー:', error);
 
@@ -140,38 +165,54 @@ export function testConnection(): any {
       notifyTestSuccess({
         success: false,
         timestamp: new Date().toISOString(),
-        details: 'GAS connection test error: ' + (error instanceof Error ? error.toString() : String(error))
+        details:
+          'GAS connection test error: ' +
+          (error instanceof Error ? error.toString() : String(error)),
       });
     } catch (notifyError) {
       console.error('通知送信もエラー:', notifyError);
     }
 
-    return { success: false, error: error instanceof Error ? error.toString() : String(error) };
+    return {
+      success: false,
+      error: error instanceof Error ? error.toString() : String(error),
+    };
   }
 }
 
 /**
  * SANKEYからの通知処理
  */
-export function onSankeyNotification(notificationData: NotificationData): any {
+export function onSankeyNotification(notificationData: NotificationData): {
+  success: boolean;
+  message?: string;
+  integrationTestResult?: unknown;
+  warning?: string;
+  error?: string;
+} {
   try {
     console.log('SANKEY通知処理を開始します...');
 
     // 必須パラメータの検証
-    if (!notificationData.userId || !notificationData.applicationId || !notificationData.licenseId) {
+    if (
+      !notificationData.userId ||
+      !notificationData.applicationId ||
+      !notificationData.licenseId
+    ) {
       return {
         success: false,
-        error: 'Missing required parameters: userId, applicationId, licenseId'
+        error: 'Missing required parameters: userId, applicationId, licenseId',
       };
     }
 
-    const { userId, applicationId, licenseId, licenseValue, testId } = notificationData;
+    const { userId, applicationId, licenseId, licenseValue, testId } =
+      notificationData;
 
     console.log('ライセンス通知詳細:', {
       userId: userId,
       applicationId: applicationId,
       licenseId: licenseId,
-      isIntegrationTest: !!testId
+      isIntegrationTest: !!testId,
     });
 
     // ライセンス情報をスプレッドシートに記録（エラーが発生しても処理継続）
@@ -182,7 +223,7 @@ export function onSankeyNotification(notificationData: NotificationData): any {
         licenseId: licenseId,
         licenseValue: licenseValue,
         testId: testId,
-        receivedAt: new Date()
+        receivedAt: new Date(),
       });
     } catch (recordError) {
       console.error('スプレッドシート記録エラー（処理は継続）:', recordError);
@@ -199,22 +240,25 @@ export function onSankeyNotification(notificationData: NotificationData): any {
         applicationId: applicationId,
         success: true,
         timestamp: new Date().toISOString(),
-        details: 'Integration test completed successfully - License received via GAS webhook'
+        details:
+          'Integration test completed successfully - License received via GAS webhook',
       });
 
       if (completionResult.success) {
         console.log('✅ 統合テスト完了通知送信成功');
         return {
           success: true,
-          message: 'License notification received and integration test completed',
-          integrationTestResult: completionResult.response
+          message:
+            'License notification received and integration test completed',
+          integrationTestResult: completionResult.response,
         };
       } else {
         console.log('⚠️ ライセンス受信成功、但し完了通知送信失敗');
         return {
           success: true,
-          message: 'License notification received but integration test completion failed',
-          warning: completionResult.error
+          message:
+            'License notification received but integration test completion failed',
+          warning: completionResult.error,
         };
       }
     } else {
@@ -222,15 +266,14 @@ export function onSankeyNotification(notificationData: NotificationData): any {
       console.log('✅ ライセンス通知受信完了');
       return {
         success: true,
-        message: 'License notification received successfully'
+        message: 'License notification received successfully',
       };
     }
-
   } catch (error) {
     console.error('❌ SANKEY通知処理エラー:', error);
     return {
       success: false,
-      error: error instanceof Error ? error.toString() : String(error)
+      error: error instanceof Error ? error.toString() : String(error),
     };
   }
 }

@@ -1,4 +1,4 @@
-import { Config } from './config';
+import { Config } from './types';
 import { CONFIG } from './config-values';
 
 /**

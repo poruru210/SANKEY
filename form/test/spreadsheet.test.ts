@@ -1,41 +1,46 @@
-import { getOrCreateSheet, recordToSpreadsheet, recordLicenseToSpreadsheet } from '../src/spreadsheet';
-import { FormData, LicenseData } from '../src/config';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import {
+  getOrCreateSheet,
+  recordToSpreadsheet,
+  recordLicenseToSpreadsheet,
+} from '../src/spreadsheet';
+import { FormData, LicenseData } from '../src/types';
 
 // モックシートオブジェクト
 const mockSheet = {
-  getName: jest.fn(() => 'Test Sheet'),
-  getLastRow: jest.fn(() => 0),
-  getRange: jest.fn(),
-  appendRow: jest.fn()
+  getName: vi.fn(() => 'Test Sheet'),
+  getLastRow: vi.fn(() => 0),
+  getRange: vi.fn(),
+  appendRow: vi.fn(),
 };
 
 const mockRange = {
-  setValues: jest.fn()
+  setValues: vi.fn(),
 };
 
 // モックスプレッドシートオブジェクト
 const mockSpreadsheet = {
-  getSheetByName: jest.fn(),
-  insertSheet: jest.fn(() => mockSheet),
-  getSheets: jest.fn(() => [mockSheet]),
-  getId: jest.fn(() => 'spreadsheet-123'),
-  getUrl: jest.fn(() => 'https://docs.google.com/spreadsheets/d/spreadsheet-123')
+  getSheetByName: vi.fn(),
+  insertSheet: vi.fn(() => mockSheet),
+  getSheets: vi.fn(() => [mockSheet]),
+  getId: vi.fn(() => 'spreadsheet-123'),
+  getUrl: vi.fn(() => 'https://docs.google.com/spreadsheets/d/spreadsheet-123'),
 };
 
 // モックフォームオブジェクト
 const mockForm = {
-  getDestinationId: jest.fn()
+  getDestinationId: vi.fn(),
 };
 
 // Google Apps Script APIのモック
 global.SpreadsheetApp = {
-  openById: jest.fn(() => mockSpreadsheet),
-  getActiveSpreadsheet: jest.fn(() => mockSpreadsheet),
-  create: jest.fn(() => mockSpreadsheet)
+  openById: vi.fn(() => mockSpreadsheet),
+  getActiveSpreadsheet: vi.fn(() => mockSpreadsheet),
+  create: vi.fn(() => mockSpreadsheet),
 } as any;
 
 global.FormApp = {
-  getActiveForm: jest.fn(() => mockForm)
+  getActiveForm: vi.fn(() => mockForm),
 } as any;
 
 // グローバル設定
@@ -47,64 +52,69 @@ global.FormApp = {
   JWT_SECRET: 'dGVzdC1zZWNyZXQ=',
   FORM_FIELDS: {
     EA_NAME: {
-      label: "EA",
-      type: "select",
+      label: 'EA',
+      type: 'select',
       required: true,
-      options: ["EA1", "EA2", "EA3"]
+      options: ['EA1', 'EA2', 'EA3'],
     },
     ACCOUNT_NUMBER: {
-      label: "口座番号",
-      type: "text",
+      label: '口座番号',
+      type: 'text',
       required: true,
-      validation: "number"
+      validation: 'number',
     },
     BROKER: {
-      label: "ブローカー",
-      type: "select",
+      label: 'ブローカー',
+      type: 'select',
       required: true,
-      options: ["BrokerA", "BrokerB", "BrokerC"]
+      options: ['BrokerA', 'BrokerB', 'BrokerC'],
     },
     EMAIL: {
-      label: "メールアドレス",
-      type: "text",
+      label: 'メールアドレス',
+      type: 'text',
       required: true,
-      validation: "email"
+      validation: 'email',
     },
     X_ACCOUNT: {
-      label: "ユーザー名",
-      type: "text",
-      required: true
+      label: 'ユーザー名',
+      type: 'text',
+      required: true,
     },
-    SPREADSHEET_ID: ""
-  }
+    SPREADSHEET_ID: '',
+  },
 };
 
-describe('Spreadsheet Functions', () => {
+describe('スプレッドシート機能', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockSheet.getRange.mockReturnValue(mockRange);
-    jest.spyOn(console, 'log').mockImplementation();
-    jest.spyOn(console, 'error').mockImplementation();
-    jest.spyOn(console, 'warn').mockImplementation();
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   describe('getOrCreateSheet', () => {
-    test('should get existing sheet', () => {
+    it('既存のシートを取得する', () => {
       mockSpreadsheet.getSheetByName.mockReturnValue(mockSheet);
       mockForm.getDestinationId.mockReturnValue('form-spreadsheet-123');
 
       const sheet = getOrCreateSheet('EA_APPLICATIONS');
 
       expect(sheet).toBe(mockSheet);
-      expect(mockSpreadsheet.getSheetByName).toHaveBeenCalledWith('EA_APPLICATIONS');
-      expect(console.log).toHaveBeenCalledWith('既存のシートを使用:', 'EA_APPLICATIONS');
+      expect(mockSpreadsheet.getSheetByName).toHaveBeenCalledWith(
+        'EA_APPLICATIONS'
+      );
+      expect(console.log).toHaveBeenCalledWith(
+        '既存のシートを使用:',
+        'EA_APPLICATIONS'
+      );
     });
 
-    test('should create new sheet if not exists', () => {
+    it('シートが存在しない場合は新規作成する', () => {
       mockSpreadsheet.getSheetByName.mockReturnValue(null);
       mockForm.getDestinationId.mockReturnValue('form-spreadsheet-123');
 
@@ -112,30 +122,13 @@ describe('Spreadsheet Functions', () => {
 
       expect(sheet).toBe(mockSheet);
       expect(mockSpreadsheet.insertSheet).toHaveBeenCalledWith('EA_LICENSES');
-      expect(console.log).toHaveBeenCalledWith('新しいシートを作成しました:', 'EA_LICENSES');
+      expect(console.log).toHaveBeenCalledWith(
+        '新しいシートを作成しました:',
+        'EA_LICENSES'
+      );
     });
 
-    test('should use configured spreadsheet ID', () => {
-      // SPREADSHEET_IDを別の場所に保存するように変更
-      const mockConfigWithSpreadsheetId = {
-        ...(global as any).CONFIG,
-        FORM_FIELDS: {
-          ...(global as any).CONFIG.FORM_FIELDS,
-          SPREADSHEET_ID: 'configured-sheet-123'
-        }
-      };
-
-      jest.spyOn(require('../src/config-manager'), 'getConfig').mockReturnValue(mockConfigWithSpreadsheetId);
-      mockForm.getDestinationId.mockReturnValue(null);
-
-      getOrCreateSheet('EA_APPLICATIONS');
-
-      expect((global as any).SpreadsheetApp.openById).toHaveBeenCalledWith('configured-sheet-123');
-
-      jest.restoreAllMocks();
-    });
-
-    test('should create new spreadsheet if none available', () => {
+    it('利用可能なスプレッドシートがない場合は新規作成する', () => {
       mockForm.getDestinationId.mockReturnValue(null);
       (global as any).SpreadsheetApp.getActiveSpreadsheet.mockReturnValue(null);
 
@@ -147,7 +140,7 @@ describe('Spreadsheet Functions', () => {
       expect(sheet).toBe(mockSheet);
     });
 
-    test('should handle sheet creation error', () => {
+    it('シート作成エラーを処理する', () => {
       mockSpreadsheet.getSheetByName.mockReturnValue(null);
       mockSpreadsheet.insertSheet.mockImplementation(() => {
         throw new Error('Sheet creation failed');
@@ -169,26 +162,35 @@ describe('Spreadsheet Functions', () => {
       accountNumber: '123456',
       broker: 'Test Broker',
       email: 'test@example.com',
-      xAccount: '@testuser'
+      xAccount: '@testuser',
     };
 
     const responseData = {
       data: {
         applicationId: 'app-123',
-        temporaryUrl: 'https://example.com/temp/123'
-      }
+        temporaryUrl: 'https://example.com/temp/123',
+      },
     };
 
-    test('should record application data to spreadsheet', () => {
+    it('申請データをスプレッドシートに記録する', () => {
       mockSpreadsheet.getSheetByName.mockReturnValue(mockSheet);
       mockSheet.getLastRow.mockReturnValue(0);
 
       recordToSpreadsheet(formData, responseData);
 
       // ヘッダー行の設定を確認
-      expect(mockRange.setValues).toHaveBeenCalledWith([[
-        '申請日時', 'EA名', 'ブローカー', '口座番号', 'メール', 'Xアカウント', '申請ID', '一時URL'
-      ]]);
+      expect(mockRange.setValues).toHaveBeenCalledWith([
+        [
+          '申請日時',
+          'EA名',
+          'ブローカー',
+          '口座番号',
+          'メール',
+          'Xアカウント',
+          '申請ID',
+          '一時URL',
+        ],
+      ]);
 
       // データ行の追加を確認
       expect(mockSheet.appendRow).toHaveBeenCalledWith([
@@ -199,15 +201,15 @@ describe('Spreadsheet Functions', () => {
         'test@example.com',
         '@testuser',
         'app-123',
-        'https://example.com/temp/123'
+        'https://example.com/temp/123',
       ]);
     });
 
-    test('should handle null response data', () => {
+    it('nullのレスポンスデータを処理する', () => {
       mockSpreadsheet.getSheetByName.mockReturnValue(mockSheet);
       mockSheet.getLastRow.mockReturnValue(1); // 既存の行がある
 
-      recordToSpreadsheet(formData, null);
+      recordToSpreadsheet(formData, undefined);
 
       expect(mockSheet.appendRow).toHaveBeenCalledWith([
         expect.any(String),
@@ -217,16 +219,28 @@ describe('Spreadsheet Functions', () => {
         'test@example.com',
         '@testuser',
         '', // 空の申請ID
-        ''  // 空の一時URL
+        '', // 空の一時URL
       ]);
     });
 
-    test('should handle spreadsheet error gracefully', () => {
+    it('スプレッドシートエラーを適切に処理する', () => {
       // getSheetByNameがエラーを投げるようにモック
       mockSpreadsheet.getSheetByName.mockImplementation(() => {
         throw new Error('Sheet access error');
       });
-      mockForm.getDestinationId.mockReturnValue('form-spreadsheet-123');
+
+      // FormApp.getActiveFormもエラーを投げるようにして、フォールバックも失敗させる
+      (global.FormApp.getActiveForm as any).mockImplementation(() => {
+        throw new Error('Form access error');
+      });
+
+      // SpreadsheetApp.getActiveSpreadsheetもnullを返すようにする
+      (global.SpreadsheetApp.getActiveSpreadsheet as any).mockReturnValue(null);
+
+      // SpreadsheetApp.createもエラーを投げるようにする
+      (global.SpreadsheetApp.create as any).mockImplementation(() => {
+        throw new Error('Cannot create spreadsheet');
+      });
 
       // getOrCreateSheetがnullを返すことを確認
       const sheet = getOrCreateSheet('EA_APPLICATIONS');
@@ -234,7 +248,9 @@ describe('Spreadsheet Functions', () => {
 
       // recordToSpreadsheetでスキップメッセージが出ることを確認
       recordToSpreadsheet(formData, responseData);
-      expect(console.warn).toHaveBeenCalledWith('スプレッドシートへの記録をスキップします');
+      expect(console.warn).toHaveBeenCalledWith(
+        'スプレッドシートへの記録をスキップします'
+      );
     });
   });
 
@@ -245,19 +261,27 @@ describe('Spreadsheet Functions', () => {
       licenseId: 'license-456',
       licenseValue: 'LICENSE_VALUE_789',
       testId: undefined,
-      receivedAt: new Date('2024-01-01T00:00:00.000Z')
+      receivedAt: new Date('2024-01-01T00:00:00.000Z'),
     };
 
-    test('should record license data to spreadsheet', () => {
+    it('ライセンスデータをスプレッドシートに記録する', () => {
       mockSpreadsheet.getSheetByName.mockReturnValue(mockSheet);
       mockSheet.getLastRow.mockReturnValue(0);
 
       recordLicenseToSpreadsheet(licenseData);
 
       // ヘッダー行の設定を確認
-      expect(mockRange.setValues).toHaveBeenCalledWith([[
-        '受信日時', 'ユーザーID', '申請ID', 'ライセンスID', 'ライセンス値', 'テストID', '備考'
-      ]]);
+      expect(mockRange.setValues).toHaveBeenCalledWith([
+        [
+          '受信日時',
+          'ユーザーID',
+          '申請ID',
+          'ライセンスID',
+          'ライセンス値',
+          'テストID',
+          '備考',
+        ],
+      ]);
 
       // データ行の追加を確認
       expect(mockSheet.appendRow).toHaveBeenCalledWith([
@@ -267,17 +291,17 @@ describe('Spreadsheet Functions', () => {
         'license-456',
         'LICENSE_VALUE_789',
         '',
-        '本番'
+        '本番',
       ]);
     });
 
-    test('should record integration test license', () => {
+    it('統合テストライセンスを記録する', () => {
       mockSpreadsheet.getSheetByName.mockReturnValue(mockSheet);
       mockSheet.getLastRow.mockReturnValue(1);
 
       const testLicenseData: LicenseData = {
         ...licenseData,
-        testId: 'test-123'
+        testId: 'test-123',
       };
 
       recordLicenseToSpreadsheet(testLicenseData);
@@ -289,17 +313,17 @@ describe('Spreadsheet Functions', () => {
         'license-456',
         'LICENSE_VALUE_789',
         'test-123',
-        '統合テスト'
+        '統合テスト',
       ]);
     });
 
-    test('should handle missing license value', () => {
+    it('ライセンス値が欠落している場合を処理する', () => {
       mockSpreadsheet.getSheetByName.mockReturnValue(mockSheet);
       mockSheet.getLastRow.mockReturnValue(1);
 
       const minimalLicenseData: LicenseData = {
         ...licenseData,
-        licenseValue: undefined
+        licenseValue: undefined,
       };
 
       recordLicenseToSpreadsheet(minimalLicenseData);
@@ -311,7 +335,7 @@ describe('Spreadsheet Functions', () => {
         'license-456',
         '', // 空のライセンス値
         '',
-        '本番'
+        '本番',
       ]);
     });
   });

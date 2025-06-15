@@ -1,20 +1,22 @@
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { doPost } from '../src/webapp';
 
 // モック
-const mockTriggerIntegrationTest = jest.fn();
-const mockOnSankeyNotification = jest.fn();
+const mockTriggerIntegrationTest = vi.fn();
+const mockOnSankeyNotification = vi.fn();
 
-jest.mock('../src/integration', () => ({
-  triggerIntegrationTest: (...args: any[]) => mockTriggerIntegrationTest(...args),
-  onSankeyNotification: (...args: any[]) => mockOnSankeyNotification(...args)
+vi.mock('../src/integration', () => ({
+  triggerIntegrationTest: (...args: any[]) =>
+    mockTriggerIntegrationTest(...args),
+  onSankeyNotification: (...args: any[]) => mockOnSankeyNotification(...args),
 }));
 
 // ContentServiceのモック
 const mockTextOutput = {
-  setMimeType: jest.fn().mockReturnThis()
+  setMimeType: vi.fn().mockReturnThis(),
 };
 
-const mockCreateTextOutput = jest.fn((content: string) => {
+const mockCreateTextOutput = vi.fn((content: string) => {
   // 実際の内容を保持する
   (mockTextOutput as any)._content = content;
   return mockTextOutput;
@@ -23,37 +25,37 @@ const mockCreateTextOutput = jest.fn((content: string) => {
 global.ContentService = {
   createTextOutput: mockCreateTextOutput,
   MimeType: {
-    JSON: 'application/json'
-  }
+    JSON: 'application/json',
+  },
 } as any;
 
-describe('Web Application', () => {
+describe('Webアプリケーション', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.spyOn(console, 'log').mockImplementation();
-    jest.spyOn(console, 'error').mockImplementation();
+    vi.clearAllMocks();
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   describe('doPost', () => {
-    test('should handle integration test request with testId', () => {
+    it('testIdを含む統合テストリクエストを処理する', () => {
       const mockEvent = {
         postData: {
           contents: JSON.stringify({
             action: 'integration_test',
             testId: 'test-123',
-            timestamp: '2024-01-01T00:00:00.000Z'
-          })
-        }
+            timestamp: '2024-01-01T00:00:00.000Z',
+          }),
+        },
       };
 
       mockTriggerIntegrationTest.mockReturnValue({
         success: true,
         message: 'Integration test triggered',
-        testId: 'test-123'
+        testId: 'test-123',
       });
 
       doPost(mockEvent as any);
@@ -63,19 +65,19 @@ describe('Web Application', () => {
         JSON.stringify({
           success: true,
           message: 'Integration test triggered',
-          testId: 'test-123'
+          testId: 'test-123',
         })
       );
     });
 
-    test('should reject integration test without testId', () => {
+    it('testIdなしの統合テストを拒否する', () => {
       const mockEvent = {
         postData: {
           contents: JSON.stringify({
-            action: 'integration_test'
+            action: 'integration_test',
             // testIdが欠落
-          })
-        }
+          }),
+        },
       };
 
       doPost(mockEvent as any);
@@ -84,25 +86,25 @@ describe('Web Application', () => {
       expect(mockCreateTextOutput).toHaveBeenCalledWith(
         JSON.stringify({
           success: false,
-          error: 'testId is required for integration test'
+          error: 'testId is required for integration test',
         })
       );
     });
 
-    test('should handle SANKEY notification', () => {
+    it('SANKEY通知を処理する', () => {
       const mockEvent = {
         postData: {
           contents: JSON.stringify({
             userId: 'test-user-id',
             applicationId: 'app-123',
-            licenseId: 'license-456'
-          })
-        }
+            licenseId: 'license-456',
+          }),
+        },
       };
 
       mockOnSankeyNotification.mockReturnValue({
         success: true,
-        message: 'Notification processed'
+        message: 'Notification processed',
       });
 
       doPost(mockEvent as any);
@@ -110,19 +112,19 @@ describe('Web Application', () => {
       expect(mockOnSankeyNotification).toHaveBeenCalledWith({
         userId: 'test-user-id',
         applicationId: 'app-123',
-        licenseId: 'license-456'
+        licenseId: 'license-456',
       });
       expect(mockCreateTextOutput).toHaveBeenCalledWith(
         JSON.stringify({
           success: true,
-          message: 'Notification processed'
+          message: 'Notification processed',
         })
       );
     });
 
-    test('should handle no post data', () => {
+    it('POSTデータがない場合を処理する', () => {
       const mockEvent = {
-        postData: null
+        postData: null,
       };
 
       doPost(mockEvent as any);
@@ -130,16 +132,16 @@ describe('Web Application', () => {
       expect(mockCreateTextOutput).toHaveBeenCalledWith(
         JSON.stringify({
           success: false,
-          error: 'No POST data received'
+          error: 'No POST data received',
         })
       );
     });
 
-    test('should handle empty post data', () => {
+    it('空のPOSTデータを処理する', () => {
       const mockEvent = {
         postData: {
-          contents: ''
-        }
+          contents: '',
+        },
       };
 
       doPost(mockEvent as any);
@@ -147,16 +149,16 @@ describe('Web Application', () => {
       expect(mockCreateTextOutput).toHaveBeenCalledWith(
         JSON.stringify({
           success: false,
-          error: 'No POST data received'
+          error: 'No POST data received',
         })
       );
     });
 
-    test('should handle invalid JSON', () => {
+    it('無効なJSONを処理する', () => {
       const mockEvent = {
         postData: {
-          contents: 'invalid json content'
-        }
+          contents: 'invalid json content',
+        },
       };
 
       doPost(mockEvent as any);
@@ -168,15 +170,15 @@ describe('Web Application', () => {
       expect(parsed.error).toContain('JSON');
     });
 
-    test('should handle exception in processing', () => {
+    it('処理中の例外を処理する', () => {
       const mockEvent = {
         postData: {
           contents: JSON.stringify({
             userId: 'test-user-id',
             applicationId: 'app-123',
-            licenseId: 'license-456'
-          })
-        }
+            licenseId: 'license-456',
+          }),
+        },
       };
 
       const mockError = new Error('Processing error');
@@ -189,26 +191,26 @@ describe('Web Application', () => {
       expect(mockCreateTextOutput).toHaveBeenCalledWith(
         JSON.stringify({
           success: false,
-          error: 'Error: Processing error'
+          error: 'Error: Processing error',
         })
       );
     });
 
-    test('should handle integration test with additional data', () => {
+    it('追加データを含む統合テストを処理する', () => {
       const mockEvent = {
         postData: {
           contents: JSON.stringify({
             action: 'integration_test',
             testId: 'test-456',
             timestamp: '2024-01-01T00:00:00.000Z',
-            additionalData: 'some extra data'
-          })
-        }
+            additionalData: 'some extra data',
+          }),
+        },
       };
 
       mockTriggerIntegrationTest.mockReturnValue({
         success: true,
-        message: 'Test triggered'
+        message: 'Test triggered',
       });
 
       doPost(mockEvent as any);
@@ -218,26 +220,26 @@ describe('Web Application', () => {
         '統合テスト実行リクエストを受信:',
         {
           testId: 'test-456',
-          timestamp: '2024-01-01T00:00:00.000Z'
+          timestamp: '2024-01-01T00:00:00.000Z',
         }
       );
     });
 
-    test('should handle SANKEY notification with testId', () => {
+    it('testIdを含むSANKEY通知を処理する', () => {
       const mockEvent = {
         postData: {
           contents: JSON.stringify({
             userId: 'test-user-id',
             applicationId: 'app-123',
             licenseId: 'license-456',
-            testId: 'test-789'
-          })
-        }
+            testId: 'test-789',
+          }),
+        },
       };
 
       mockOnSankeyNotification.mockReturnValue({
         success: true,
-        message: 'Integration test notification processed'
+        message: 'Integration test notification processed',
       });
 
       doPost(mockEvent as any);
@@ -246,7 +248,7 @@ describe('Web Application', () => {
         userId: 'test-user-id',
         applicationId: 'app-123',
         licenseId: 'license-456',
-        testId: 'test-789'
+        testId: 'test-789',
       });
     });
   });

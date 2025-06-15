@@ -1,4 +1,4 @@
-import { FormData } from './config';
+import { FormData, FormSubmitEvent } from './types';
 import { getConfig } from './config-manager';
 import { sendWebhook } from './webhook';
 import { recordToSpreadsheet } from './spreadsheet';
@@ -6,7 +6,7 @@ import { recordToSpreadsheet } from './spreadsheet';
 /**
  * フォーム送信時の処理（トリガー用）
  */
-export function onFormSubmit(e: any): void {
+export function onFormSubmit(e: FormSubmitEvent): void {
   try {
     console.log('フォーム送信を検知しました');
     const config = getConfig();
@@ -14,10 +14,11 @@ export function onFormSubmit(e: any): void {
     // フォームの回答データを取得
     const formData: FormData = {
       eaName: e.namedValues[config.FORM_FIELDS.EA_NAME.label]?.[0] || '',
-      accountNumber: e.namedValues[config.FORM_FIELDS.ACCOUNT_NUMBER.label]?.[0] || '',
+      accountNumber:
+        e.namedValues[config.FORM_FIELDS.ACCOUNT_NUMBER.label]?.[0] || '',
       broker: e.namedValues[config.FORM_FIELDS.BROKER.label]?.[0] || '',
       email: e.namedValues[config.FORM_FIELDS.EMAIL.label]?.[0] || '',
-      xAccount: e.namedValues[config.FORM_FIELDS.X_ACCOUNT.label]?.[0] || ''
+      xAccount: e.namedValues[config.FORM_FIELDS.X_ACCOUNT.label]?.[0] || '',
     };
 
     console.log('フォームデータ:', formData);
@@ -33,7 +34,6 @@ export function onFormSubmit(e: any): void {
     } else {
       console.error('❌ フォーム処理失敗:', result.error);
     }
-
   } catch (error) {
     console.error('❌ onFormSubmitエラー:', error);
   }

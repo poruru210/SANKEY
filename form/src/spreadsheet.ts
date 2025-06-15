@@ -1,13 +1,13 @@
-import { FormData, LicenseData } from './config';
-import { getConfig } from './config-manager';
+import { FormData, LicenseData } from './types';
 
 /**
  * シート取得または作成（Google Form連携版）
  */
-export function getOrCreateSheet(sheetName: string): GoogleAppsScript.Spreadsheet.Sheet | null {
+export function getOrCreateSheet(
+  sheetName: string
+): GoogleAppsScript.Spreadsheet.Sheet | null {
   try {
     let spreadsheet: GoogleAppsScript.Spreadsheet.Spreadsheet | null = null;
-    const config = getConfig();
 
     // 方法1: Formに紐づいたスプレッドシートを取得（推奨）
     try {
@@ -18,7 +18,10 @@ export function getOrCreateSheet(sheetName: string): GoogleAppsScript.Spreadshee
         const destinationId = form.getDestinationId();
         if (destinationId) {
           spreadsheet = SpreadsheetApp.openById(destinationId);
-          console.log('フォームに紐づいたスプレッドシートを使用:', destinationId);
+          console.log(
+            'フォームに紐づいたスプレッドシートを使用:',
+            destinationId
+          );
         } else {
           console.log('フォームにスプレッドシートが紐づいていません');
         }
@@ -28,15 +31,17 @@ export function getOrCreateSheet(sheetName: string): GoogleAppsScript.Spreadshee
     }
 
     // 方法2: 手動で設定されたスプレッドシートIDを使用
-    const spreadsheetId = (config.FORM_FIELDS as any).SPREADSHEET_ID;
-    if (!spreadsheet && spreadsheetId && spreadsheetId.trim() !== '') {
-      try {
-        spreadsheet = SpreadsheetApp.openById(spreadsheetId.trim());
-        console.log('設定されたスプレッドシートIDを使用:', spreadsheetId);
-      } catch (openError) {
-        console.error('スプレッドシートIDが無効です:', openError);
-      }
-    }
+    // TODO: スプレッドシートIDの設定方法を検討
+    // 現在はFORM_FIELDSにSPREADSHEET_IDが存在しないため、この部分はスキップ
+    // const spreadsheetId: string | undefined = undefined;
+    // if (!spreadsheet && spreadsheetId && spreadsheetId.trim() !== '') {
+    //   try {
+    //     spreadsheet = SpreadsheetApp.openById(spreadsheetId.trim());
+    //     console.log('設定されたスプレッドシートIDを使用:', spreadsheetId);
+    //   } catch (openError) {
+    //     console.error('スプレッドシートIDが無効です:', openError);
+    //   }
+    // }
 
     // 方法3: 現在のスプレッドシートを取得（スクリプトエディタから実行時）
     if (!spreadsheet) {
@@ -54,12 +59,15 @@ export function getOrCreateSheet(sheetName: string): GoogleAppsScript.Spreadshee
     if (!spreadsheet) {
       try {
         console.log('新しいスプレッドシートを作成します...');
-        spreadsheet = SpreadsheetApp.create('EA License Integration Test Data - ' + new Date().toISOString());
+        spreadsheet = SpreadsheetApp.create(
+          'EA License Integration Test Data - ' + new Date().toISOString()
+        );
 
         console.log('✅ 新規スプレッドシート作成成功:', {
           spreadsheetId: spreadsheet.getId(),
           url: spreadsheet.getUrl(),
-          message: 'フォームの回答の送信先をこのスプレッドシートに設定することを推奨します'
+          message:
+            'フォームの回答の送信先をこのスプレッドシートに設定することを推奨します',
         });
       } catch (createError) {
         console.error('スプレッドシート作成エラー:', createError);
@@ -109,7 +117,6 @@ export function getOrCreateSheet(sheetName: string): GoogleAppsScript.Spreadshee
     }
 
     return null;
-
   } catch (error) {
     console.error('getOrCreateSheet完全エラー:', error);
     return null;
@@ -119,7 +126,18 @@ export function getOrCreateSheet(sheetName: string): GoogleAppsScript.Spreadshee
 /**
  * スプレッドシートに申請データを記録
  */
-export function recordToSpreadsheet(formData: FormData, responseData: any): void {
+export function recordToSpreadsheet(
+  formData: FormData,
+  responseData:
+    | {
+        data?: {
+          applicationId?: string;
+          temporaryUrl?: string;
+        };
+        message?: string;
+      }
+    | undefined
+): void {
   try {
     const sheet = getOrCreateSheet('EA_APPLICATIONS');
 
@@ -131,9 +149,20 @@ export function recordToSpreadsheet(formData: FormData, responseData: any): void
 
     // ヘッダー行の確認・作成
     if (sheet.getLastRow() === 0) {
-      sheet.getRange(1, 1, 1, 8).setValues([[
-        '申請日時', 'EA名', 'ブローカー', '口座番号', 'メール', 'Xアカウント', '申請ID', '一時URL'
-      ]]);
+      sheet
+        .getRange(1, 1, 1, 8)
+        .setValues([
+          [
+            '申請日時',
+            'EA名',
+            'ブローカー',
+            '口座番号',
+            'メール',
+            'Xアカウント',
+            '申請ID',
+            '一時URL',
+          ],
+        ]);
     }
 
     // データ行の追加
@@ -154,15 +183,14 @@ export function recordToSpreadsheet(formData: FormData, responseData: any): void
       formData.email,
       formData.xAccount,
       applicationId,
-      temporaryUrl
+      temporaryUrl,
     ]);
 
     console.log('スプレッドシートに記録完了:', {
       sheet: sheet.getName(),
       row: sheet.getLastRow(),
-      applicationId: applicationId
+      applicationId: applicationId,
     });
-
   } catch (error) {
     console.error('スプレッドシート記録エラー:', error);
     // エラーが発生しても処理は継続
@@ -184,9 +212,19 @@ export function recordLicenseToSpreadsheet(licenseData: LicenseData): void {
 
     // ヘッダー行の確認・作成
     if (sheet.getLastRow() === 0) {
-      sheet.getRange(1, 1, 1, 7).setValues([[
-        '受信日時', 'ユーザーID', '申請ID', 'ライセンスID', 'ライセンス値', 'テストID', '備考'
-      ]]);
+      sheet
+        .getRange(1, 1, 1, 7)
+        .setValues([
+          [
+            '受信日時',
+            'ユーザーID',
+            '申請ID',
+            'ライセンスID',
+            'ライセンス値',
+            'テストID',
+            '備考',
+          ],
+        ]);
     }
 
     // データ行の追加
@@ -200,16 +238,15 @@ export function recordLicenseToSpreadsheet(licenseData: LicenseData): void {
       licenseData.licenseId,
       licenseData.licenseValue || '',
       licenseData.testId || '',
-      remark
+      remark,
     ]);
 
     console.log('ライセンス情報をスプレッドシートに記録完了:', {
       sheet: sheet.getName(),
       row: sheet.getLastRow(),
       licenseId: licenseData.licenseId,
-      isTest: !!licenseData.testId
+      isTest: !!licenseData.testId,
     });
-
   } catch (error) {
     console.error('ライセンス記録エラー:', error);
     // エラーが発生しても処理は継続

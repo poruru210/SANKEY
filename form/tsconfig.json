@@ -5,14 +5,19 @@
     "lib": ["es2020"],
     "moduleResolution": "node",
     "outDir": "dist",
-    "rootDir": ".",
+    "baseUrl": "./",
+    "paths": {
+      "@/*": ["src/*"]
+    },
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "allowUnreachableCode": false,
-    "allowUnusedLabels": false
+    "allowUnusedLabels": false,
+    "types": ["google-apps-script", "vitest/globals"]
   },
-  "include": ["src/**/*", "test/**/*", "rollup.config.mjs"]
+  "include": ["src/**/*", "test/**/*"],
+  "exclude": ["node_modules", "dist"]
 }
