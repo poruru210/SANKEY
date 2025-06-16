@@ -49,7 +49,12 @@ export default {
         },
       },
     }),
-    typescript(),
+    typescript({
+      tsconfigOverride: {
+        include: ["src/**/*"],
+        exclude: ["test/**/*"]
+      }
+    }),
     prettier({ parser: 'typescript' }),
   ],
   context: 'this',

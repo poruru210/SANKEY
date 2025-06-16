@@ -6,27 +6,9 @@ import {
 } from '../src/webhook';
 import { FormData, TestResult } from '../src/types';
 
-// UrlFetchAppのモック
-const mockFetch = vi.fn();
-global.UrlFetchApp = {
-  fetch: mockFetch,
-} as any;
-
-// Utilitiesのモック
-global.Utilities = {
-  sleep: vi.fn(),
-  base64Encode: vi.fn((data: any) => Buffer.from(data).toString('base64')),
-  base64Decode: vi.fn((data: string) =>
-    Buffer.from(data, 'base64').toString('binary')
-  ),
-  computeHmacSha256Signature: vi.fn(() => new Uint8Array([1, 2, 3, 4, 5])),
-  newBlob: vi.fn((data: string) => ({
-    getBytes: () => new TextEncoder().encode(data),
-  })),
-} as any;
-
-// グローバル設定
-(global as any).CONFIG = {
+// グローバル設定 (CONFIG is also set in vitest.setup.ts, this might be redundant or override)
+// For now, retain it to ensure tests have their specific CONFIG values if needed.
+(globalThis as any).CONFIG = {
   WEBHOOK_URL: 'https://example.com/webhook',
   TEST_NOTIFICATION_URL: 'https://example.com/test',
   RESULT_NOTIFICATION_URL: 'https://example.com/result',
@@ -65,9 +47,47 @@ global.Utilities = {
   },
 };
 
+// Helper type for mock HTTPResponse objects
+type MockHTTPResponse = {
+  getResponseCode: () => number;
+  getContentText: () => string;
+  // Add other HTTPResponse methods if used by the code under test
+};
+
 describe('Webhook機能', () => {
+  let fetchSpy: vi.SpyInstance<
+    [
+      url: string,
+      params?: GoogleAppsScript.URL_Fetch.URLFetchRequestOptions | undefined,
+    ],
+    GoogleAppsScript.URL_Fetch.HTTPResponse
+  >;
+  let _computeHmacSha256SignatureSpy: vi.SpyInstance; // Prefixed as unused in this file's assertions
+  let _newBlobSpy: vi.SpyInstance; // Prefixed as unused in this file's assertions
+  let sleepSpy: vi.SpyInstance;
+
   beforeEach(() => {
     vi.clearAllMocks();
+
+    if (!globalThis.UrlFetchApp || !globalThis.Utilities) {
+      throw new Error(
+        'GAS globals (UrlFetchApp, Utilities) not found. Check vitest.setup.ts.'
+      );
+    }
+
+    fetchSpy = vi.spyOn(globalThis.UrlFetchApp, 'fetch');
+
+    // Spy on Utilities methods but rely on vitest.setup.ts for their mock implementation
+    _computeHmacSha256SignatureSpy = vi.spyOn(
+      globalThis.Utilities,
+      'computeHmacSha256Signature'
+    );
+    _newBlobSpy = vi.spyOn(globalThis.Utilities, 'newBlob');
+    sleepSpy = vi.spyOn(globalThis.Utilities, 'sleep');
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   describe('sendWebhook', () => {
@@ -92,7 +112,7 @@ describe('Webhook機能', () => {
           }),
       };
 
-      mockFetch.mockReturnValue(mockResponse);
+      fetchSpy.mockReturnValue(mockResponse as MockHTTPResponse);
 
       const result = await sendWebhook(formData);
 
@@ -105,7 +125,7 @@ describe('Webhook機能', () => {
         },
       });
 
-      expect(mockFetch).toHaveBeenCalledWith(
+      expect(fetchSpy).toHaveBeenCalledWith(
         'https://example.com/webhook',
         expect.objectContaining({
           method: 'post',
@@ -130,15 +150,15 @@ describe('Webhook機能', () => {
         getContentText: () => JSON.stringify({ success: true }),
       };
 
-      mockFetch
-        .mockReturnValueOnce(mockResponse503)
-        .mockReturnValueOnce(mockResponse200);
+      fetchSpy
+        .mockReturnValueOnce(mockResponse503 as MockHTTPResponse)
+        .mockReturnValueOnce(mockResponse200 as MockHTTPResponse);
 
       const result = await sendWebhook(formData);
 
       expect(result.success).toBe(true);
-      expect(global.Utilities.sleep).toHaveBeenCalledWith(3000);
-      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(sleepSpy).toHaveBeenCalledWith(3000);
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
     });
 
     it('エラーレスポンスを処理する', async () => {
@@ -147,7 +167,7 @@ describe('Webhook機能', () => {
         getContentText: () => 'Bad Request',
       };
 
-      mockFetch.mockReturnValue(mockResponse);
+      fetchSpy.mockReturnValue(mockResponse as MockHTTPResponse);
 
       const result = await sendWebhook(formData);
 
@@ -156,7 +176,7 @@ describe('Webhook機能', () => {
     });
 
     it('ネットワークエラーを処理する', async () => {
-      mockFetch.mockImplementation(() => {
+      fetchSpy.mockImplementation(() => {
         throw new Error('Network error');
       });
 
@@ -181,7 +201,7 @@ describe('Webhook機能', () => {
         getContentText: () => JSON.stringify({ success: true }),
       };
 
-      mockFetch.mockReturnValue(mockResponse);
+      fetchSpy.mockReturnValue(mockResponse as MockHTTPResponse);
 
       const result = await sendWebhook(integrationTestData);
 
@@ -204,14 +224,14 @@ describe('Webhook機能', () => {
           JSON.stringify({ message: 'Notification received' }),
       };
 
-      mockFetch.mockReturnValue(mockResponse);
+      fetchSpy.mockReturnValue(mockResponse as MockHTTPResponse);
 
       const result = await notifyTestSuccess(testResult);
 
       expect(result.success).toBe(true);
       expect(result.response).toEqual({ message: 'Notification received' });
 
-      expect(mockFetch).toHaveBeenCalledWith(
+      expect(fetchSpy).toHaveBeenCalledWith(
         'https://example.com/test',
         expect.objectContaining({
           method: 'post',
@@ -227,9 +247,18 @@ describe('Webhook機能', () => {
 
     it('TEST_NOTIFICATION_URLが欠落している場合を処理する', async () => {
       // getConfigをモックして空のTEST_NOTIFICATION_URLを返す
-      const configModule = await import('../src/config-manager');
-      vi.spyOn(configModule, 'getConfig').mockReturnValue({
-        ...(global as any).CONFIG,
+      // This test specifically tests logic within notifyTestSuccess for missing URL,
+      // so we don't want UrlFetchApp.fetch to be called.
+      // We need to mock getConfig which is used internally by notifyTestSuccess.
+      // This requires careful handling if getConfig is also used by sendWebhook.
+      // For simplicity, if TEST_NOTIFICATION_URL is empty, fetch shouldn't be called.
+
+      // Mock getConfig from config-manager to return an empty TEST_NOTIFICATION_URL
+      // This is the correct way to influence the config used by the function under test.
+      const configManager = await import('../src/config-manager');
+      // No need to store originalGetConfig if using mockRestore() or restoreAllMocks()
+      vi.spyOn(configManager, 'getConfig').mockReturnValue({
+        ...(globalThis as any).CONFIG,
         TEST_NOTIFICATION_URL: '',
       });
 
@@ -237,8 +266,9 @@ describe('Webhook機能', () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toBe('TEST_NOTIFICATION_URL not configured');
+      expect(fetchSpy).not.toHaveBeenCalled();
 
-      vi.restoreAllMocks();
+      // vi.restoreAllMocks() in afterEach will handle restoring getConfig
     });
 
     it('テスト失敗通知を処理する', async () => {
@@ -253,12 +283,12 @@ describe('Webhook機能', () => {
         getContentText: () => JSON.stringify({ message: 'Failure noted' }),
       };
 
-      mockFetch.mockReturnValue(mockResponse);
+      fetchSpy.mockReturnValue(mockResponse as MockHTTPResponse);
 
       const result = await notifyTestSuccess(failureResult);
 
       expect(result.success).toBe(true);
-      expect(mockFetch).toHaveBeenCalledWith(
+      expect(fetchSpy).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
           payload: expect.stringContaining('"success":false'),
@@ -284,12 +314,13 @@ describe('Webhook機能', () => {
         getContentText: () => JSON.stringify({ success: true }),
       };
 
-      mockFetch.mockReturnValue(mockResponse);
+      fetchSpy.mockReturnValue(mockResponse as MockHTTPResponse);
+      fetchSpy.mockReturnValue(mockResponse as MockHTTPResponse);
 
       const result = await notifyIntegrationTestCompletion(completionData);
 
       expect(result.success).toBe(true);
-      expect(mockFetch).toHaveBeenCalledWith(
+      expect(fetchSpy).toHaveBeenCalledWith(
         'https://example.com/test/complete',
         expect.objectContaining({
           method: 'post',
@@ -304,7 +335,7 @@ describe('Webhook機能', () => {
         getContentText: () => 'Internal Server Error',
       };
 
-      mockFetch.mockReturnValue(mockResponse);
+      fetchSpy.mockReturnValue(mockResponse as any);
 
       const result = await notifyIntegrationTestCompletion(completionData);
 
