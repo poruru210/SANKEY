@@ -16,13 +16,15 @@ vi.mock('../src/config-manager');
 
 // Simulate the global functions that would be defined in index.ts for GAS
 // These test-local functions will call the mocked handlers.
-const localOnFormSubmit = (event: FormSubmitEvent) => formHandlerModule.onFormSubmit(event);
-const localDoPost = (event: GoogleAppsScript.Events.DoPost) => webappModule.doPost(event);
+const localOnFormSubmit = (event: FormSubmitEvent) =>
+  formHandlerModule.onFormSubmit(event);
+const localDoPost = (event: GoogleAppsScript.Events.DoPost) =>
+  webappModule.doPost(event);
 const localTestConnection = () => integrationModule.testConnection();
-const localTriggerIntegrationTest = () => integrationModule.triggerIntegrationTest();
+const localTriggerIntegrationTest = () =>
+  integrationModule.triggerIntegrationTest();
 const localValidateConfig = () => configManagerModule.validateConfig();
 const localGetConfig = () => configManagerModule.getConfig();
-
 
 describe('Index Global Functions (Simulated GAS Environment)', () => {
   // Spies on the methods of the mocked handler modules
@@ -40,7 +42,10 @@ describe('Index Global Functions (Simulated GAS Environment)', () => {
     onFormSubmitHandlerSpy = vi.spyOn(formHandlerModule, 'onFormSubmit');
     doPostHandlerSpy = vi.spyOn(webappModule, 'doPost');
     testConnectionHandlerSpy = vi.spyOn(integrationModule, 'testConnection');
-    triggerIntegrationTestHandlerSpy = vi.spyOn(integrationModule, 'triggerIntegrationTest');
+    triggerIntegrationTestHandlerSpy = vi.spyOn(
+      integrationModule,
+      'triggerIntegrationTest'
+    );
     validateConfigHandlerSpy = vi.spyOn(configManagerModule, 'validateConfig');
     getConfigHandlerSpy = vi.spyOn(configManagerModule, 'getConfig');
   });
@@ -55,7 +60,7 @@ describe('Index Global Functions (Simulated GAS Environment)', () => {
       response: {} as GoogleAppsScript.Forms.FormResponse,
       source: {} as GoogleAppsScript.Forms.Form,
       triggerUid: '123',
-      namedValues: { 'Field1': ['Value1'] }
+      namedValues: { Field1: ['Value1'] },
     } as FormSubmitEvent;
 
     localOnFormSubmit(mockEvent); // Call the test-local simulated global
@@ -75,18 +80,20 @@ describe('Index Global Functions (Simulated GAS Environment)', () => {
         length: 0,
         type: '',
         contents: '',
-        name: 'postData'
-      }
+        name: 'postData',
+      },
     } as GoogleAppsScript.Events.DoPost;
 
-    const mockTextOutput = globalThis.ContentService.createTextOutput("test output").setMimeType(globalThis.ContentService.MimeType.TEXT);
+    const mockTextOutput = globalThis.ContentService.createTextOutput(
+      'test output'
+    ).setMimeType(globalThis.ContentService.MimeType.TEXT);
     doPostHandlerSpy.mockReturnValue(mockTextOutput);
 
     const result = localDoPost(mockEvent); // Call the test-local simulated global
 
     expect(doPostHandlerSpy).toHaveBeenCalledTimes(1);
     expect(doPostHandlerSpy).toHaveBeenCalledWith(mockEvent);
-    expect(result.getContent()).toBe("test output");
+    expect(result.getContent()).toBe('test output');
     expect(result.getMimeType()).toBe(globalThis.ContentService.MimeType.TEXT);
   });
 

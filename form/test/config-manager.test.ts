@@ -3,7 +3,7 @@ import * as configManager from '../src/config-manager'; // Import all as configM
 import type { Config } from '../src/types';
 
 // Mock the getConfig function from the same module
-vi.mock('../src/config-manager', async (importOriginal) => {
+vi.mock('../src/config-manager', async importOriginal => {
   const originalModule = await importOriginal<typeof configManager>();
   return {
     ...originalModule, // Preserve other exports like getGasProjectId, validateConfig itself
@@ -11,7 +11,9 @@ vi.mock('../src/config-manager', async (importOriginal) => {
   };
 });
 
-const mockGetConfig = configManager.getConfig as vi.MockedFunction<typeof configManager.getConfig>;
+const mockGetConfig = configManager.getConfig as vi.MockedFunction<
+  typeof configManager.getConfig
+>;
 
 describe('ConfigManager', () => {
   let consoleErrorSpy: vi.SpyInstance;
@@ -34,7 +36,33 @@ describe('ConfigManager', () => {
       WEBHOOK_URL: 'https://example.com/webhook',
       USER_ID: 'test-user',
       JWT_SECRET: 'test-secret-jwt',
-      FORM_FIELDS: {}, // Assuming empty is fine if not core to validation here
+      FORM_FIELDS: {
+        EA_NAME: {
+          label: 'EA Name',
+          type: 'select',
+          required: true,
+          options: ['EA1', 'EA2'],
+        },
+        ACCOUNT_NUMBER: {
+          label: 'Account Number',
+          type: 'text',
+          required: true,
+          validation: 'number',
+        },
+        BROKER: {
+          label: 'Broker',
+          type: 'select',
+          required: true,
+          options: ['BrokerA', 'BrokerB'],
+        },
+        EMAIL: {
+          label: 'Email',
+          type: 'text',
+          required: true,
+          validation: 'email',
+        },
+        X_ACCOUNT: { label: 'X Account', type: 'text', required: true },
+      },
       // TEST_NOTIFICATION_URL and RESULT_NOTIFICATION_URL can be optional or valid
       TEST_NOTIFICATION_URL: 'https://example.com/test_notification',
       RESULT_NOTIFICATION_URL: 'https://example.com/result_notification',
@@ -57,7 +85,10 @@ describe('ConfigManager', () => {
     });
 
     it('should return true (currently) even for invalid WEBHOOK_URL (placeholder)', () => {
-      mockGetConfig.mockReturnValue({ ...validConfig, WEBHOOK_URL: 'YOUR_WEBHOOK_URL_HERE' });
+      mockGetConfig.mockReturnValue({
+        ...validConfig,
+        WEBHOOK_URL: 'YOUR_WEBHOOK_URL_HERE',
+      });
       const isValid = configManager.validateConfig();
       expect(isValid).toBe(true); // Actual behavior
       expect(consoleErrorSpy).not.toHaveBeenCalled(); // Assuming no error log
@@ -71,7 +102,10 @@ describe('ConfigManager', () => {
     });
 
     it('should return true (currently) even for invalid USER_ID (placeholder)', () => {
-      mockGetConfig.mockReturnValue({ ...validConfig, USER_ID: 'YOUR_USER_ID_HERE' });
+      mockGetConfig.mockReturnValue({
+        ...validConfig,
+        USER_ID: 'YOUR_USER_ID_HERE',
+      });
       const isValid = configManager.validateConfig();
       expect(isValid).toBe(true); // Actual behavior
       expect(consoleErrorSpy).not.toHaveBeenCalled(); // Assuming no error log
@@ -85,7 +119,10 @@ describe('ConfigManager', () => {
     });
 
     it('should return true (currently) even for invalid JWT_SECRET (placeholder)', () => {
-      mockGetConfig.mockReturnValue({ ...validConfig, JWT_SECRET: 'YOUR_JWT_SECRET_HERE' });
+      mockGetConfig.mockReturnValue({
+        ...validConfig,
+        JWT_SECRET: 'YOUR_JWT_SECRET_HERE',
+      });
       const isValid = configManager.validateConfig();
       expect(isValid).toBe(true); // Actual behavior
       expect(consoleErrorSpy).not.toHaveBeenCalled(); // Assuming no error log
@@ -96,7 +133,7 @@ describe('ConfigManager', () => {
         ...validConfig,
         WEBHOOK_URL: '',
         USER_ID: 'YOUR_USER_ID_HERE',
-        JWT_SECRET: ''
+        JWT_SECRET: '',
       });
       const isValid = configManager.validateConfig();
       expect(isValid).toBe(true); // Actual behavior
@@ -110,7 +147,9 @@ describe('ConfigManager', () => {
     it('should return ScriptApp.getScriptId() when successful', () => {
       const mockScriptId = 'test-project-id-123';
       // globalThis.ScriptApp is provided by vitest.setup.ts
-      const getScriptIdSpy = vi.spyOn(globalThis.ScriptApp, 'getScriptId').mockReturnValue(mockScriptId);
+      const getScriptIdSpy = vi
+        .spyOn(globalThis.ScriptApp, 'getScriptId')
+        .mockReturnValue(mockScriptId);
 
       const projectId = configManager.getGasProjectId();
 
@@ -121,15 +160,20 @@ describe('ConfigManager', () => {
 
     it('should return empty string and log error when ScriptApp.getScriptId() throws', () => {
       const error = new Error('GAS API error');
-      const getScriptIdSpy = vi.spyOn(globalThis.ScriptApp, 'getScriptId').mockImplementation(() => {
-        throw error;
-      });
+      const getScriptIdSpy = vi
+        .spyOn(globalThis.ScriptApp, 'getScriptId')
+        .mockImplementation(() => {
+          throw error;
+        });
 
       const projectId = configManager.getGasProjectId();
 
       expect(projectId).toBe('');
       expect(getScriptIdSpy).toHaveBeenCalled();
-      expect(consoleErrorSpy).toHaveBeenCalledWith('GASプロジェクトID取得エラー:', error); // Corrected message
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        'GASプロジェクトID取得エラー:',
+        error
+      ); // Corrected message
     });
   });
 });

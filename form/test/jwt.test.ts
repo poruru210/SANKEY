@@ -8,7 +8,9 @@ vi.mock('../src/config-manager', () => ({
   getConfig: vi.fn(),
 }));
 
-const mockGetConfig = configManager.getConfig as vi.MockedFunction<typeof configManager.getConfig>;
+const mockGetConfig = configManager.getConfig as vi.MockedFunction<
+  typeof configManager.getConfig
+>;
 
 describe('JWT Utilities', () => {
   let consoleErrorSpy: vi.SpyInstance;
@@ -25,7 +27,10 @@ describe('JWT Utilities', () => {
     // We spy on them here to check for calls within these specific tests.
     // Ensure these spies are restored if they are also spied on elsewhere.
     base64EncodeSpy = vi.spyOn(globalThis.Utilities, 'base64Encode');
-    computeHmacSha256SignatureSpy = vi.spyOn(globalThis.Utilities, 'computeHmacSha256Signature');
+    computeHmacSha256SignatureSpy = vi.spyOn(
+      globalThis.Utilities,
+      'computeHmacSha256Signature'
+    );
     // If newBlob is indeed used by createJWT's path:
     // newBlobSpy = vi.spyOn(globalThis.Utilities, 'newBlob');
   });
@@ -66,7 +71,9 @@ describe('JWT Utilities', () => {
 
     it('should handle padding correctly (multiple padding characters)', () => {
       base64EncodeSpy.mockReturnValue('YW55IGNhcm5hbCBwbGVhc3VyZS4uLi4='); // "any carnal pleasure...."
-      expect(base64UrlEncode('any carnal pleasure....')).toBe('YW55IGNhcm5hbCBwbGVhc3VyZS4uLi4');
+      expect(base64UrlEncode('any carnal pleasure....')).toBe(
+        'YW55IGNhcm5hbCBwbGVhc3VyZS4uLi4'
+      );
     });
 
     it('should handle strings that result in no padding', () => {
@@ -117,8 +124,18 @@ describe('JWT Utilities', () => {
       const parts = jwt.split('.');
 
       // Assuming base64url characters are used, and Buffer.from handles base64url.
-      const header = JSON.parse(Buffer.from(parts[0].replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString());
-      const payload = JSON.parse(Buffer.from(parts[1].replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString());
+      const header = JSON.parse(
+        Buffer.from(
+          parts[0].replace(/-/g, '+').replace(/_/g, '/'),
+          'base64'
+        ).toString()
+      );
+      const payload = JSON.parse(
+        Buffer.from(
+          parts[1].replace(/-/g, '+').replace(/_/g, '/'),
+          'base64'
+        ).toString()
+      );
 
       expect(header).toEqual({ alg: 'HS256', typ: 'JWT' });
       expect(payload.userId).toBe(mockConfig.USER_ID);
@@ -132,20 +149,34 @@ describe('JWT Utilities', () => {
     });
 
     it('should throw error and log if JWT_SECRET is not configured (empty)', () => {
-      mockGetConfig.mockReturnValue({ ...mockConfig, JWT_SECRET: '' } as Config);
+      mockGetConfig.mockReturnValue({
+        ...mockConfig,
+        JWT_SECRET: '',
+      } as Config);
 
-      expect(() => createJWT(mockFormData)).toThrowError('JWT作成に失敗しました');
-      expect(consoleErrorSpy).toHaveBeenCalledWith("JWT作成エラー:", expect.objectContaining({ message: 'JWT_SECRET is not configured' }));
+      expect(() => createJWT(mockFormData)).toThrowError(
+        'JWT作成に失敗しました'
+      );
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        'JWT作成エラー:',
+        expect.objectContaining({ message: 'JWT_SECRET is not configured' })
+      );
     });
 
     it('should NOT throw error if JWT_SECRET is a placeholder (current behavior)', () => {
-      mockGetConfig.mockReturnValue({ ...mockConfig, JWT_SECRET: 'YOUR_JWT_SECRET_HERE' } as Config);
+      mockGetConfig.mockReturnValue({
+        ...mockConfig,
+        JWT_SECRET: 'YOUR_JWT_SECRET_HERE',
+      } as Config);
       // Actual behavior: The code does not treat "YOUR_JWT_SECRET_HERE" as invalid and proceeds.
       expect(() => createJWT(mockFormData)).not.toThrowError();
       // Consequently, no error should be logged for this specific placeholder being "invalid" by createJWT itself.
       // If createJWT internally called validateConfig and that logged, this might need adjustment.
       // But the error being tested for is thrown by createJWT.
-      expect(consoleErrorSpy).not.toHaveBeenCalledWith("JWT作成エラー:", expect.objectContaining({ message: 'JWT_SECRET is not configured' }));
+      expect(consoleErrorSpy).not.toHaveBeenCalledWith(
+        'JWT作成エラー:',
+        expect.objectContaining({ message: 'JWT_SECRET is not configured' })
+      );
     });
 
     it('should throw error if computeHmacSha256Signature fails', () => {
@@ -154,7 +185,9 @@ describe('JWT Utilities', () => {
         throw hmacError;
       });
 
-      expect(() => createJWT(mockFormData)).toThrowError('JWT作成に失敗しました');
+      expect(() => createJWT(mockFormData)).toThrowError(
+        'JWT作成に失敗しました'
+      );
       expect(consoleErrorSpy).toHaveBeenCalledWith('JWT作成エラー:', hmacError);
     });
   });

@@ -17,6 +17,13 @@
       "rules": {
         "@typescript-eslint/no-unused-vars": "off"
       }
+    },
+    {
+      "files": ["test/vitest.setup.ts"],
+      "rules": {
+        "n/no-unpublished-require": "off",
+        "n/no-unpublished-import": "off"
+      }
     }
   ],
   "parserOptions": {

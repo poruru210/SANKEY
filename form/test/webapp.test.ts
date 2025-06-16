@@ -22,10 +22,18 @@ describe('Webアプリケーション', () => {
 
     // Spy on the global ContentService.createTextOutput
     // This relies on ContentService being available globally from vitest.setup.ts
-    if (!globalThis.ContentService || !globalThis.ContentService.createTextOutput) {
-      throw new Error("globalThis.ContentService.createTextOutput is not defined. Check vitest.setup.ts");
+    if (
+      !globalThis.ContentService ||
+      !globalThis.ContentService.createTextOutput
+    ) {
+      throw new Error(
+        'globalThis.ContentService.createTextOutput is not defined. Check vitest.setup.ts'
+      );
     }
-    createTextOutputSpy = vi.spyOn(globalThis.ContentService, 'createTextOutput');
+    createTextOutputSpy = vi.spyOn(
+      globalThis.ContentService,
+      'createTextOutput'
+    );
   });
 
   afterEach(() => {
@@ -60,7 +68,9 @@ describe('Webアプリケーション', () => {
         message: 'Integration test triggered',
         testId: 'test-123',
       });
-      expect(result.setMimeType).toHaveBeenCalledWith(globalThis.ContentService.MimeType.JSON);
+      expect(result.setMimeType).toHaveBeenCalledWith(
+        globalThis.ContentService.MimeType.JSON
+      );
     });
 
     it('testIdなしの統合テストを拒否する', () => {
@@ -82,7 +92,9 @@ describe('Webアプリケーション', () => {
         success: false,
         error: 'testId is required for integration test',
       });
-      expect(result.setMimeType).toHaveBeenCalledWith(globalThis.ContentService.MimeType.JSON);
+      expect(result.setMimeType).toHaveBeenCalledWith(
+        globalThis.ContentService.MimeType.JSON
+      );
     });
 
     it('SANKEY通知を処理する', () => {
@@ -114,7 +126,9 @@ describe('Webアプリケーション', () => {
         success: true,
         message: 'Notification processed',
       });
-      expect(result.setMimeType).toHaveBeenCalledWith(globalThis.ContentService.MimeType.JSON);
+      expect(result.setMimeType).toHaveBeenCalledWith(
+        globalThis.ContentService.MimeType.JSON
+      );
     });
 
     it('POSTデータがない場合を処理する', () => {
@@ -127,10 +141,12 @@ describe('Webアプリケーション', () => {
       expect(createTextOutputSpy).toHaveBeenCalledTimes(1);
       const jsonResponse = JSON.parse(createTextOutputSpy.mock.calls[0][0]);
       expect(jsonResponse).toEqual({
-          success: false,
-          error: 'No POST data received',
+        success: false,
+        error: 'No POST data received',
       });
-      expect(result.setMimeType).toHaveBeenCalledWith(globalThis.ContentService.MimeType.JSON);
+      expect(result.setMimeType).toHaveBeenCalledWith(
+        globalThis.ContentService.MimeType.JSON
+      );
     });
 
     it('空のPOSTデータを処理する', () => {
@@ -145,10 +161,12 @@ describe('Webアプリケーション', () => {
       expect(createTextOutputSpy).toHaveBeenCalledTimes(1);
       const jsonResponse = JSON.parse(createTextOutputSpy.mock.calls[0][0]);
       expect(jsonResponse).toEqual({
-          success: false,
-          error: 'No POST data received',
+        success: false,
+        error: 'No POST data received',
       });
-      expect(result.setMimeType).toHaveBeenCalledWith(globalThis.ContentService.MimeType.JSON);
+      expect(result.setMimeType).toHaveBeenCalledWith(
+        globalThis.ContentService.MimeType.JSON
+      );
     });
 
     it('無効なJSONを処理する', () => {
@@ -164,7 +182,9 @@ describe('Webアプリケーション', () => {
       const jsonResponse = JSON.parse(createTextOutputSpy.mock.calls[0][0]);
       expect(jsonResponse.success).toBe(false);
       expect(jsonResponse.error).toContain('JSON');
-      expect(result.setMimeType).toHaveBeenCalledWith(globalThis.ContentService.MimeType.JSON);
+      expect(result.setMimeType).toHaveBeenCalledWith(
+        globalThis.ContentService.MimeType.JSON
+      );
     });
 
     it('処理中の例外を処理する', () => {
@@ -188,10 +208,12 @@ describe('Webアプリケーション', () => {
       expect(createTextOutputSpy).toHaveBeenCalledTimes(1);
       const jsonResponse = JSON.parse(createTextOutputSpy.mock.calls[0][0]);
       expect(jsonResponse).toEqual({
-          success: false,
-          error: 'Error: Processing error',
+        success: false,
+        error: 'Error: Processing error',
       });
-      expect(result.setMimeType).toHaveBeenCalledWith(globalThis.ContentService.MimeType.JSON);
+      expect(result.setMimeType).toHaveBeenCalledWith(
+        globalThis.ContentService.MimeType.JSON
+      );
     });
 
     it('追加データを含む統合テストを処理する', () => {

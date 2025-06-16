@@ -47,47 +47,46 @@ import { FormData, TestResult } from '../src/types';
   },
 };
 
+// Helper type for mock HTTPResponse objects
+type MockHTTPResponse = {
+  getResponseCode: () => number;
+  getContentText: () => string;
+  // Add other HTTPResponse methods if used by the code under test
+};
+
 describe('Webhook機能', () => {
-  let fetchSpy: import('vitest').SpyInstance;
-  let computeHmacSha256SignatureSpy: import('vitest').SpyInstance;
-  let newBlobSpy: import('vitest').SpyInstance;
-  let sleepSpy: import('vitest').SpyInstance;
-  // base64Encode and base64Decode will use gas-local's default or can be spied on if needed for verification
+  let fetchSpy: vi.SpyInstance<
+    [
+      url: string,
+      params?: GoogleAppsScript.URL_Fetch.URLFetchRequestOptions | undefined,
+    ],
+    GoogleAppsScript.URL_Fetch.HTTPResponse
+  >;
+  let _computeHmacSha256SignatureSpy: vi.SpyInstance; // Prefixed as unused in this file's assertions
+  let _newBlobSpy: vi.SpyInstance; // Prefixed as unused in this file's assertions
+  let sleepSpy: vi.SpyInstance;
 
   beforeEach(() => {
-    vi.clearAllMocks(); // Clears spies too
+    vi.clearAllMocks();
 
-    // Ensure global GAS objects are available (from vitest.setup.ts)
     if (!globalThis.UrlFetchApp || !globalThis.Utilities) {
-      throw new Error('GAS globals (UrlFetchApp, Utilities) not found. Check vitest.setup.ts.');
+      throw new Error(
+        'GAS globals (UrlFetchApp, Utilities) not found. Check vitest.setup.ts.'
+      );
     }
 
     fetchSpy = vi.spyOn(globalThis.UrlFetchApp, 'fetch');
 
-    // Spying on Utilities methods that are expected to be called
-    // computeHmacSha256Signature is critical for JWT
-    computeHmacSha256SignatureSpy = vi.spyOn(globalThis.Utilities, 'computeHmacSha256Signature')
-      .mockReturnValue([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31]); // Needs to be a valid length for HMAC-SHA256
-
-    // newBlob might be called by JWT logic if certain payloads are stringified
-    newBlobSpy = vi.spyOn(globalThis.Utilities, 'newBlob').mockImplementation((data: string) => {
-      const textEncoder = new TextEncoder();
-      const bytes = Array.from(textEncoder.encode(data)); // Convert Uint8Array to number[]
-      return {
-        getBytes: () => bytes,
-        getDataAsString: () => data,
-        getContentType: () => 'text/plain',
-        // Add other blob methods if they are used by the code
-      } as any; // Cast to any to simplify mock for uncommonly used methods
-    });
-
+    // Spy on Utilities methods but rely on vitest.setup.ts for their mock implementation
+    _computeHmacSha256SignatureSpy = vi.spyOn(
+      globalThis.Utilities,
+      'computeHmacSha256Signature'
+    );
+    _newBlobSpy = vi.spyOn(globalThis.Utilities, 'newBlob');
     sleepSpy = vi.spyOn(globalThis.Utilities, 'sleep');
-    // No need to spy on base64Encode/Decode unless we want to assert their calls,
-    // as gas-local provides functional mocks.
   });
 
   afterEach(() => {
-    // Restore all mocks to ensure clean state between test files if not already handled by clearAllMocks
     vi.restoreAllMocks();
   });
 
@@ -113,7 +112,7 @@ describe('Webhook機能', () => {
           }),
       };
 
-      fetchSpy.mockReturnValue(mockResponse as any); // Cast to any if HTTPResponse type is complex
+      fetchSpy.mockReturnValue(mockResponse as MockHTTPResponse);
 
       const result = await sendWebhook(formData);
 
@@ -151,9 +150,9 @@ describe('Webhook機能', () => {
         getContentText: () => JSON.stringify({ success: true }),
       };
 
-      fetchSpy // Corrected from mockFetch
-        .mockReturnValueOnce(mockResponse503 as any)
-        .mockReturnValueOnce(mockResponse200 as any);
+      fetchSpy
+        .mockReturnValueOnce(mockResponse503 as MockHTTPResponse)
+        .mockReturnValueOnce(mockResponse200 as MockHTTPResponse);
 
       const result = await sendWebhook(formData);
 
@@ -168,7 +167,7 @@ describe('Webhook機能', () => {
         getContentText: () => 'Bad Request',
       };
 
-      fetchSpy.mockReturnValue(mockResponse as any);
+      fetchSpy.mockReturnValue(mockResponse as MockHTTPResponse);
 
       const result = await sendWebhook(formData);
 
@@ -202,7 +201,7 @@ describe('Webhook機能', () => {
         getContentText: () => JSON.stringify({ success: true }),
       };
 
-      fetchSpy.mockReturnValue(mockResponse as any);
+      fetchSpy.mockReturnValue(mockResponse as MockHTTPResponse);
 
       const result = await sendWebhook(integrationTestData);
 
@@ -225,7 +224,7 @@ describe('Webhook機能', () => {
           JSON.stringify({ message: 'Notification received' }),
       };
 
-      fetchSpy.mockReturnValue(mockResponse as any);
+      fetchSpy.mockReturnValue(mockResponse as MockHTTPResponse);
 
       const result = await notifyTestSuccess(testResult);
 
@@ -257,21 +256,19 @@ describe('Webhook機能', () => {
       // Mock getConfig from config-manager to return an empty TEST_NOTIFICATION_URL
       // This is the correct way to influence the config used by the function under test.
       const configManager = await import('../src/config-manager');
-      const originalGetConfig = configManager.getConfig; // Store original
+      // No need to store originalGetConfig if using mockRestore() or restoreAllMocks()
       vi.spyOn(configManager, 'getConfig').mockReturnValue({
-        ...(globalThis as any).CONFIG, // Spread current global CONFIG to get other values
-        TEST_NOTIFICATION_URL: '',    // Override specific value
+        ...(globalThis as any).CONFIG,
+        TEST_NOTIFICATION_URL: '',
       });
 
       const result = await notifyTestSuccess(testResult);
 
       expect(result.success).toBe(false);
       expect(result.error).toBe('TEST_NOTIFICATION_URL not configured');
-      expect(fetchSpy).not.toHaveBeenCalled(); // Ensure fetch was NOT called
+      expect(fetchSpy).not.toHaveBeenCalled();
 
-      // Restore original getConfig if other tests in this file might need it,
-      // though vi.restoreAllMocks() in afterEach should handle it.
-      vi.mocked(configManager.getConfig).mockRestore(); // Or vi.restoreAllMocks();
+      // vi.restoreAllMocks() in afterEach will handle restoring getConfig
     });
 
     it('テスト失敗通知を処理する', async () => {
@@ -286,7 +283,7 @@ describe('Webhook機能', () => {
         getContentText: () => JSON.stringify({ message: 'Failure noted' }),
       };
 
-      fetchSpy.mockReturnValue(mockResponse as any);
+      fetchSpy.mockReturnValue(mockResponse as MockHTTPResponse);
 
       const result = await notifyTestSuccess(failureResult);
 
@@ -317,7 +314,8 @@ describe('Webhook機能', () => {
         getContentText: () => JSON.stringify({ success: true }),
       };
 
-      fetchSpy.mockReturnValue(mockResponse as any);
+      fetchSpy.mockReturnValue(mockResponse as MockHTTPResponse);
+      fetchSpy.mockReturnValue(mockResponse as MockHTTPResponse);
 
       const result = await notifyIntegrationTestCompletion(completionData);
 

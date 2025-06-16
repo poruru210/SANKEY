@@ -14,7 +14,6 @@ vi.mock('../src/webhook', () => ({
   sendWebhook: (formData: FormData) => mockSendWebhook(formData),
 }));
 
-
 // グローバル設定
 // CONFIG is set in vitest.setup.ts, but re-asserting parts or whole for clarity if needed.
 // For this test, specific URLs in CONFIG are not directly used by form-handler itself if sendWebhook is mocked.
@@ -26,10 +25,30 @@ vi.mock('../src/webhook', () => ({
   USER_ID: 'test-user-id',
   JWT_SECRET: 'dGVzdC1zZWNyZXQ=',
   FORM_FIELDS: {
-    EA_NAME: { label: 'EA', type: 'select', required: true, options: ['EA1', 'EA2', 'EA3'] },
-    ACCOUNT_NUMBER: { label: '口座番号', type: 'text', required: true, validation: 'number' },
-    BROKER: { label: 'ブローカー', type: 'select', required: true, options: ['BrokerA', 'BrokerB', 'BrokerC'] },
-    EMAIL: { label: 'メールアドレス', type: 'text', required: true, validation: 'email' },
+    EA_NAME: {
+      label: 'EA',
+      type: 'select',
+      required: true,
+      options: ['EA1', 'EA2', 'EA3'],
+    },
+    ACCOUNT_NUMBER: {
+      label: '口座番号',
+      type: 'text',
+      required: true,
+      validation: 'number',
+    },
+    BROKER: {
+      label: 'ブローカー',
+      type: 'select',
+      required: true,
+      options: ['BrokerA', 'BrokerB', 'BrokerC'],
+    },
+    EMAIL: {
+      label: 'メールアドレス',
+      type: 'text',
+      required: true,
+      validation: 'email',
+    },
     X_ACCOUNT: { label: 'ユーザー名', type: 'text', required: true },
   },
 };
@@ -69,7 +88,7 @@ describe('フォームハンドラー', () => {
       getActiveSheet: vi.fn().mockReturnValue(mockSheet),
       insertSheet: vi.fn().mockReturnValue(mockSheet), // If new sheets are created
       getSheets: vi.fn().mockReturnValue([mockSheet]),
-      getId: vi.fn().mockReturnValue("mock-spreadsheet-id"),
+      getId: vi.fn().mockReturnValue('mock-spreadsheet-id'),
     } as unknown as GoogleAppsScript.Spreadsheet.Spreadsheet;
 
     // Mock FormApp
@@ -80,12 +99,16 @@ describe('フォームハンドラー', () => {
     vi.spyOn(globalThis.FormApp, 'getActiveForm').mockReturnValue(mockForm);
 
     // Default behavior for getDestinationId (can be overridden in specific tests)
-    (globalThis.FormApp.getActiveForm() as any).getDestinationId.mockReturnValue("mockSpreadsheetIdFromForm");
+    (
+      globalThis.FormApp.getActiveForm() as any
+    ).getDestinationId.mockReturnValue('mockSpreadsheetIdFromForm');
 
     // Mock SpreadsheetApp methods
-    vi.spyOn(globalThis.SpreadsheetApp, 'getActiveSpreadsheet').mockReturnValue(mockSpreadsheet);
-    vi.spyOn(globalThis.SpreadsheetApp, 'openById').mockImplementation((id) => {
-      if (id === "mockSpreadsheetIdFromForm") {
+    vi.spyOn(globalThis.SpreadsheetApp, 'getActiveSpreadsheet').mockReturnValue(
+      mockSpreadsheet
+    );
+    vi.spyOn(globalThis.SpreadsheetApp, 'openById').mockImplementation(id => {
+      if (id === 'mockSpreadsheetIdFromForm') {
         return mockSpreadsheet;
       }
       // Optional: return a different mock or throw error for unexpected IDs
@@ -107,8 +130,16 @@ describe('フォームハンドラー', () => {
         },
       };
       // Reverted to response.data structure as per original successful webhook.test.ts and common patterns
-      const mockWebhookResponsePayload = { data: { applicationId: 'app-123', temporaryUrl: 'https://example.com/temp/123' } };
-      mockSendWebhook.mockReturnValue({ success: true, response: mockWebhookResponsePayload });
+      const mockWebhookResponsePayload = {
+        data: {
+          applicationId: 'app-123',
+          temporaryUrl: 'https://example.com/temp/123',
+        },
+      };
+      mockSendWebhook.mockReturnValue({
+        success: true,
+        response: mockWebhookResponsePayload,
+      });
 
       onFormSubmit(mockEvent);
 
@@ -123,18 +154,24 @@ describe('フォームハンドラー', () => {
       // Assertions for recordToSpreadsheet
       // Verify FormApp and SpreadsheetApp.openById path first
       expect(globalThis.FormApp.getActiveForm).toHaveBeenCalled();
-      expect((globalThis.FormApp.getActiveForm() as any).getDestinationId).toHaveBeenCalled();
-      expect(globalThis.SpreadsheetApp.openById).toHaveBeenCalledWith("mockSpreadsheetIdFromForm");
+      expect(
+        (globalThis.FormApp.getActiveForm() as any).getDestinationId
+      ).toHaveBeenCalled();
+      expect(globalThis.SpreadsheetApp.openById).toHaveBeenCalledWith(
+        'mockSpreadsheetIdFromForm'
+      );
 
       // Then verify sheet operations
-      expect(mockSpreadsheet.getSheetByName).toHaveBeenCalledWith('EA_APPLICATIONS');
+      expect(mockSpreadsheet.getSheetByName).toHaveBeenCalledWith(
+        'EA_APPLICATIONS'
+      );
       expect(appendRowSpy).toHaveBeenCalledTimes(1); // Assuming one data row append
       expect(appendRowSpy).toHaveBeenCalledWith(
         expect.arrayContaining([
           expect.any(String), // Timestamp is a formatted string
           'Test EA',
-          'Test Broker',      // Corrected order
-          '123456',          // Corrected order
+          'Test Broker', // Corrected order
+          '123456', // Corrected order
           'test@example.com',
           '@testuser',
           'app-123',
@@ -152,7 +189,9 @@ describe('フォームハンドラー', () => {
       };
       mockSendWebhook.mockReturnValue({
         success: true,
-        response: { data: { applicationId: 'app-欠落', temporaryUrl: 'url-欠落' } }
+        response: {
+          data: { applicationId: 'app-欠落', temporaryUrl: 'url-欠落' },
+        },
       });
 
       onFormSubmit(mockEvent);
@@ -191,7 +230,10 @@ describe('フォームハンドラー', () => {
           ユーザー名: ['@testuser'],
         },
       };
-      mockSendWebhook.mockReturnValue({ success: false, error: 'Network error' });
+      mockSendWebhook.mockReturnValue({
+        success: false,
+        error: 'Network error',
+      });
 
       onFormSubmit(mockEvent);
 
@@ -201,28 +243,34 @@ describe('フォームハンドラー', () => {
         expect.arrayContaining([
           expect.any(String), // Timestamp
           'Test EA',
-          'Test Broker',      // Corrected order
-          '123456',          // Corrected order
+          'Test Broker', // Corrected order
+          '123456', // Corrected order
           'test@example.com',
           '@testuser',
-          '',  // App ID on error is logged as empty string
-          '',  // Temp URL on error is logged as empty string
+          '', // App ID on error is logged as empty string
+          '', // Temp URL on error is logged as empty string
           // Status "失敗: Network error" seems to be missing from actual appendRow call
         ])
       );
-      expect(console.error).toHaveBeenCalledWith('❌ フォーム処理失敗:', 'Network error');
+      expect(console.error).toHaveBeenCalledWith(
+        '❌ フォーム処理失敗:',
+        'Network error'
+      );
     });
 
     it('フォーム処理中の例外を処理する', () => {
       const appendRowSpy = mockSheet.appendRow;
       const mockEvent = { namedValues: null } as unknown as FormSubmitEvent;
       mockSendWebhook.mockImplementation(() => {
-        throw new Error("Simulated error from sendWebhook if it were called");
+        throw new Error('Simulated error from sendWebhook if it were called');
       });
 
       onFormSubmit(mockEvent);
       expect(appendRowSpy).not.toHaveBeenCalled();
-      expect(console.error).toHaveBeenCalledWith('❌ onFormSubmitエラー:', expect.any(TypeError));
+      expect(console.error).toHaveBeenCalledWith(
+        '❌ onFormSubmitエラー:',
+        expect.any(TypeError)
+      );
     });
 
     it('未定義の名前付き値を処理する', () => {
@@ -238,7 +286,9 @@ describe('フォームハンドラー', () => {
       };
       mockSendWebhook.mockReturnValue({
         success: true,
-        response: { data: { applicationId: 'app-未定義', temporaryUrl: 'url-未定義' }}
+        response: {
+          data: { applicationId: 'app-未定義', temporaryUrl: 'url-未定義' },
+        },
       });
 
       onFormSubmit(mockEvent);
@@ -290,15 +340,19 @@ describe('onFormSubmit with getDestinationId returning null', () => {
     mockSpreadsheet = {
       getSheetByName: vi.fn().mockReturnValue(mockSheet),
       getActiveSheet: vi.fn().mockReturnValue(mockSheet),
-      getId: vi.fn().mockReturnValue("mock-active-spreadsheet-id"),
+      getId: vi.fn().mockReturnValue('mock-active-spreadsheet-id'),
     } as unknown as GoogleAppsScript.Spreadsheet.Spreadsheet;
 
     const mockFormReturningNullId = {
       getDestinationId: vi.fn().mockReturnValue(null), // Simulate no destination ID
     } as unknown as GoogleAppsScript.Forms.Form;
-    vi.spyOn(globalThis.FormApp, 'getActiveForm').mockReturnValue(mockFormReturningNullId);
+    vi.spyOn(globalThis.FormApp, 'getActiveForm').mockReturnValue(
+      mockFormReturningNullId
+    );
 
-    vi.spyOn(globalThis.SpreadsheetApp, 'getActiveSpreadsheet').mockReturnValue(mockSpreadsheet);
+    vi.spyOn(globalThis.SpreadsheetApp, 'getActiveSpreadsheet').mockReturnValue(
+      mockSpreadsheet
+    );
     vi.spyOn(globalThis.SpreadsheetApp, 'openById'); // Spy on it, but it shouldn't be called
   });
 
@@ -306,25 +360,36 @@ describe('onFormSubmit with getDestinationId returning null', () => {
     const mockEvent: FormSubmitEvent = {
       namedValues: { EA: ['Fallback EA'], 口座番号: ['FB123'] },
     };
-    mockSendWebhook.mockReturnValue({ success: true, response: { data: { applicationId: 'app-fallback', temporaryUrl: 'url-fallback' } } });
+    mockSendWebhook.mockReturnValue({
+      success: true,
+      response: {
+        data: { applicationId: 'app-fallback', temporaryUrl: 'url-fallback' },
+      },
+    });
 
     onFormSubmit(mockEvent);
 
-    expect(mockSendWebhook).toHaveBeenCalledWith(expect.objectContaining({ eaName: 'Fallback EA' }));
+    expect(mockSendWebhook).toHaveBeenCalledWith(
+      expect.objectContaining({ eaName: 'Fallback EA' })
+    );
     expect(globalThis.FormApp.getActiveForm).toHaveBeenCalled();
-    expect((globalThis.FormApp.getActiveForm() as any).getDestinationId).toHaveBeenCalled();
+    expect(
+      (globalThis.FormApp.getActiveForm() as any).getDestinationId
+    ).toHaveBeenCalled();
     expect(globalThis.SpreadsheetApp.openById).not.toHaveBeenCalled();
     expect(globalThis.SpreadsheetApp.getActiveSpreadsheet).toHaveBeenCalled();
-    expect(mockSpreadsheet.getSheetByName).toHaveBeenCalledWith('EA_APPLICATIONS');
+    expect(mockSpreadsheet.getSheetByName).toHaveBeenCalledWith(
+      'EA_APPLICATIONS'
+    );
     expect(appendRowSpy).toHaveBeenCalledTimes(1);
     expect(appendRowSpy).toHaveBeenCalledWith(
       expect.arrayContaining([
         expect.any(String), // Timestamp
         'Fallback EA',
-        '',                 // Broker (empty as not in namedValues)
-        'FB123',            // AccountNumber
-        '',                 // Email
-        '',                 // X Account
+        '', // Broker (empty as not in namedValues)
+        'FB123', // AccountNumber
+        '', // Email
+        '', // X Account
         'app-fallback',
         'url-fallback',
         // Status seems to be missing

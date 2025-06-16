@@ -16,26 +16,52 @@ vi.mock('../src/config-values', () => ({
     USER_ID: 'test-user-id',
     JWT_SECRET: 'dGVzdC1zZWNyZXQ=',
     FORM_FIELDS: {
-      EA_NAME: { label: 'EA', type: 'select', required: true, options: ['EA1', 'EA2', 'EA3'] },
-      ACCOUNT_NUMBER: { label: '口座番号', type: 'text', required: true, validation: 'number' },
-      BROKER: { label: 'ブローカー', type: 'select', required: true, options: ['BrokerA', 'BrokerB', 'BrokerC'] },
-      EMAIL: { label: 'メールアドレス', type: 'text', required: true, validation: 'email' },
+      EA_NAME: {
+        label: 'EA',
+        type: 'select',
+        required: true,
+        options: ['EA1', 'EA2', 'EA3'],
+      },
+      ACCOUNT_NUMBER: {
+        label: '口座番号',
+        type: 'text',
+        required: true,
+        validation: 'number',
+      },
+      BROKER: {
+        label: 'ブローカー',
+        type: 'select',
+        required: true,
+        options: ['BrokerA', 'BrokerB', 'BrokerC'],
+      },
+      EMAIL: {
+        label: 'メールアドレス',
+        type: 'text',
+        required: true,
+        validation: 'email',
+      },
       X_ACCOUNT: { label: 'ユーザー名', type: 'text', required: true },
     },
   },
 }));
 
 // Assign available GAS global objects from gasGlobalMock
-globalThis.Logger = gasGlobalMock.Logger || { log: vi.fn(), clear: vi.fn(), getLog: vi.fn() };
+globalThis.Logger = gasGlobalMock.Logger || {
+  log: vi.fn(),
+  clear: vi.fn(),
+  getLog: vi.fn(),
+};
 
 // Create a comprehensive Utilities mock.
 // Start with a base set of mocks for all known used Utilities functions.
 const comprehensiveUtilities = {
-  formatString: vi.fn((format, ...args) => { // Basic pass-through for testing
+  formatString: vi.fn((format, ...args) => {
+    // Basic pass-through for testing
     let i = 0;
     return format.replace(/%s/g, () => String(args[i++]));
   }),
-  formatDate: vi.fn((date, timeZone, format) => { // Basic pass-through for testing
+  formatDate: vi.fn((date, timeZone, format) => {
+    // Basic pass-through for testing
     // This is a simplified mock. Real formatDate is complex.
     // For tests, often just checking it was called is enough, or a predictable string.
     // Example: return date.toISOString() + ` (${timeZone} to ${format})`;
@@ -51,59 +77,83 @@ const comprehensiveUtilities = {
     }
     return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}Z`; // Default to ISO-like
   }),
-  sleep: vi.fn((milliseconds) => { /* no-op for tests */ }),
-  base64Encode: vi.fn((data: string | number[] | Uint8Array, charset?: any): string => {
-    const toEncode = typeof data === 'string' ? Buffer.from(data) : Buffer.from(data as Uint8Array);
-    return toEncode.toString('base64');
-  }),
-  base64Decode: vi.fn().mockImplementation((encoded: string, charset?: any): number[] => {
-    return Array.from(Buffer.from(encoded, 'base64'));
-  }),
-  computeHmacSha256Signature: vi.fn((value: string, key: string | number[] | Uint8Array): number[] => {
-    // console.log('Mock computeHmacSha256Signature called'); // For debugging
-    // Return a fixed, known-length array for predictability if needed, or random for basic check
-    const signature = new Uint8Array(32); // 32 bytes for SHA256
-    for (let i = 0; i < signature.length; i++) {
-      signature[i] = i; // Fill with some predictable data
+  sleep: vi.fn(_milliseconds => {
+    /* no-op for tests */
+  }), // Prefixed unused parameter
+  base64Encode: vi.fn(
+    (data: string | number[] | Uint8Array, _charset?: string): string => {
+      // Typed _charset, prefixed
+      const toEncode =
+        typeof data === 'string'
+          ? Buffer.from(data)
+          : Buffer.from(data as Uint8Array);
+      return toEncode.toString('base64');
     }
-    return Array.from(signature);
-  }),
-  newBlob: vi.fn((data: string | number[] | Uint8Array | GoogleAppsScript.Base.BlobSource, contentType?: string, name?: string) => {
-    let bytes: Uint8Array;
-    let resolvedContentType = contentType || 'text/plain';
-    let resolvedName = name || 'blob';
+  ),
+  base64Decode: vi
+    .fn()
+    .mockImplementation((encoded: string, _charset?: string): number[] => {
+      // Typed _charset, prefixed
+      return Array.from(Buffer.from(encoded, 'base64'));
+    }),
+  computeHmacSha256Signature: vi.fn(
+    (value: string, key: string | number[] | Uint8Array): number[] => {
+      // console.log('Mock computeHmacSha256Signature called'); // For debugging
+      // Return a fixed, known-length array for predictability if needed, or random for basic check
+      const signature = new Uint8Array(32); // 32 bytes for SHA256
+      for (let i = 0; i < signature.length; i++) {
+        signature[i] = i; // Fill with some predictable data
+      }
+      return Array.from(signature);
+    }
+  ),
+  newBlob: vi.fn(
+    (
+      data: string | number[] | Uint8Array | GoogleAppsScript.Base.BlobSource,
+      contentType?: string,
+      name?: string
+    ) => {
+      let bytes: Uint8Array;
+      let resolvedContentType = contentType || 'text/plain';
+      let resolvedName = name || 'blob';
 
-    if (typeof data === 'string') {
-      bytes = new TextEncoder().encode(data);
-    } else if (Array.isArray(data)) {
-      bytes = Uint8Array.from(data);
-    } else if (data instanceof Uint8Array) {
-      bytes = data;
-    } else { // BlobSource
-      bytes = Uint8Array.from(data.getBytes()); // BlobSource must have getBytes()
-      resolvedContentType = data.getContentType() || resolvedContentType;
-      resolvedName = data.getName() || resolvedName;
+      if (typeof data === 'string') {
+        bytes = new TextEncoder().encode(data);
+      } else if (Array.isArray(data)) {
+        bytes = Uint8Array.from(data);
+      } else if (data instanceof Uint8Array) {
+        bytes = data;
+      } else {
+        // BlobSource
+        bytes = Uint8Array.from(data.getBytes()); // BlobSource must have getBytes()
+        resolvedContentType = data.getContentType() || resolvedContentType;
+        resolvedName = data.getName() || resolvedName;
+      }
+      return {
+        getBytes: () => Array.from(bytes), // Return as number[] for some contexts
+        getDataAsString: (charset?: string) =>
+          new TextDecoder(charset).decode(bytes), // Handle charset
+        getContentType: () => resolvedContentType,
+        getName: () => resolvedName,
+        isGoogleType: () => false, // Example
+        getAs: vi.fn(function (contentType) {
+          // mock getAs
+          if (contentType === this.getContentType()) return this;
+          throw new Error(`Mock Blob: Cannot convert to ${contentType}`);
+        }),
+        copyBlob: vi.fn(function () {
+          return this;
+        }), // mock copyBlob
+        // ... other blob methods
+      };
     }
-    return {
-      getBytes: () => Array.from(bytes), // Return as number[] for some contexts
-      getDataAsString: (charset?: string) => new TextDecoder(charset).decode(bytes), // Handle charset
-      getContentType: () => resolvedContentType,
-      getName: () => resolvedName,
-      isGoogleType: () => false, // Example
-      getAs: vi.fn(function(contentType) { // mock getAs
-        if (contentType === this.getContentType()) return this;
-        throw new Error(`Mock Blob: Cannot convert to ${contentType}`);
-      }),
-      copyBlob: vi.fn(function() { return this }), // mock copyBlob
-      // ... other blob methods
-    };
-  }),
+  ),
 };
 
 // Merge with gasGlobalMock.Utilities, ensuring comprehensiveUtilities takes precedence for defined methods.
 globalThis.Utilities = {
   ...(gasGlobalMock.Utilities || {}), // gas-local's defaults (sleep, formatDate, formatString might be here)
-  ...comprehensiveUtilities,      // Our more complete/specific mocks override and add
+  ...comprehensiveUtilities, // Our more complete/specific mocks override and add
 };
 
 // Define mocks for services not provided by gasGlobalMock.globalMockDefault
@@ -138,14 +188,36 @@ globalThis.SpreadsheetApp = {
 };
 
 globalThis.PropertiesService = {
-  getDocumentProperties: vi.fn(() => ({ getProperty: vi.fn(), setProperty: vi.fn(), getProperties: vi.fn(), deleteAllProperties: vi.fn(), deleteProperty: vi.fn() })),
-  getUserProperties: vi.fn(() => ({ getProperty: vi.fn(), setProperty: vi.fn(), getProperties: vi.fn(), deleteAllProperties: vi.fn(), deleteProperty: vi.fn() })),
-  getScriptProperties: vi.fn(() => ({ getProperty: vi.fn(), setProperty: vi.fn(), getProperties: vi.fn(), deleteAllProperties: vi.fn(), deleteProperty: vi.fn() })),
+  getDocumentProperties: vi.fn(() => ({
+    getProperty: vi.fn(),
+    setProperty: vi.fn(),
+    getProperties: vi.fn(),
+    deleteAllProperties: vi.fn(),
+    deleteProperty: vi.fn(),
+  })),
+  getUserProperties: vi.fn(() => ({
+    getProperty: vi.fn(),
+    setProperty: vi.fn(),
+    getProperties: vi.fn(),
+    deleteAllProperties: vi.fn(),
+    deleteProperty: vi.fn(),
+  })),
+  getScriptProperties: vi.fn(() => ({
+    getProperty: vi.fn(),
+    setProperty: vi.fn(),
+    getProperties: vi.fn(),
+    deleteAllProperties: vi.fn(),
+    deleteProperty: vi.fn(),
+  })),
 };
 
 globalThis.Session = {
-  getActiveUser: vi.fn(() => ({ getEmail: vi.fn().mockReturnValue('user@example.com') })),
-  getEffectiveUser: vi.fn(() => ({ getEmail: vi.fn().mockReturnValue('effective.user@example.com') })),
+  getActiveUser: vi.fn(() => ({
+    getEmail: vi.fn().mockReturnValue('user@example.com'),
+  })),
+  getEffectiveUser: vi.fn(() => ({
+    getEmail: vi.fn().mockReturnValue('effective.user@example.com'),
+  })),
   getScriptTimeZone: vi.fn().mockReturnValue('UTC'),
   // ... other Session methods
 };
@@ -163,7 +235,8 @@ globalThis.ScriptApp = {
     LIMITED: 'LIMITED' as GoogleAppsScript.Script.AuthMode,
     FULL: 'FULL' as GoogleAppsScript.Script.AuthMode,
   },
-  EventType: { // Example, add if used
+  EventType: {
+    // Example, add if used
     ON_FORM_SUBMIT: 'ON_FORM_SUBMIT',
     ON_OPEN: 'ON_OPEN',
     // ...
@@ -183,11 +256,12 @@ globalThis.FormApp = {
 globalThis.ContentService = {
   createTextOutput: vi.fn(text => {
     // Store mimeType locally for this instance of TextOutput
-    let currentMimeType: GoogleAppsScript.Content.MimeType = globalThis.ContentService.MimeType.TEXT; // Default
+    let currentMimeType: GoogleAppsScript.Content.MimeType =
+      globalThis.ContentService.MimeType.TEXT; // Default
 
     const textOutputInstance = {
       getContent: () => text,
-      setMimeType: vi.fn(function(mimeType: GoogleAppsScript.Content.MimeType) {
+      setMimeType: vi.fn((mimeType: GoogleAppsScript.Content.MimeType) => {
         currentMimeType = mimeType;
         return textOutputInstance; // Return the object itself for chaining
       }),
@@ -197,7 +271,8 @@ globalThis.ContentService = {
     };
     return textOutputInstance;
   }),
-  MimeType: { // Global MimeType (ensure this is complete for what's used)
+  MimeType: {
+    // Global MimeType (ensure this is complete for what's used)
     JSON: 'application/json' as GoogleAppsScript.Content.MimeType,
     TEXT: 'text/plain' as GoogleAppsScript.Content.MimeType,
     ATOM: 'ATOM' as GoogleAppsScript.Content.MimeType, // Add as needed
@@ -209,7 +284,6 @@ globalThis.ContentService = {
     XML: 'XML' as GoogleAppsScript.Content.MimeType,
   },
 };
-
 
 // デフォルトのCONFIG設定
 (globalThis as { CONFIG?: Config }).CONFIG = {
